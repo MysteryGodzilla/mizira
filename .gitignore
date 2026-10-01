@@ -35,3 +35,11 @@ examples/data/
 # site-specific tools: only the README is shared
 custom-plugins/*
 !custom-plugins/README.md
+
+# runtime config/state folders at the repo root only; unanchored "config/" would also
+# match the internal/config Go package
+/config/
+/data/
+
+# Windows builds
+*.exe
