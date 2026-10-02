@@ -117,6 +117,32 @@ func (f *InFlight) CancelSource(source, exceptRequestID string) int {
 	return len(matched)
 }
 
+// CancelAll stops every running request on every network EXCEPT the one asking. Used by the
+// emergency +stop.
+func (f *InFlight) CancelAll(exceptRequestID string) int {
+	f.mu.Lock()
+	var targets []*entry
+	for _, entries := range f.byKey {
+		for _, e := range entries {
+			if exceptRequestID != "" && e.requestID == exceptRequestID {
+				continue
+			}
+			targets = append(targets, e)
+		}
+	}
+	f.mu.Unlock()
+
+	ids := make([]string, 0, len(targets))
+	for _, e := range targets {
+		e.cancel()
+		ids = append(ids, e.requestID)
+	}
+	if len(ids) > 0 {
+		GetLogger().Info("requests_cancelled", "scope", "all", "requests", ids)
+	}
+	return len(targets)
+}
+
 // Count reports how many requests are running for a conversation.
 func (f *InFlight) Count(key string) int {
 	f.mu.Lock()
