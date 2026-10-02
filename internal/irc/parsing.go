@@ -54,14 +54,18 @@ func CheckAddressed(message, trigger string) bool {
 	return false
 }
 
-// CheckAdmin returns true if hostmask matches any admin in the list.
-// An empty list means nobody is admin, never everybody.
+// CheckAdmin returns true if hostmask matches any admin mask in the list. Masks may use the
+// wildcards * and ? (see matchMask). An empty list means nobody is admin, never everybody, and
+// a mask ValidateAdminMask refuses (e.g. "*!*@*") never matches.
 func CheckAdmin(hostmask string, adminList []string) bool {
-	if len(adminList) == 0 {
+	if hostmask == "" {
 		return false
 	}
 	for _, admin := range adminList {
-		if admin == hostmask {
+		if ValidateAdminMask(admin) != nil {
+			continue
+		}
+		if matchMask(admin, hostmask) {
 			return true
 		}
 	}
