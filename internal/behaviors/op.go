@@ -30,7 +30,7 @@ func (b *OpBehavior) Events() []string {
 
 func (b *OpBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) bool {
 	cfg := ctx.GetConfig()
-	if !cfg.Bot.OpWatcher {
+	if !cfg.Bot.OpWatcher || core.Halted() {
 		return false
 	}
 

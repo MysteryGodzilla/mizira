@@ -31,7 +31,8 @@ func (b *NonAddressedBehavior) Check(ctx irc.ChatContextInterface, event *girc.E
 		return false
 	}
 	// A10: answering every bot line unprompted is the fastest way into a loop.
-	if ctx.IsBotLine() {
+	// T15: nothing new starts while paused or stopped.
+	if ctx.IsBotLine() || core.Halted() {
 		return false
 	}
 	return !cfg.Bot.Addressed && !ctx.IsAddressed() && !ctx.IsPrivate() && len(ctx.GetArgs()) > 0

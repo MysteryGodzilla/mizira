@@ -67,6 +67,9 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	cmdRegistry.Register(&commands.PromptCommand{})
 	cmdRegistry.Register(&commands.MemoriesCommand{})
 	cmdRegistry.Register(&commands.BotsCommand{})
+	cmdRegistry.Register(&commands.PauseCommand{})
+	cmdRegistry.Register(&commands.ResumeCommand{})
+	cmdRegistry.Register(&commands.StopCommand{})
 
 	// Initialize behavior registry (order matters: passive watchers first, addressed last as fallback)
 	behaviorRegistry := behaviors.NewRegistry()
@@ -167,7 +170,8 @@ func runNetwork(ctx context.Context, cfg *config.Configuration, sys core.System,
 	// Reminders fire outside any request context, so delivery lives here rather than in the tool that
 	// schedules them.
 	go core.RunReminderScheduler(ctx, core.Reminders(), cfg.Server.Name, func(channel, message string) bool {
-		if !ircClient.IsConnected() {
+		// T15: hold reminders while paused or stopped; they're delivered (late) after +resume.
+		if !ircClient.IsConnected() || core.Halted() {
 			return false
 		}
 		// A13: never deliver into a channel the bot may not speak in. Report it as handled,
