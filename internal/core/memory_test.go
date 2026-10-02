@@ -300,3 +300,18 @@ func TestAdoptUnscopedMemories(t *testing.T) {
 		t.Errorf("migration is not idempotent, re-stamped %d rows", again)
 	}
 }
+
+func TestCountSubject(t *testing.T) {
+	store, err := OpenMemoryStore(filepath.Join(t.TempDir(), "m.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	store.Remember("net", "Jeff", "a", "alice", "#test")
+	store.Remember("net", "jeff", "b", "alice", "#test")
+	store.Remember("net", "bob", "c", "alice", "#test")
+	store.Remember("other", "jeff", "d", "alice", "#test")
+	if n, err := store.CountSubject("net", "JEFF"); err != nil || n != 2 {
+		t.Fatalf("CountSubject = %d, %v; want 2 (case-insensitive, this network only)", n, err)
+	}
+}
