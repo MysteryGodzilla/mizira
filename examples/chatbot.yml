@@ -91,7 +91,7 @@ greeting: wave hello
 # Admin control (hostmasks who can use /set, /get, etc.)
 # admins:
 #   - "admin!~admin@trusted.host"
-#   - "*!*@admin.example.com"    # Wildcard patterns supported
+# Matched exactly against nick!ident@host: wildcards like "*!*@host" do NOT work.
 
 # ============================================================================
 # SESSION MANAGEMENT
