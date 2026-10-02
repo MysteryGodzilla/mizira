@@ -29,6 +29,7 @@ type runtimeOverrides struct {
 	ScreenNicks *[]string `json:"screennicks,omitempty"`
 	FilterNicks *[]string `json:"filternicks,omitempty"`
 	BotPrefixes *[]string `json:"botprefixes,omitempty"`
+	BotNicks    *[]string `json:"botnicks,omitempty"`
 }
 
 var overridesMu sync.Mutex
@@ -132,13 +133,15 @@ func PersistScreening(screen, filter []string) {
 	saveOverrides(o)
 }
 
-// PersistBotPrefixes records the prefixes that mark other bots' lines.
-func PersistBotPrefixes(prefixes []string) {
+// PersistBots records how other bots are recognised: by line prefix and by nick.
+func PersistBots(prefixes, nicks []string) {
 	overridesMu.Lock()
 	defer overridesMu.Unlock()
 	o := loadOverrides()
-	cp := append([]string{}, prefixes...)
-	o.BotPrefixes = &cp
+	p := append([]string{}, prefixes...)
+	n := append([]string{}, nicks...)
+	o.BotPrefixes = &p
+	o.BotNicks = &n
 	saveOverrides(o)
 }
 
@@ -194,6 +197,10 @@ func ApplyOverrides(cfg *config.Configuration) []string {
 	if o.BotPrefixes != nil {
 		cfg.Bot.BotPrefixes = *o.BotPrefixes
 		core.GetLogger().Info("override_applied", "key", "botprefixes", "count", len(*o.BotPrefixes))
+	}
+	if o.BotNicks != nil {
+		cfg.Bot.BotNicks = *o.BotNicks
+		core.GetLogger().Info("override_applied", "key", "botnicks", "count", len(*o.BotNicks))
 	}
 	if o.AdminTools != nil {
 		cfg.Bot.AdminTools = *o.AdminTools

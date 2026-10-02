@@ -70,6 +70,9 @@ type BotConfig struct {
 	// BotPrefixes mark lines written by other bots. Bots there often share their owner's nick,
 	// so the line prefix (e.g. "[metalai]") is the only reliable sign.
 	BotPrefixes []string
+	// BotNicks are bots with their own account (and so their own nick); every line from them
+	// is a bot line, prefix or not.
+	BotNicks []string
 	// BotReplyLimit caps replies to bot lines in a row per channel; a human line or
 	// BotCooldown without bot replies resets it. 0 means never reply to bots.
 	BotReplyLimit int
@@ -240,6 +243,7 @@ func GetFlags() []cli.Flag {
 		&cli.BoolFlag{Name: "sandbox", Usage: "run shell/bash/MCP tools inside a platform sandbox (macOS sandbox-exec, Linux bubblewrap)", Sources: src("sandbox", "METALD_SANDBOX")},
 		&cli.BoolFlag{Name: "ignoreprivate", Usage: "ignore direct/private messages entirely (no response, no commands)", Sources: src("ignoreprivate", "METALD_IGNOREPRIVATE")},
 		&cli.StringSliceFlag{Name: "botprefixes", Usage: "line prefixes that mark other bots' messages (e.g. '[metalai]')", Sources: src("botprefixes", "METALD_BOTPREFIXES")},
+		&cli.StringSliceFlag{Name: "botnicks", Usage: "nicks of bots that have their own account; all their lines count as bot lines", Sources: src("botnicks", "METALD_BOTNICKS")},
 		&cli.IntFlag{Name: "botreplylimit", Value: 3, Usage: "replies to other bots allowed in a row per channel before waiting for a human (0 = never reply to bots)", Sources: src("botreplylimit", "METALD_BOTREPLYLIMIT")},
 		&cli.DurationFlag{Name: "botcooldown", Value: 10 * time.Minute, Usage: "quiet time after which the bot reply count resets", Sources: src("botcooldown", "METALD_BOTCOOLDOWN")},
 		&cli.BoolFlag{Name: "partunlisted", Usage: "leave (PART) any channel other than the configured one, once per connection; the bot is silent there either way", Sources: src("partunlisted", "METALD_PARTUNLISTED")},
@@ -338,6 +342,7 @@ func (c *Configuration) PrintConfig() {
 		{"ignoreprivate", fmt.Sprintf("%t", c.Bot.IgnorePrivate)},
 		{"partunlisted", fmt.Sprintf("%t", c.Bot.PartUnlisted)},
 		{"botprefixes", fmt.Sprintf("%v", c.Bot.BotPrefixes)},
+		{"botnicks", fmt.Sprintf("%v", c.Bot.BotNicks)},
 		{"botreplylimit", fmt.Sprintf("%d", c.Bot.BotReplyLimit)},
 		{"botcooldown", c.Bot.BotCooldown.String()},
 		{"sessionduration", c.Session.TTL.String()},
@@ -411,6 +416,7 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			IgnorePrivate:      c.Bool("ignoreprivate"),
 			PartUnlisted:       c.Bool("partunlisted"),
 			BotPrefixes:        c.StringSlice("botprefixes"),
+			BotNicks:           c.StringSlice("botnicks"),
 			BotReplyLimit:      int(c.Int("botreplylimit")),
 			BotCooldown:        c.Duration("botcooldown"),
 			FloodMessages:      c.Int("floodmessages"),
