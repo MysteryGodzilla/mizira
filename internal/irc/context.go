@@ -102,16 +102,25 @@ func (c ChatContext) GetLogger() *slog.Logger {
 }
 
 func (c ChatContext) Oper(channel, nick string) bool {
+	if !c.mayTarget(channel, "oper") {
+		return false
+	}
 	c.client.Cmd.Oper(channel, nick)
 	return true
 }
 
 func (c ChatContext) Kick(channel, nick, reason string) bool {
+	if !c.mayTarget(channel, "kick") {
+		return false
+	}
 	c.client.Cmd.Kick(channel, nick, reason)
 	return true
 }
 
 func (c ChatContext) Topic(channel, topic string) bool {
+	if !c.mayTarget(channel, "topic") {
+		return false
+	}
 	c.client.Cmd.Topic(channel, topic)
 	return true
 }
@@ -131,11 +140,17 @@ func (c ChatContext) Nick(nickname string) bool {
 }
 
 func (c ChatContext) Join(channel string) bool {
+	if !c.mayTarget(channel, "join") {
+		return false
+	}
 	c.client.Cmd.Join(channel)
 	return true
 }
 
 func (c ChatContext) JoinWithKey(channel, key string) bool {
+	if !c.mayTarget(channel, "join") {
+		return false
+	}
 	c.client.Cmd.Join(channel, key)
 	return true
 }
@@ -202,6 +217,10 @@ func (c ChatContext) Reply(message string) {
 		return
 	}
 
+	if !c.mayReplyHere("reply") {
+		return
+	}
+
 	// Never let the model's own tool-call wire format reach the channel.
 	if leakedToolCall.MatchString(message) {
 		c.logger.Warn("reply_suppressed_tool_syntax", "message", message)
@@ -221,6 +240,27 @@ func (c ChatContext) Reply(message string) {
 		message = prefix + " " + message
 	}
 	c.client.Cmd.Reply(*c.event, message)
+}
+
+// mayReplyHere is the A13 send-side check for replies: the place the event happened must be
+// allowed. The entry gate (ChannelGate) should already have dropped anything else; this
+// catches a code path that skips it.
+func (c ChatContext) mayReplyHere(action string) bool {
+	target, gated := eventTarget(c.event)
+	if !gated {
+		return true
+	}
+	return c.mayTarget(target, action)
+}
+
+// mayTarget is the last-line A13 check on everything the bot sends or does to a channel:
+// any channel but the configured one is refused and logged.
+func (c ChatContext) mayTarget(target, action string) bool {
+	if ChannelAllowed(c.Config, target) {
+		return true
+	}
+	c.logger.Warn("send_blocked_channel", "target", target, "action", action)
+	return false
 }
 
 // silenced reports whether this request may write to the channel at all, and why not.
@@ -246,6 +286,9 @@ func (c ChatContext) suppressed() bool {
 }
 
 func (c ChatContext) SendAction(target, message string) {
+	if !c.mayTarget(target, "action") {
+		return
+	}
 	c.client.Cmd.Action(target, message)
 }
 
@@ -253,6 +296,9 @@ func (c ChatContext) ReplyAction(message string) {
 	// Same two gates as Reply.
 	if reason, quiet := c.silenced(); quiet {
 		c.logger.Debug("action_suppressed", "reason", reason, "message", message)
+		return
+	}
+	if !c.mayReplyHere("action") {
 		return
 	}
 
@@ -266,21 +312,33 @@ func (c ChatContext) ReplyAction(message string) {
 }
 
 func (c ChatContext) SetMode(target, flags string, args ...string) bool {
+	if !c.mayTarget(target, "mode") {
+		return false
+	}
 	c.client.Cmd.Mode(target, flags, args...)
 	return true
 }
 
 func (c ChatContext) Ban(channel, target string) bool {
+	if !c.mayTarget(channel, "ban") {
+		return false
+	}
 	c.client.Cmd.Ban(channel, target)
 	return true
 }
 
 func (c ChatContext) Unban(channel, target string) bool {
+	if !c.mayTarget(channel, "unban") {
+		return false
+	}
 	c.client.Cmd.Unban(channel, target)
 	return true
 }
 
 func (c ChatContext) Invite(channel, nick string) bool {
+	if !c.mayTarget(channel, "invite") {
+		return false
+	}
 	c.client.Cmd.Invite(channel, nick)
 	return true
 }
