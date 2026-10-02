@@ -287,6 +287,18 @@ func (m *MemoryStore) Count(network string) (int64, error) {
 	return n, err
 }
 
+// CountSubject reports how many memories exist about one subject, so a capped listing can say
+// how many it left out.
+func (m *MemoryStore) CountSubject(network, subject string) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var n int64
+	err := m.db.QueryRow(`SELECT COUNT(*) FROM memories WHERE network = ? AND subject = ?`,
+		network, normalizeSubject(subject)).Scan(&n)
+	return n, err
+}
+
 // Close releases the database.
 func (m *MemoryStore) Close() error {
 	m.mu.Lock()

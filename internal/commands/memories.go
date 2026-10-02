@@ -55,10 +55,15 @@ func (c *MemoriesCommand) Execute(ctx irc.ChatContextInterface) {
 	}
 }
 
+// maxMemoryLines caps how many memories one +memories / +recall reply lists. Anyone can run
+// these, and the count was user-chosen ("+memories list 500"), so without a cap one line could
+// make the bot flood the channel.
+const maxMemoryLines = 5
+
 func (c *MemoriesCommand) list(ctx irc.ChatContextInterface, store *core.MemoryStore, args []string) {
-	limit := 10
+	limit := maxMemoryLines
 	if len(args) > 2 {
-		if n, err := strconv.Atoi(args[2]); err == nil && n > 0 {
+		if n, err := strconv.Atoi(args[2]); err == nil && n > 0 && n < limit {
 			limit = n
 		}
 	}
@@ -84,7 +89,8 @@ func (c *MemoriesCommand) list(ctx irc.ChatContextInterface, store *core.MemoryS
 }
 
 func (c *MemoriesCommand) about(ctx irc.ChatContextInterface, store *core.MemoryStore, subject string) {
-	mems, err := store.Recall(ctx.GetNetwork(), subject, 25)
+	total, _ := store.CountSubject(ctx.GetNetwork(), subject)
+	mems, err := store.Recall(ctx.GetNetwork(), subject, maxMemoryLines)
 	if err != nil {
 		ctx.GetLogger().Error("memory_recall_failed", "error", err.Error())
 		ctx.Reply("could not read memory")
@@ -96,7 +102,11 @@ func (c *MemoriesCommand) about(ctx irc.ChatContextInterface, store *core.Memory
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "%d memory(ies) about %s:", len(mems), subject)
+	if total > int64(len(mems)) {
+		fmt.Fprintf(&b, "%d memory(ies) about %s, showing the %d most recent:", total, subject, len(mems))
+	} else {
+		fmt.Fprintf(&b, "%d memory(ies) about %s:", len(mems), subject)
+	}
 	for _, m := range mems {
 		fmt.Fprintf(&b, "\n  [%d] %s", m.ID, m.Fact)
 	}
