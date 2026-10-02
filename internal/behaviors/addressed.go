@@ -37,19 +37,32 @@ func (b *AddressedBehavior) Check(ctx irc.ChatContextInterface, event *girc.Even
 	if len(ctx.GetArgs()) == 0 {
 		return false
 	}
+	// T15: while paused or stopped, only admin commands get through, so +resume always works.
+	// Everyone else is ignored and nothing is added to the conversation.
+	if core.Halted() {
+		return ctx.IsAdmin() && !ctx.IsBotLine() && b.isCommand(ctx, event)
+	}
 	// Other bots may chat with us, but never run commands, and only up to the loop limit.
 	if ctx.IsBotLine() {
 		return ctx.IsAddressed() && botMayReply(ctx)
 	}
 
 	// A registered command is handled even when the message doesn't address the bot by name.
-	if fields := strings.Fields(event.Last()); len(fields) > 0 {
-		if _, isCommand := b.CmdRegistry.Get(irc.CanonicalCommand(fields[0], ctx.GetConfig().Bot.CommandPrefix)); isCommand {
-			return true
-		}
+	if b.isCommand(ctx, event) {
+		return true
 	}
 
 	return ctx.IsAddressed() || ctx.IsPrivate()
+}
+
+// isCommand reports whether the message starts with a registered +command.
+func (b *AddressedBehavior) isCommand(ctx irc.ChatContextInterface, event *girc.Event) bool {
+	fields := strings.Fields(event.Last())
+	if len(fields) == 0 {
+		return false
+	}
+	_, ok := b.CmdRegistry.Get(irc.CanonicalCommand(fields[0], ctx.GetConfig().Bot.CommandPrefix))
+	return ok
 }
 
 func (b *AddressedBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {

@@ -25,7 +25,8 @@ func (b *JoinBehavior) Events() []string {
 
 func (b *JoinBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) bool {
 	cfg := ctx.GetConfig()
-	return event.Source.Name == ctx.GetBotNick() && cfg.Bot.Greeting != ""
+	// T15: no greeting while paused or stopped.
+	return event.Source.Name == ctx.GetBotNick() && cfg.Bot.Greeting != "" && !core.Halted()
 }
 
 func (b *JoinBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {

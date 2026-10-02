@@ -40,7 +40,7 @@ func (b *URLBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) boo
 		return false
 	}
 	// A10: commenting on links other bots post would answer a bot without counting the reply.
-	if ctx.IsBotLine() {
+	if ctx.IsBotLine() || core.Halted() {
 		return false
 	}
 	if urlPattern.MatchString(event.Last()) {

@@ -30,6 +30,8 @@ type runtimeOverrides struct {
 	FilterNicks *[]string `json:"filternicks,omitempty"`
 	BotPrefixes *[]string `json:"botprefixes,omitempty"`
 	BotNicks    *[]string `json:"botnicks,omitempty"`
+	// RunState is "paused" or "stopped" while the bot is halted; absent when running.
+	RunState string `json:"runstate,omitempty"`
 }
 
 var overridesMu sync.Mutex
@@ -145,6 +147,18 @@ func PersistBots(prefixes, nicks []string) {
 	saveOverrides(o)
 }
 
+// PersistRunState records whether the bot is paused or stopped. Running is stored as absent.
+func PersistRunState(s core.RunState) {
+	overridesMu.Lock()
+	defer overridesMu.Unlock()
+	o := loadOverrides()
+	o.RunState = ""
+	if s != core.Running {
+		o.RunState = s.String()
+	}
+	saveOverrides(o)
+}
+
 // PersistAdminTools records which tools are restricted to admins.
 func PersistAdminTools(adminTools []string) {
 	overridesMu.Lock()
@@ -197,6 +211,15 @@ func ApplyOverrides(cfg *config.Configuration) []string {
 	if o.BotPrefixes != nil {
 		cfg.Bot.BotPrefixes = *o.BotPrefixes
 		core.GetLogger().Info("override_applied", "key", "botprefixes", "count", len(*o.BotPrefixes))
+	}
+	if o.RunState != "" {
+		if s, ok := core.ParseRunState(o.RunState); ok {
+			core.SetState(s)
+			// Loud on purpose: a bot that starts up silent is otherwise a mystery.
+			core.GetLogger().Warn("bot_starts_halted", "state", s.String(), "hint", "+resume to continue")
+		} else {
+			core.GetLogger().Warn("override_rejected", "key", "runstate", "value", o.RunState)
+		}
 	}
 	if o.BotNicks != nil {
 		cfg.Bot.BotNicks = *o.BotNicks
