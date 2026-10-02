@@ -125,7 +125,8 @@ Set `model` to `provider/name`:
 | `datadir` | `.` | where runtime state is kept |
 | `urlwatcher` | off | comment on links posted in the channel |
 | `sandbox` | off | run shell, bash and MCP tools in a platform sandbox |
-| `verbose`, `loglevel`, `logformat` | off, `info`, `text` | logging |
+| `verbose`, `loglevel`, `logformat` | off, `info`, `text` | console logging |
+| `logfile`, `logmaxsize`, `logkeep` | `logs/mizira.log`, `10`, `5` | logs are also written as JSON lines to this file (relative to `datadir`; `off` disables), rotated at `logmaxsize` MB, keeping `logkeep` old files |
 
 ## Plugins
 

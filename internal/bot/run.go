@@ -27,7 +27,23 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	if cfg.Bot.Verbose {
 		level = "debug"
 	}
-	core.InitLogger(level, cfg.Bot.LogFormat)
+	// T14: the log file is best-effort. If it can't be opened, log to the console only and say so.
+	var logFile *core.RotatingFile
+	var logFileErr error
+	logPath := core.LogFilePath(cfg.Bot.DataDir, cfg.Bot.LogFile)
+	if logPath != "" {
+		logFile, logFileErr = core.OpenRotatingFile(logPath, int64(cfg.Bot.LogMaxSizeMB)*1024*1024, cfg.Bot.LogKeep)
+	}
+	if logFile != nil {
+		defer logFile.Close()
+		core.InitLogger(level, cfg.Bot.LogFormat, logFile)
+		core.GetLogger().Info("log_file_open", "path", logPath)
+	} else {
+		core.InitLogger(level, cfg.Bot.LogFormat, nil)
+		if logFileErr != nil {
+			core.GetLogger().Warn("log_file_unavailable", "path", logPath, "error", logFileErr.Error())
+		}
+	}
 
 	if err := irc.ValidCommandPrefix(cfg.Bot.CommandPrefix); err != nil {
 		return fmt.Errorf("commandprefix %q: %w", cfg.Bot.CommandPrefix, err)
