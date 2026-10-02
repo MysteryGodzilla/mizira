@@ -70,7 +70,7 @@ port: 6697
 tls: true
 channel: "#chat"
 admins:
-  - "yournick!*@your.host"
+  - "yournick!ident@your.host"   # exact: no wildcards
 
 model: openai/gpt-5.1
 openaikey: "sk-..."
@@ -111,7 +111,7 @@ Set `model` to `provider/name`:
 | `partunlisted` | off | leave other channels the bot is joined to (e.g. by a server auto-join), once per connection |
 | `saslnick`, `saslpass`, `serverpass` | | authentication. A password needs `tls: true` and `tlsinsecure: false`, or the bot refuses to start |
 | `networks` | | several networks; each entry takes `name`, `nick`, `server`, `port`, `channel`, `channelkey`, `tls`, `tlsinsecure`, `saslnick`, `saslpass`, `serverpass` and `responseprefix`, and inherits anything it leaves out |
-| `admins` | none | hostmasks allowed to run admin commands; empty means nobody |
+| `admins` | none | hostmasks allowed to run admin commands, matched exactly (`nick!ident@host`, no wildcards; `/whois` yourself to see yours); empty means nobody |
 | `addressed`, `trigger` | on, the nick | answer only when addressed, and the word that addresses the bot |
 | `commandprefix` | `+` | what starts a command |
 | `responseprefix` | | text put in front of every reply line |
