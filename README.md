@@ -126,6 +126,7 @@ Set `model` to `provider/name`:
 | `urlwatcher` | off | comment on links posted in the channel |
 | `sandbox` | off | run shell, bash and MCP tools in a platform sandbox |
 | `verbose`, `loglevel`, `logformat` | off, `info`, `text` | console logging |
+| `commandsneedname` | on | commands only work as `<name> +command`, so one `+help` doesn't trigger every bot in the channel |
 | `maxreplylines` | `4` | most IRC lines one reply may post; the rest is dropped (`0` = no limit). The persona can ask for short replies, but this guarantees it |
 | `logfile`, `logmaxsize`, `logkeep` | `logs/mizira.log`, `10`, `5` | logs are also written as JSON lines to this file (relative to `datadir`; `off` disables), rotated at `logmaxsize` MB, keeping `logkeep` old files |
 
@@ -163,7 +164,7 @@ Images, songs, speech and video go through one uploader, chosen with `UPLOAD_BAC
 
 ## Commands
 
-Commands start with the command prefix, `+` by default (`commandprefix: "!"` to change it; punctuation only), and must be the first word of the message: `metald +stats` is ordinary chat, not a command. They don't need the bot to be addressed and run immediately, even while a long request is in progress. The tables below use the default prefix.
+Commands start with the command prefix, `+` by default (`commandprefix: "!"` to change it; punctuation only). By default they must also be addressed to the bot by name, as the first word: `Mizira +stats` or `Mizira: +stats`. A bare `+stats` is left for other bots in the channel, which often share the same prefix (`commandsneedname: false` brings back bare commands). Commands run immediately, even while a long request is in progress. The tables below show the command part only.
 
 | command | admin | |
 |---|---|---|
