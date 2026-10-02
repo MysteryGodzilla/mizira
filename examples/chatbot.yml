@@ -16,6 +16,17 @@ channel: '#metald'
 # several connections per account, a PART can take your own client out of the channel too.
 # partunlisted: false
 
+# Other bots in the channel. Bots often share their owner's nick and tag their lines with a
+# prefix such as "[metalai]"; list those prefixes here (or use +botprefix add <prefix>).
+# The bot may chat with them, but only botreplylimit replies in a row: a human message, or
+# botcooldown without replies to bots, resets the count. 0 = never reply to bots.
+# Bot lines never run +commands and don't count towards flood limits. Lines starting with this
+# bot's own responseprefix are always ignored.
+# botprefixes:
+#   - "[metalai]"
+# botreplylimit: 3
+# botcooldown: 10m
+
 # IRC server connection details
 # server: irc.libera.chat       # Default: localhost
 # port: 6697                    # Default: 6667 (use 6697 for TLS)

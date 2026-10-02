@@ -67,6 +67,13 @@ type BotConfig struct {
 	// PartUnlisted makes the bot leave channels other than Server.Channel. Off by default: on a
 	// server where the bot shares its owner's nick, a PART can pull the owner out too.
 	PartUnlisted bool
+	// BotPrefixes mark lines written by other bots. Bots there often share their owner's nick,
+	// so the line prefix (e.g. "[metalai]") is the only reliable sign.
+	BotPrefixes []string
+	// BotReplyLimit caps replies to bot lines in a row per channel; a human line or
+	// BotCooldown without bot replies resets it. 0 means never reply to bots.
+	BotReplyLimit int
+	BotCooldown   time.Duration
 	// Flood protection: more than FloodMessages from one nick within
 	// FloodWindow auto-ignores them for FloodTimeout. 0 messages disables it.
 	FloodMessages int
@@ -232,6 +239,9 @@ func GetFlags() []cli.Flag {
 		&cli.BoolFlag{Name: "urlwatchersilent", Usage: "run URL watcher without sending a reply in chat; response is discarded", Sources: src("urlwatchersilent", "METALD_URLWATCHERSILENT")},
 		&cli.BoolFlag{Name: "sandbox", Usage: "run shell/bash/MCP tools inside a platform sandbox (macOS sandbox-exec, Linux bubblewrap)", Sources: src("sandbox", "METALD_SANDBOX")},
 		&cli.BoolFlag{Name: "ignoreprivate", Usage: "ignore direct/private messages entirely (no response, no commands)", Sources: src("ignoreprivate", "METALD_IGNOREPRIVATE")},
+		&cli.StringSliceFlag{Name: "botprefixes", Usage: "line prefixes that mark other bots' messages (e.g. '[metalai]')", Sources: src("botprefixes", "METALD_BOTPREFIXES")},
+		&cli.IntFlag{Name: "botreplylimit", Value: 3, Usage: "replies to other bots allowed in a row per channel before waiting for a human (0 = never reply to bots)", Sources: src("botreplylimit", "METALD_BOTREPLYLIMIT")},
+		&cli.DurationFlag{Name: "botcooldown", Value: 10 * time.Minute, Usage: "quiet time after which the bot reply count resets", Sources: src("botcooldown", "METALD_BOTCOOLDOWN")},
 		&cli.BoolFlag{Name: "partunlisted", Usage: "leave (PART) any channel other than the configured one, once per connection; the bot is silent there either way", Sources: src("partunlisted", "METALD_PARTUNLISTED")},
 		&cli.IntFlag{Name: "floodmessages", Value: 5, Usage: "messages from one nick within floodwindow that trigger an auto-timeout (0 disables)", Sources: src("floodmessages", "METALD_FLOODMESSAGES")},
 		&cli.StringSliceFlag{Name: "screennicks", Usage: "nicks whose messages are screened by a classifier before answering (empty disables)", Sources: src("screennicks", "METALD_SCREENNICKS")},
@@ -327,6 +337,9 @@ func (c *Configuration) PrintConfig() {
 		{"sandbox", fmt.Sprintf("%t", c.Bot.Sandbox)},
 		{"ignoreprivate", fmt.Sprintf("%t", c.Bot.IgnorePrivate)},
 		{"partunlisted", fmt.Sprintf("%t", c.Bot.PartUnlisted)},
+		{"botprefixes", fmt.Sprintf("%v", c.Bot.BotPrefixes)},
+		{"botreplylimit", fmt.Sprintf("%d", c.Bot.BotReplyLimit)},
+		{"botcooldown", c.Bot.BotCooldown.String()},
 		{"sessionduration", c.Session.TTL.String()},
 		{"openaikey", mask(c.API.OpenAIKey)},
 		{"anthropickey", mask(c.API.AnthropicKey)},
@@ -397,6 +410,9 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			Sandbox:            c.Bool("sandbox"),
 			IgnorePrivate:      c.Bool("ignoreprivate"),
 			PartUnlisted:       c.Bool("partunlisted"),
+			BotPrefixes:        c.StringSlice("botprefixes"),
+			BotReplyLimit:      int(c.Int("botreplylimit")),
+			BotCooldown:        c.Duration("botcooldown"),
 			FloodMessages:      c.Int("floodmessages"),
 			ScreenNicks:        c.StringSlice("screennicks"),
 			ScreenRefusal:      c.String("screenrefusal"),
