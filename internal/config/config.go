@@ -466,5 +466,13 @@ func NewConfiguration(c *cli.Command) *Configuration {
 		slog.Info("networks_configured", "count", len(nets))
 	}
 
+	// A15: refuse rather than send a password where it can be read or intercepted.
+	if insecure := InsecureCredentialNetworks(config.Networks); len(insecure) > 0 {
+		slog.Error("credentials_require_tls",
+			"networks", strings.Join(insecure, ", "),
+			"hint", "set tls: true and tlsinsecure: false, or remove serverpass/saslpass")
+		os.Exit(1)
+	}
+
 	return config
 }
