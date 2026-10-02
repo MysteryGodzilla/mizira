@@ -28,6 +28,7 @@ type runtimeOverrides struct {
 	AdminTools  *[]string `json:"admintools,omitempty"`
 	ScreenNicks *[]string `json:"screennicks,omitempty"`
 	FilterNicks *[]string `json:"filternicks,omitempty"`
+	BotPrefixes *[]string `json:"botprefixes,omitempty"`
 }
 
 var overridesMu sync.Mutex
@@ -131,6 +132,16 @@ func PersistScreening(screen, filter []string) {
 	saveOverrides(o)
 }
 
+// PersistBotPrefixes records the prefixes that mark other bots' lines.
+func PersistBotPrefixes(prefixes []string) {
+	overridesMu.Lock()
+	defer overridesMu.Unlock()
+	o := loadOverrides()
+	cp := append([]string{}, prefixes...)
+	o.BotPrefixes = &cp
+	saveOverrides(o)
+}
+
 // PersistAdminTools records which tools are restricted to admins.
 func PersistAdminTools(adminTools []string) {
 	overridesMu.Lock()
@@ -179,6 +190,10 @@ func ApplyOverrides(cfg *config.Configuration) []string {
 	if o.FilterNicks != nil {
 		cfg.Bot.FilterNicks = *o.FilterNicks
 		core.GetLogger().Info("override_applied", "key", "filternicks", "count", len(*o.FilterNicks))
+	}
+	if o.BotPrefixes != nil {
+		cfg.Bot.BotPrefixes = *o.BotPrefixes
+		core.GetLogger().Info("override_applied", "key", "botprefixes", "count", len(*o.BotPrefixes))
 	}
 	if o.AdminTools != nil {
 		cfg.Bot.AdminTools = *o.AdminTools
