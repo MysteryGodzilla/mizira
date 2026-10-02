@@ -79,9 +79,11 @@ type BotConfig struct {
 	BotCooldown   time.Duration
 	// LogFile is where logs are also written as JSON (relative = inside DataDir; "" or "off" =
 	// console only). It rotates at LogMaxSizeMB, keeping LogKeep old files.
-	LogFile      string
-	LogMaxSizeMB int
-	LogKeep      int
+	// MaxReplyLines caps the IRC lines one model reply may post (0 = no cap).
+	MaxReplyLines int
+	LogFile       string
+	LogMaxSizeMB  int
+	LogKeep       int
 	// Flood protection: more than FloodMessages from one nick within
 	// FloodWindow auto-ignores them for FloodTimeout. 0 messages disables it.
 	FloodMessages int
@@ -251,6 +253,7 @@ func GetFlags() []cli.Flag {
 		&cli.StringSliceFlag{Name: "botnicks", Usage: "nicks of bots that have their own account; all their lines count as bot lines", Sources: src("botnicks", "METALD_BOTNICKS")},
 		&cli.IntFlag{Name: "botreplylimit", Value: 3, Usage: "replies to other bots allowed in a row per channel before waiting for a human (0 = never reply to bots)", Sources: src("botreplylimit", "METALD_BOTREPLYLIMIT")},
 		&cli.DurationFlag{Name: "botcooldown", Value: 10 * time.Minute, Usage: "quiet time after which the bot reply count resets", Sources: src("botcooldown", "METALD_BOTCOOLDOWN")},
+		&cli.IntFlag{Name: "maxreplylines", Value: 4, Usage: "most IRC lines one reply may post; the rest is dropped (0 = no limit)", Sources: src("maxreplylines", "METALD_MAXREPLYLINES")},
 		&cli.StringFlag{Name: "logfile", Value: "logs/mizira.log", Usage: "also write logs as JSON to this file (relative to datadir; \"off\" to disable)", Sources: src("logfile", "METALD_LOGFILE")},
 		&cli.IntFlag{Name: "logmaxsize", Value: 10, Usage: "rotate the log file when it reaches this many MB", Sources: src("logmaxsize", "METALD_LOGMAXSIZE")},
 		&cli.IntFlag{Name: "logkeep", Value: 5, Usage: "how many rotated log files to keep", Sources: src("logkeep", "METALD_LOGKEEP")},
@@ -353,6 +356,7 @@ func (c *Configuration) PrintConfig() {
 		{"botnicks", fmt.Sprintf("%v", c.Bot.BotNicks)},
 		{"botreplylimit", fmt.Sprintf("%d", c.Bot.BotReplyLimit)},
 		{"botcooldown", c.Bot.BotCooldown.String()},
+		{"maxreplylines", fmt.Sprintf("%d", c.Bot.MaxReplyLines)},
 		{"logfile", c.Bot.LogFile},
 		{"sessionduration", c.Session.TTL.String()},
 		{"openaikey", mask(c.API.OpenAIKey)},
@@ -428,6 +432,7 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			BotNicks:           c.StringSlice("botnicks"),
 			BotReplyLimit:      int(c.Int("botreplylimit")),
 			BotCooldown:        c.Duration("botcooldown"),
+			MaxReplyLines:      int(c.Int("maxreplylines")),
 			LogFile:            c.String("logfile"),
 			LogMaxSizeMB:       int(c.Int("logmaxsize")),
 			LogKeep:            int(c.Int("logkeep")),

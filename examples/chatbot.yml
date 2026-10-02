@@ -30,6 +30,10 @@ channel: '#metald'
 # botreplylimit: 3
 # botcooldown: 10m
 
+# Most IRC lines one reply may post; anything longer is cut off (0 = no limit). Prompts can ask
+# for short replies, but a model asked for a long story often ignores that; this is the guarantee.
+# maxreplylines: 4
+
 # Log file: every log line is also written here as JSON, for debugging and for reviewing what
 # happened when someone breaks the bot. Relative paths are inside datadir; "off" disables it.
 # It rotates at logmaxsize MB and keeps logkeep old files (mizira.log.1 is the newest).

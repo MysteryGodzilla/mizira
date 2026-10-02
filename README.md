@@ -126,6 +126,7 @@ Set `model` to `provider/name`:
 | `urlwatcher` | off | comment on links posted in the channel |
 | `sandbox` | off | run shell, bash and MCP tools in a platform sandbox |
 | `verbose`, `loglevel`, `logformat` | off, `info`, `text` | console logging |
+| `maxreplylines` | `4` | most IRC lines one reply may post; the rest is dropped (`0` = no limit). The persona can ask for short replies, but this guarantees it |
 | `logfile`, `logmaxsize`, `logkeep` | `logs/mizira.log`, `10`, `5` | logs are also written as JSON lines to this file (relative to `datadir`; `off` disables), rotated at `logmaxsize` MB, keeping `logkeep` old files |
 
 ## Plugins
