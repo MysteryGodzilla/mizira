@@ -99,7 +99,9 @@ greeting: wave hello
 # Admin control (hostmasks who can use /set, /get, etc.)
 # admins:
 #   - "admin!~admin@trusted.host"
-# Matched exactly against nick!ident@host: wildcards like "*!*@host" do NOT work.
+#   - "admin!*@*.example.com"    # * and ? wildcards work; matching ignores case
+# Masks that would match nearly anyone, like "*!*@*", are refused. A mask with a wildcard host
+# ("nick!*@*") is allowed with a startup warning: only safe where the server ties nicks to accounts.
 
 # ============================================================================
 # SESSION MANAGEMENT
