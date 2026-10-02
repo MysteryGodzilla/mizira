@@ -30,6 +30,14 @@ channel: '#metald'
 # botreplylimit: 3
 # botcooldown: 10m
 
+# Log file: every log line is also written here as JSON, for debugging and for reviewing what
+# happened when someone breaks the bot. Relative paths are inside datadir; "off" disables it.
+# It rotates at logmaxsize MB and keeps logkeep old files (mizira.log.1 is the newest).
+# The file can quote what users said, so keep datadir private.
+# logfile: logs/mizira.log
+# logmaxsize: 10
+# logkeep: 5
+
 # IRC server connection details
 # server: irc.libera.chat       # Default: localhost
 # port: 6697                    # Default: 6667 (use 6697 for TLS)

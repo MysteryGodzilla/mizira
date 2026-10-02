@@ -77,6 +77,11 @@ type BotConfig struct {
 	// BotCooldown without bot replies resets it. 0 means never reply to bots.
 	BotReplyLimit int
 	BotCooldown   time.Duration
+	// LogFile is where logs are also written as JSON (relative = inside DataDir; "" or "off" =
+	// console only). It rotates at LogMaxSizeMB, keeping LogKeep old files.
+	LogFile      string
+	LogMaxSizeMB int
+	LogKeep      int
 	// Flood protection: more than FloodMessages from one nick within
 	// FloodWindow auto-ignores them for FloodTimeout. 0 messages disables it.
 	FloodMessages int
@@ -246,6 +251,9 @@ func GetFlags() []cli.Flag {
 		&cli.StringSliceFlag{Name: "botnicks", Usage: "nicks of bots that have their own account; all their lines count as bot lines", Sources: src("botnicks", "METALD_BOTNICKS")},
 		&cli.IntFlag{Name: "botreplylimit", Value: 3, Usage: "replies to other bots allowed in a row per channel before waiting for a human (0 = never reply to bots)", Sources: src("botreplylimit", "METALD_BOTREPLYLIMIT")},
 		&cli.DurationFlag{Name: "botcooldown", Value: 10 * time.Minute, Usage: "quiet time after which the bot reply count resets", Sources: src("botcooldown", "METALD_BOTCOOLDOWN")},
+		&cli.StringFlag{Name: "logfile", Value: "logs/mizira.log", Usage: "also write logs as JSON to this file (relative to datadir; \"off\" to disable)", Sources: src("logfile", "METALD_LOGFILE")},
+		&cli.IntFlag{Name: "logmaxsize", Value: 10, Usage: "rotate the log file when it reaches this many MB", Sources: src("logmaxsize", "METALD_LOGMAXSIZE")},
+		&cli.IntFlag{Name: "logkeep", Value: 5, Usage: "how many rotated log files to keep", Sources: src("logkeep", "METALD_LOGKEEP")},
 		&cli.BoolFlag{Name: "partunlisted", Usage: "leave (PART) any channel other than the configured one, once per connection; the bot is silent there either way", Sources: src("partunlisted", "METALD_PARTUNLISTED")},
 		&cli.IntFlag{Name: "floodmessages", Value: 5, Usage: "messages from one nick within floodwindow that trigger an auto-timeout (0 disables)", Sources: src("floodmessages", "METALD_FLOODMESSAGES")},
 		&cli.StringSliceFlag{Name: "screennicks", Usage: "nicks whose messages are screened by a classifier before answering (empty disables)", Sources: src("screennicks", "METALD_SCREENNICKS")},
@@ -345,6 +353,7 @@ func (c *Configuration) PrintConfig() {
 		{"botnicks", fmt.Sprintf("%v", c.Bot.BotNicks)},
 		{"botreplylimit", fmt.Sprintf("%d", c.Bot.BotReplyLimit)},
 		{"botcooldown", c.Bot.BotCooldown.String()},
+		{"logfile", c.Bot.LogFile},
 		{"sessionduration", c.Session.TTL.String()},
 		{"openaikey", mask(c.API.OpenAIKey)},
 		{"anthropickey", mask(c.API.AnthropicKey)},
@@ -419,6 +428,9 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			BotNicks:           c.StringSlice("botnicks"),
 			BotReplyLimit:      int(c.Int("botreplylimit")),
 			BotCooldown:        c.Duration("botcooldown"),
+			LogFile:            c.String("logfile"),
+			LogMaxSizeMB:       int(c.Int("logmaxsize")),
+			LogKeep:            int(c.Int("logkeep")),
 			FloodMessages:      c.Int("floodmessages"),
 			ScreenNicks:        c.StringSlice("screennicks"),
 			ScreenRefusal:      c.String("screenrefusal"),

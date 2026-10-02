@@ -40,6 +40,10 @@ custom-plugins/*
 # match the internal/config Go package
 /config/
 /data/
+# log files (datadir defaults to ".", so a bot run from here writes logs/ here); they quote users
+/logs/
+*.log
+*.log.[0-9]*
 
 # Windows builds
 *.exe
