@@ -173,6 +173,8 @@ Commands start with the command prefix, `+` by default (`commandprefix: "!"` to 
 | `+reset` | | clear this channel's conversation, custom persona and model switch |
 | `+prompt <text>` | | set a custom persona for this channel; it disables every tool until `+reset`. No argument shows the current state |
 | `+memories` / `+memories about <nick>` | | list stored memories |
+| `+remember <fact>` / `+remember <nick>: <fact>` | | save a fact about yourself or someone else, through the same safety checks as the bot's memory tool; the reply names the saved id |
+| `+recall [nick]` | | what is stored about someone (yourself by default) |
 | `+memories clear <nick>` / `+memories forget <id>` | own memories only | clear all memories about a nick, or delete one; admins may do either for anyone |
 | `+tools` | | list loaded tools |
 | `+tools load <spec>` / `+tools rm <pattern>` | yes | load or unload a tool |

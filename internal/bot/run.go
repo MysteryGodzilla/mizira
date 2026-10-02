@@ -83,6 +83,8 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	cmdRegistry.Register(&commands.ModelsCommand{})
 	cmdRegistry.Register(&commands.PromptCommand{})
 	cmdRegistry.Register(&commands.MemoriesCommand{})
+	cmdRegistry.Register(&commands.RememberCommand{})
+	cmdRegistry.Register(&commands.RecallCommand{})
 	cmdRegistry.Register(&commands.BotsCommand{})
 	cmdRegistry.Register(&commands.PauseCommand{})
 	cmdRegistry.Register(&commands.ResumeCommand{})
