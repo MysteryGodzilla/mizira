@@ -204,6 +204,28 @@ var configFields = map[string]configField{
 		},
 		getter: func(c *config.Configuration) string { return strconv.Itoa(c.Bot.MaxConcurrent) },
 	},
+	"botreplylimit": {
+		setter: func(c *config.Configuration, v string) error {
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 0 || n > 20 {
+				return fmt.Errorf("invalid value for botreplylimit. Please provide a whole number from 0 to 20")
+			}
+			c.Bot.BotReplyLimit = n
+			return nil
+		},
+		getter: func(c *config.Configuration) string { return strconv.Itoa(c.Bot.BotReplyLimit) },
+	},
+	"botcooldown": {
+		setter: func(c *config.Configuration, v string) error {
+			d, err := time.ParseDuration(v)
+			if err != nil || d < 0 {
+				return fmt.Errorf("invalid value for botcooldown. Please provide a valid duration (e.g. 10m, 1h)")
+			}
+			c.Bot.BotCooldown = d
+			return nil
+		},
+		getter: func(c *config.Configuration) string { return c.Bot.BotCooldown.String() },
+	},
 	"sessionduration": {
 		setter: func(c *config.Configuration, v string) error {
 			d, err := time.ParseDuration(v)
