@@ -106,7 +106,8 @@ Set `model` to `provider/name`:
 | `server`, `port` | `localhost`, `6667` | IRC server |
 | `tls`, `tlsinsecure` | off | TLS, and skipping certificate checks |
 | `channel`, `channelkey` | | channel to join, and its key. The bot speaks only here: events from any other channel are ignored |
-| `botprefixes`, `botreplylimit`, `botcooldown` | none, `3`, `10m` | line prefixes that mark other bots (e.g. `[metalai]`); how many replies to bots in a row before waiting for a human, and the quiet time that resets it |
+| `botnicks`, `botprefixes` | | other bots: by nick (bots with their own account), or by line prefix such as `[metalai]` (bots sharing their owner's nick) |
+| `botreplylimit`, `botcooldown` | `3`, `10m` | how many replies to bots in a row before waiting for a human, and the quiet time that resets it |
 | `partunlisted` | off | leave other channels the bot is joined to (e.g. by a server auto-join), once per connection |
 | `saslnick`, `saslpass`, `serverpass` | | authentication. A password needs `tls: true` and `tlsinsecure: false`, or the bot refuses to start |
 | `networks` | | several networks; each entry takes `name`, `nick`, `server`, `port`, `channel`, `channelkey`, `tls`, `tlsinsecure`, `saslnick`, `saslpass`, `serverpass` and `responseprefix`, and inherits anything it leaves out |
@@ -179,7 +180,7 @@ Commands start with the command prefix, `+` by default (`commandprefix: "!"` to 
 | `+backend` | yes | check that the OpenAI-compatible backend answers |
 | `+admins` / `+admins add <hostmask>` / `+admins remove <hostmask>` | yes | manage admins |
 | `+ignore <nick> [duration]` / `+unignore <nick>` | yes | stop answering someone for a while (default 1h) |
-| `+botprefix list` / `+botprefix add <prefix>` / `+botprefix remove <prefix>` | yes | manage the prefixes that mark other bots' lines |
+| `+bots list` / `+bots add nick\|prefix <value>` / `+bots remove nick\|prefix <value>` | yes | manage who counts as another bot |
 | `+screen <nick>` / `+unscreen <nick>` / `+screen list` | yes | put a nick behind inbound and outbound screening, dropping their earlier turns |
 
 ## Native tools

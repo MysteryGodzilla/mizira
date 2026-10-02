@@ -16,7 +16,7 @@ import (
 
 func botConfig(ownPrefix string, botPrefixes ...string) *config.Configuration {
 	return &config.Configuration{
-		Server: &config.ServerConfig{Name: "botlines-test", Channel: "#chat"},
+		Server: &config.ServerConfig{Name: "botlines-test", Channel: "#chat", Nick: "botnick"},
 		Bot:    &config.BotConfig{ResponsePrefix: ownPrefix, BotPrefixes: botPrefixes},
 	}
 }
@@ -41,7 +41,7 @@ func TestClassifyLine(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := ClassifyLine(cfg, tt.line); got != tt.want {
+			if got := ClassifyLine(cfg, "alice", tt.line); got != tt.want {
 				t.Errorf("ClassifyLine(%q) = %v, want %v", tt.line, got, tt.want)
 			}
 		})
@@ -53,8 +53,54 @@ func TestClassifyLine(t *testing.T) {
 func TestClassifyLineIgnoresShortPrefixes(t *testing.T) {
 	cfg := botConfig("", "[", "ab")
 	for _, line := range []string{"[hi]", "about that", "abc"} {
-		if got := ClassifyLine(cfg, line); got != HumanLine {
+		if got := ClassifyLine(cfg, "alice", line); got != HumanLine {
 			t.Errorf("ClassifyLine(%q) = %v, want HumanLine", line, got)
+		}
+	}
+}
+
+// Bots with their own account are recognised by nick, prefix or not.
+func TestClassifyLineByNick(t *testing.T) {
+	cfg := botConfig("[botnick]", "[otherbot]")
+	cfg.Bot.BotNicks = []string{"CarolBot", "botnick"} // own nick listed by mistake
+	tests := []struct {
+		name string
+		nick string
+		line string
+		want LineKind
+	}{
+		{"bot account, no prefix", "carolbot", "hi botnick", BotLine},
+		{"bot account, rfc1459 case", "CAROLBOT", "hi", BotLine},
+		{"human nick", "alice", "hi botnick", HumanLine},
+		{"own nick is never a bot nick (the owner chats on it)", "botnick", "hi all", HumanLine},
+		{"own nick with own prefix is still own", "botnick", "[botnick] hello", OwnLine},
+		{"no nick", "", "hi", HumanLine},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ClassifyLine(cfg, tt.nick, tt.line); got != tt.want {
+				t.Errorf("ClassifyLine(%q, %q) = %v, want %v", tt.nick, tt.line, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateBotNick(t *testing.T) {
+	cfg := botConfig("[botnick]")
+	tests := []struct {
+		nick string
+		ok   bool
+	}{
+		{"carolbot", true},
+		{"BotNick", false},  // configured own nick
+		{"botnick_", false}, // live nick after a collision
+		{"#chat", false},
+		{"alice,bob", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		if err := ValidateBotNick(cfg, tt.nick, "botnick_"); (err == nil) != tt.ok {
+			t.Errorf("ValidateBotNick(%q) error = %v, want ok=%v", tt.nick, err, tt.ok)
 		}
 	}
 }
@@ -81,6 +127,7 @@ func TestValidateBotPrefix(t *testing.T) {
 
 func TestTrackLine(t *testing.T) {
 	cfg := botConfig("[botnick]", "[otherbot]")
+	cfg.Bot.BotNicks = []string{"carolbot"}
 	msg := func(text string) *girc.Event {
 		return &girc.Event{Command: girc.PRIVMSG, Source: &girc.Source{Name: "alice"}, Params: []string{"#chat", text}}
 	}
@@ -103,6 +150,7 @@ func TestTrackLine(t *testing.T) {
 		{"own line is dropped", msg("[botnick] hello"), true, false},
 		{"human message resets", msg("hi all"), false, true},
 		{"bot line doesn't reset", msg("[otherbot] hi all"), false, false},
+		{"bot account doesn't reset", &girc.Event{Command: girc.PRIVMSG, Source: &girc.Source{Name: "carolbot"}, Params: []string{"#chat", "hi all"}}, false, false},
 		{"bot /me action doesn't reset", msg("\x01ACTION is thinking...\x01"), false, false},
 		{"notice doesn't reset", &girc.Event{Command: girc.NOTICE, Source: &girc.Source{Name: "alice"}, Params: []string{"#chat", "hi"}}, false, false},
 		{"private message doesn't reset", &girc.Event{Command: girc.PRIVMSG, Source: &girc.Source{Name: "alice"}, Params: []string{"botnick", "hi"}}, false, false},

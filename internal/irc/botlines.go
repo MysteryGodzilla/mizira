@@ -21,7 +21,8 @@ type LineKind int
 const (
 	// HumanLine is anything that doesn't start with a known bot prefix.
 	HumanLine LineKind = iota
-	// BotLine starts with one of the configured botprefixes: another bot is talking.
+	// BotLine comes from a nick in botnicks, or starts with one of the botprefixes: another
+	// bot is talking.
 	BotLine
 	// OwnLine starts with this bot's own responseprefix: it is reading its own words back.
 	OwnLine
@@ -31,16 +32,26 @@ const (
 // talk by accident (a prefix like "[" would match half the channel).
 const minBotPrefixLen = 3
 
-// ClassifyLine reports whether a line was written by a human, another bot, or this bot.
+// ClassifyLine reports whether a line from nick was written by a human, another bot, or
+// this bot.
 //
-// A10: bots on servers like SeedPool share their owner's nick and tag their lines with a
-// prefix such as "[metalai]", so the prefix is the only reliable sign. Colours and other
+// A10: a bot is recognised in one of two ways. Bots with their own account have their own
+// nick (botnicks). Bots that share their owner's nick tag their lines with a prefix such as
+// "[metalai]" (botprefixes), which is then the only reliable sign. Colours and other
 // formatting are stripped first, since a bot may colour its tag.
-func ClassifyLine(cfg *config.Configuration, text string) LineKind {
+func ClassifyLine(cfg *config.Configuration, nick, text string) LineKind {
 	line := normaliseLine(text)
 	if own := normaliseLine(cfg.EffectiveResponsePrefix()); utf8.RuneCountInString(own) >= minBotPrefixLen &&
 		strings.HasPrefix(line, own) {
 		return OwnLine
+	}
+	// Our own nick is never a bot nick, even if listed by mistake: the owner chats on it too.
+	if nick != "" && !sameNick(nick, cfg.Server.Nick) {
+		for _, n := range cfg.Bot.BotNicks {
+			if sameNick(nick, n) {
+				return BotLine
+			}
+		}
 	}
 	for _, p := range cfg.Bot.BotPrefixes {
 		if prefix := normaliseLine(p); utf8.RuneCountInString(prefix) >= minBotPrefixLen &&
@@ -58,7 +69,11 @@ func TrackLine(cfg *config.Configuration, e *girc.Event) (drop bool) {
 	if e.Command != girc.PRIVMSG && e.Command != girc.NOTICE {
 		return false
 	}
-	switch ClassifyLine(cfg, e.Last()) {
+	nick := ""
+	if e.Source != nil {
+		nick = e.Source.Name
+	}
+	switch ClassifyLine(cfg, nick, e.Last()) {
 	case OwnLine:
 		return true
 	case HumanLine:
@@ -86,6 +101,23 @@ func ValidateBotPrefix(cfg *config.Configuration, prefix string) error {
 		return errors.New("that's my own prefix; my own lines are always ignored")
 	}
 	return nil
+}
+
+// ValidateBotNick checks a nick before it is added with +bots. currentNick is the bot's live
+// nick, which may differ from the configured one.
+func ValidateBotNick(cfg *config.Configuration, nick, currentNick string) error {
+	if !girc.IsValidNick(nick) {
+		return errors.New("that isn't a valid nick")
+	}
+	if sameNick(nick, cfg.Server.Nick) || sameNick(nick, currentNick) {
+		return errors.New("that's my own nick, which my owner chats on too")
+	}
+	return nil
+}
+
+// sameNick compares nicks the way IRC does (case-insensitive, RFC 1459 casemapping).
+func sameNick(a, b string) bool {
+	return a != "" && girc.ToRFC1459(a) == girc.ToRFC1459(b)
 }
 
 // NormaliseBotPrefix is the form a bot prefix is stored in: no formatting, no outer spaces,

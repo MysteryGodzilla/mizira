@@ -66,7 +66,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	cmdRegistry.Register(&commands.ModelsCommand{})
 	cmdRegistry.Register(&commands.PromptCommand{})
 	cmdRegistry.Register(&commands.MemoriesCommand{})
-	cmdRegistry.Register(&commands.BotPrefixCommand{})
+	cmdRegistry.Register(&commands.BotsCommand{})
 
 	// Initialize behavior registry (order matters: passive watchers first, addressed last as fallback)
 	behaviorRegistry := behaviors.NewRegistry()

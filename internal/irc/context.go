@@ -443,7 +443,7 @@ func (c ChatContext) IsPrivate() bool {
 }
 
 func (c ChatContext) IsBotLine() bool {
-	return ClassifyLine(c.Config, c.event.Last()) == BotLine
+	return ClassifyLine(c.Config, c.event.Source.Name, c.event.Last()) == BotLine
 }
 
 func (c ChatContext) GetCommand() string {
