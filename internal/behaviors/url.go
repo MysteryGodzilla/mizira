@@ -39,6 +39,10 @@ func (b *URLBehavior) Check(ctx irc.ChatContextInterface, event *girc.Event) boo
 	if ctx.IsAddressed() {
 		return false
 	}
+	// A10: commenting on links other bots post would answer a bot without counting the reply.
+	if ctx.IsBotLine() {
+		return false
+	}
 	if urlPattern.MatchString(event.Last()) {
 		ctx.GetLogger().Info("url_detected")
 		return true

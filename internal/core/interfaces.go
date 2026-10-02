@@ -23,6 +23,8 @@ type ChatContextInterface interface {
 	IsAddressed() bool
 	IsAdmin() bool
 	IsPrivate() bool
+	// IsBotLine reports whether the message starts with another bot's prefix (botprefixes).
+	IsBotLine() bool
 	GetCommand() string
 	GetSource() string
 	GetRequestID() string

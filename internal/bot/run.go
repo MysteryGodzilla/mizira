@@ -66,6 +66,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	cmdRegistry.Register(&commands.ModelsCommand{})
 	cmdRegistry.Register(&commands.PromptCommand{})
 	cmdRegistry.Register(&commands.MemoriesCommand{})
+	cmdRegistry.Register(&commands.BotPrefixCommand{})
 
 	// Initialize behavior registry (order matters: passive watchers first, addressed last as fallback)
 	behaviorRegistry := behaviors.NewRegistry()
@@ -192,6 +193,9 @@ func runNetwork(ctx context.Context, cfg *config.Configuration, sys core.System,
 			return
 		}
 		if !gate.Admit(cfg, &e, client.GetNick(), func(channel string) { client.Cmd.Part(channel) }) {
+			return
+		}
+		if irc.TrackLine(cfg, &e) {
 			return
 		}
 		chatCtx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e, fatalErr)
