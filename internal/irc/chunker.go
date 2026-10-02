@@ -16,6 +16,28 @@ type Chunker struct {
 	output       chan<- string
 	buffer       *bytes.Buffer
 	maxChunkSize int
+
+	// maxLines caps how many lines one reply may post (0 = no cap). A small model asked for a
+	// long story ignores "keep it short" in its prompt; this makes the limit a guarantee.
+	maxLines  int
+	sent      int
+	truncated bool
+}
+
+// SetMaxLines caps how many lines this chunker will emit. Anything after that is dropped.
+func (c *Chunker) SetMaxLines(n int) { c.maxLines = n }
+
+// Truncated reports whether lines were dropped because of the line cap.
+func (c *Chunker) Truncated() bool { return c.truncated }
+
+// emit sends one line, unless the line cap has been reached.
+func (c *Chunker) emit(line string) {
+	if c.maxLines > 0 && c.sent >= c.maxLines {
+		c.truncated = true
+		return
+	}
+	c.sent++
+	c.output <- line
 }
 
 // NewChunker creates a new IRC chunker that writes to the given output channel.
@@ -44,16 +66,18 @@ func (c *Chunker) Write(content string) {
 		}
 		// Remove the newline and send
 		if line = strings.TrimSuffix(line, "\n"); line != "" {
-			c.output <- line
+			c.emit(line)
 		}
 	}
 
-	// If buffer is getting too large, force a chunk
-	if c.buffer.Len() >= c.maxChunkSize {
+	// If the buffer is too large, force chunks until it fits. A loop, not a single split: a big
+	// block arriving in one write must not leave an oversized remainder for Flush.
+	for c.buffer.Len() >= c.maxChunkSize {
 		chunk := c.extractBestSplitChunk()
-		if chunk != "" {
-			c.output <- chunk
+		if chunk == "" {
+			break
 		}
+		c.emit(chunk)
 	}
 }
 
@@ -78,10 +102,17 @@ func (c *Chunker) extractBestSplitChunk() string {
 	return chunk
 }
 
-// Flush emits any remaining buffer content.
+// Flush emits any remaining buffer content, still split at maxChunkSize.
 func (c *Chunker) Flush() {
+	for c.buffer.Len() > c.maxChunkSize {
+		chunk := c.extractBestSplitChunk()
+		if chunk == "" {
+			break
+		}
+		c.emit(chunk)
+	}
 	if c.buffer.Len() > 0 {
-		c.output <- c.buffer.String()
+		c.emit(c.buffer.String())
 		c.buffer.Reset()
 	}
 }
