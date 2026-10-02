@@ -169,6 +169,12 @@ func runNetwork(ctx context.Context, cfg *config.Configuration, sys core.System,
 		if !ircClient.IsConnected() {
 			return false
 		}
+		// A13: never deliver into a channel the bot may not speak in. Report it as handled,
+		// since retrying could never succeed.
+		if !irc.ChannelAllowed(cfg, channel) {
+			log.Warn("reminder_blocked_channel", "channel", channel)
+			return true
+		}
 		message = irc.RenderIRCFormatting(message)
 		if prefix := cfg.EffectiveResponsePrefix(); prefix != "" {
 			message = prefix + " " + message
@@ -177,9 +183,15 @@ func runNetwork(ctx context.Context, cfg *config.Configuration, sys core.System,
 		return true
 	})
 
+	// A13: drops events from every channel but the configured one before anything else sees them.
+	gate := irc.NewChannelGate(log)
+
 	// Single global handler routes all events through the behavior registry
 	ircClient.Handlers.AddBg(girc.ALL_EVENTS, func(client *girc.Client, e girc.Event) {
 		if !behaviorRegistry.Handles(e.Command) {
+			return
+		}
+		if !gate.Admit(cfg, &e, client.GetNick(), func(channel string) { client.Cmd.Part(channel) }) {
 			return
 		}
 		chatCtx, cancel := irc.NewChatContext(ctx, cfg, sys, client, &e, fatalErr)
@@ -208,6 +220,7 @@ func runNetwork(ctx context.Context, cfg *config.Configuration, sys core.System,
 			"sasl", ircClient.Config.SASL != nil,
 		)
 
+		gate.Reset()
 		if err := ircClient.Connect(); err != nil {
 			if ctx.Err() != nil {
 				return nil
