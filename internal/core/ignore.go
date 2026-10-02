@@ -12,13 +12,57 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // IgnoreStore tracks temporarily ignored nicks.
 type IgnoreStore struct {
 	mu      sync.RWMutex
 	path    string
-	entries map[string]time.Time // lowercased nick -> expiry
+	entries map[string]ignoreRecord // lowercased scoped nick -> record
+}
+
+// Kinds of ignore, so an operator can tell who decided it.
+const (
+	IgnoreByFlood = "flood" // automatic flood timeout
+	IgnoreByBot   = "bot"   // the model used its irc__ignore tool
+	IgnoreByAdmin = "admin" // an admin ran +ignore
+)
+
+// IgnoreInfo explains an ignore: what kind it is, who caused it and why. For IgnoreByBot, By is
+// the nick whose message the bot was answering, which matters because someone can try to talk
+// the bot into ignoring somebody else (A11).
+type IgnoreInfo struct {
+	Kind   string    `json:"kind,omitempty"`
+	By     string    `json:"by,omitempty"`
+	Reason string    `json:"reason,omitempty"`
+	SetAt  time.Time `json:"set_at,omitzero"`
+}
+
+// ignoreRecord is one stored ignore.
+type ignoreRecord struct {
+	Until time.Time `json:"until"`
+	IgnoreInfo
+}
+
+// maxIgnoreReason caps a stored reason. Reasons can come from the model or a user's message,
+// so they are kept short and on one line.
+const maxIgnoreReason = 120
+
+// cleanIgnoreReason puts a reason on one line: control characters (newlines, IRC colour and
+// bold codes) become spaces, runs of spaces collapse, and it is cut to maxIgnoreReason.
+func cleanIgnoreReason(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, s)
+	s = strings.Join(strings.Fields(s), " ")
+	if r := []rune(s); len(r) > maxIgnoreReason {
+		s = string(r[:maxIgnoreReason-1]) + "…"
+	}
+	return s
 }
 
 var (
@@ -37,7 +81,7 @@ func Ignores() *IgnoreStore {
 
 // NewIgnoreStore creates a store backed by path, loading any existing state.
 func NewIgnoreStore(path string) *IgnoreStore {
-	s := &IgnoreStore{path: path, entries: make(map[string]time.Time)}
+	s := &IgnoreStore{path: path, entries: make(map[string]ignoreRecord)}
 	s.load()
 	return s
 }
@@ -50,10 +94,19 @@ func normalizeNick(nick string) string {
 
 // Add ignores nick for d, replacing any existing entry. Returns the expiry.
 func (s *IgnoreStore) Add(network, nick string, d time.Duration) time.Time {
+	return s.AddWithInfo(network, nick, d, IgnoreInfo{})
+}
+
+// AddWithInfo is Add that also records why, so +ignore list can show it later.
+func (s *IgnoreStore) AddWithInfo(network, nick string, d time.Duration, info IgnoreInfo) time.Time {
 	nick = ScopeKey(network, nick)
-	expiry := time.Now().Add(d)
+	now := time.Now()
+	expiry := now.Add(d)
+	info.Reason = cleanIgnoreReason(info.Reason)
+	info.By = cleanIgnoreReason(info.By)
+	info.SetAt = now
 	s.mu.Lock()
-	s.entries[normalizeNick(nick)] = expiry
+	s.entries[normalizeNick(nick)] = ignoreRecord{Until: expiry, IgnoreInfo: info}
 	s.mu.Unlock()
 	s.save()
 	return expiry
@@ -80,18 +133,18 @@ func (s *IgnoreStore) IsIgnored(network, nick string) bool {
 	key := normalizeNick(nick)
 
 	s.mu.RLock()
-	expiry, ok := s.entries[key]
+	rec, ok := s.entries[key]
 	s.mu.RUnlock()
 	if !ok {
 		return false
 	}
-	if time.Now().Before(expiry) {
+	if time.Now().Before(rec.Until) {
 		return true
 	}
 
 	// Expired - drop it so the list stays clean.
 	s.mu.Lock()
-	if cur, still := s.entries[key]; still && !time.Now().Before(cur) {
+	if cur, still := s.entries[key]; still && !time.Now().Before(cur.Until) {
 		delete(s.entries, key)
 		s.mu.Unlock()
 		s.save()
@@ -105,6 +158,7 @@ func (s *IgnoreStore) IsIgnored(network, nick string) bool {
 type IgnoreEntry struct {
 	Nick   string
 	Expiry time.Time
+	IgnoreInfo
 }
 
 // List returns the currently-active ignores, sorted by nick, dropping any it has expired.
@@ -114,14 +168,14 @@ func (s *IgnoreStore) List(network string) []IgnoreEntry {
 	var expired []string
 
 	s.mu.RLock()
-	for nick, expiry := range s.entries {
-		if !now.Before(expiry) {
+	for nick, rec := range s.entries {
+		if !now.Before(rec.Until) {
 			expired = append(expired, nick)
 			continue
 		}
 		// This network only: the testbed must not disclose who is muted on the live network.
 		if keyInNetwork(network, nick) {
-			out = append(out, IgnoreEntry{Nick: UnscopeKey(network, nick), Expiry: expiry})
+			out = append(out, IgnoreEntry{Nick: UnscopeKey(network, nick), Expiry: rec.Until, IgnoreInfo: rec.IgnoreInfo})
 		}
 	}
 	s.mu.RUnlock()
@@ -129,7 +183,7 @@ func (s *IgnoreStore) List(network string) []IgnoreEntry {
 	if len(expired) > 0 {
 		s.mu.Lock()
 		for _, nick := range expired {
-			if cur, ok := s.entries[nick]; ok && !now.Before(cur) {
+			if cur, ok := s.entries[nick]; ok && !now.Before(cur.Until) {
 				delete(s.entries, nick)
 			}
 		}
@@ -148,26 +202,43 @@ func (s *IgnoreStore) load() {
 	if err != nil {
 		return
 	}
-	var raw map[string]time.Time
+	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
 		GetLogger().Warn("ignore_store_unreadable", "path", s.path, "error", err.Error())
 		return
 	}
 	now := time.Now()
-	for nick, expiry := range raw {
-		if now.Before(expiry) {
-			s.entries[normalizeNick(nick)] = expiry
+	for nick, value := range raw {
+		rec, err := decodeIgnoreRecord(value)
+		if err != nil {
+			GetLogger().Warn("ignore_entry_unreadable", "nick", nick, "error", err.Error())
+			continue
+		}
+		if now.Before(rec.Until) {
+			s.entries[normalizeNick(nick)] = rec
 		}
 	}
+}
+
+// decodeIgnoreRecord reads one saved entry. Files written before ignores had details hold just
+// the expiry time; those still load, with no details.
+func decodeIgnoreRecord(value json.RawMessage) (ignoreRecord, error) {
+	var rec ignoreRecord
+	if len(value) > 0 && value[0] == '"' {
+		err := json.Unmarshal(value, &rec.Until)
+		return rec, err
+	}
+	err := json.Unmarshal(value, &rec)
+	return rec, err
 }
 
 // save writes state atomically (temp file + rename) so a crash mid-write
 // can't leave a truncated file that loses every active ignore.
 func (s *IgnoreStore) save() {
 	s.mu.RLock()
-	snapshot := make(map[string]time.Time, len(s.entries))
-	for nick, expiry := range s.entries {
-		snapshot[nick] = expiry
+	snapshot := make(map[string]ignoreRecord, len(s.entries))
+	for nick, rec := range s.entries {
+		snapshot[nick] = rec
 	}
 	s.mu.RUnlock()
 
