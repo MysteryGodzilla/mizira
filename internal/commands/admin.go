@@ -62,7 +62,7 @@ func (c *AdminCommand) addAdmin(ctx irc.ChatContextInterface, hostmask string) {
 		return
 	}
 
-	if err := irc.ValidateHostmask(hostmask); err != nil {
+	if err := irc.ValidateAdminMask(hostmask); err != nil {
 		ctx.Reply(fmt.Sprintf("Invalid hostmask: %s", err))
 		return
 	}
@@ -77,7 +77,11 @@ func (c *AdminCommand) addAdmin(ctx irc.ChatContextInterface, hostmask string) {
 
 	cfg.Bot.Admins = append(cfg.Bot.Admins, hostmask)
 	PersistAdmins(cfg.Bot.Admins)
-	ctx.Reply(fmt.Sprintf("Added admin: %s", hostmask))
+	if warning := irc.AdminMaskWarning(hostmask); warning != "" {
+		ctx.Reply(fmt.Sprintf("Added admin: %s (note: %s)", hostmask, warning))
+	} else {
+		ctx.Reply(fmt.Sprintf("Added admin: %s", hostmask))
+	}
 	ctx.GetSession().Clear()
 }
 

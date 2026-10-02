@@ -54,6 +54,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	// Layer persisted runtime changes (+set, +admins, +tools) over config.yml. Must run
 	// before NewSystem, which reads them.
 	commands.ApplyOverrides(cfg)
+	checkAdminMasks(cfg.Bot.Admins)
 	core.SetConcurrency(cfg.Bot.MaxConcurrent)
 	if lib := core.ExportPluginLib(cfg.Bot.PluginLib); lib != "" {
 		core.GetLogger().Info("plugin_lib_exported", "path", lib)
@@ -279,4 +280,23 @@ func runNetwork(ctx context.Context, cfg *config.Configuration, sys core.System,
 	}
 
 	return fmt.Errorf("failed to connect after %d attempts", maxRetries)
+}
+
+// checkAdminMasks reports admin masks that will never match or deserve a second look. With no
+// usable admin, nobody can run +resume or +stop, so that case is logged loudly.
+func checkAdminMasks(admins []string) {
+	usable := 0
+	for _, mask := range admins {
+		if err := irc.ValidateAdminMask(mask); err != nil {
+			core.GetLogger().Error("admin_mask_ignored", "mask", mask, "reason", err.Error())
+			continue
+		}
+		usable++
+		if warning := irc.AdminMaskWarning(mask); warning != "" {
+			core.GetLogger().Warn("admin_mask_broad", "mask", mask, "note", warning)
+		}
+	}
+	if usable == 0 {
+		core.GetLogger().Warn("no_admins", "hint", "set admins in config.yml, or nobody can use admin commands such as +stop")
+	}
 }
