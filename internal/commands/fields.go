@@ -204,6 +204,17 @@ var configFields = map[string]configField{
 		},
 		getter: func(c *config.Configuration) string { return strconv.Itoa(c.Bot.MaxConcurrent) },
 	},
+	"maxreplylines": {
+		setter: func(c *config.Configuration, v string) error {
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 0 || n > 20 {
+				return fmt.Errorf("invalid value for maxreplylines. Please provide a whole number from 0 (no limit) to 20")
+			}
+			c.Bot.MaxReplyLines = n
+			return nil
+		},
+		getter: func(c *config.Configuration) string { return strconv.Itoa(c.Bot.MaxReplyLines) },
+	},
 	"botreplylimit": {
 		setter: func(c *config.Configuration, v string) error {
 			n, err := strconv.Atoi(v)

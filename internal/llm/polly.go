@@ -68,6 +68,7 @@ func (p *PollyLLM) ChatCompletionStream(chatCtx core.ChatContextInterface, req *
 		})
 
 		chunker := irc.NewChunker(output, maxChunkSize)
+		chunker.SetMaxLines(cfg.Bot.MaxReplyLines)
 		cb := newCallbackHandler(chatCtx, chunker, cfg)
 
 		resp, err := agent.Run(chatCtx, req, cb.build())
@@ -96,6 +97,10 @@ func (p *PollyLLM) ChatCompletionStream(chatCtx core.ChatContextInterface, req *
 		}
 
 		cb.flush()
+		if chunker.Truncated() {
+			// Not a suspicion signal: asking for a long story is normal, not an attack.
+			chatCtx.GetLogger().Info("reply_line_limit", "limit", cfg.Bot.MaxReplyLines)
+		}
 
 		commitExchange(chatCtx.GetSession(),
 			append(takePending(req), redactRefusedArguments(resp.AllMessages)...))
