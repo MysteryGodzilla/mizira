@@ -442,6 +442,10 @@ func (c ChatContext) IsPrivate() bool {
 	return CheckPrivate(c.event.Params[0])
 }
 
+func (c ChatContext) IsBotLine() bool {
+	return ClassifyLine(c.Config, c.event.Last()) == BotLine
+}
+
 func (c ChatContext) GetCommand() string {
 	return CanonicalCommand(c.args[0], c.Config.Bot.CommandPrefix)
 }

@@ -37,6 +37,10 @@ func (b *AddressedBehavior) Check(ctx irc.ChatContextInterface, event *girc.Even
 	if len(ctx.GetArgs()) == 0 {
 		return false
 	}
+	// Other bots may chat with us, but never run commands, and only up to the loop limit.
+	if ctx.IsBotLine() {
+		return ctx.IsAddressed() && botMayReply(ctx)
+	}
 
 	// A registered command is handled even when the message doesn't address the bot by name.
 	if fields := strings.Fields(event.Last()); len(fields) > 0 {
@@ -49,7 +53,9 @@ func (b *AddressedBehavior) Check(ctx irc.ChatContextInterface, event *girc.Even
 }
 
 func (b *AddressedBehavior) Execute(ctx irc.ChatContextInterface, event *girc.Event) {
-	if CheckFlood(ctx) {
+	// Bot lines share their owner's nick, so counting them would flood-mute the human too.
+	// The bot loop limit caps them instead.
+	if !ctx.IsBotLine() && CheckFlood(ctx) {
 		return
 	}
 	// Lock-bypassing commands (e.g. +reset) exist to unstick a wedged lock,

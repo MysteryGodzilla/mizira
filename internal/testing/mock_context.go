@@ -24,6 +24,7 @@ type MockChatContext struct {
 	Addressed bool
 	Admin     bool
 	Private   bool
+	BotLine   bool
 	Command   string
 	Source    string
 	Args      []string
@@ -194,6 +195,10 @@ func (m *MockChatContext) IsAdmin() bool {
 
 func (m *MockChatContext) IsPrivate() bool {
 	return m.Private
+}
+
+func (m *MockChatContext) IsBotLine() bool {
+	return m.BotLine
 }
 
 func (m *MockChatContext) GetCommand() string {
