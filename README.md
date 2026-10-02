@@ -105,7 +105,8 @@ Set `model` to `provider/name`:
 | `nick` | `metald` | bot nickname |
 | `server`, `port` | `localhost`, `6667` | IRC server |
 | `tls`, `tlsinsecure` | off | TLS, and skipping certificate checks |
-| `channel`, `channelkey` | | channel to join, and its key |
+| `channel`, `channelkey` | | channel to join, and its key. The bot speaks only here: events from any other channel are ignored |
+| `partunlisted` | off | leave other channels the bot is joined to (e.g. by a server auto-join), once per connection |
 | `saslnick`, `saslpass`, `serverpass` | | authentication |
 | `networks` | | several networks; each entry takes `name`, `nick`, `server`, `port`, `channel`, `channelkey`, `tls`, `tlsinsecure`, `saslnick`, `saslpass`, `serverpass` and `responseprefix`, and inherits anything it leaves out |
 | `admins` | none | hostmasks allowed to run admin commands; empty means nobody |

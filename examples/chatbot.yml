@@ -8,6 +8,13 @@ nick: chatbot
 # IRC channel to join (include # for public channels)
 channel: '#metald'
 # channel: "##private-channel"  # Some networks use ## for unofficial channels
+# The bot reads and speaks ONLY in this channel (and private messages, see ignoreprivate).
+# Anything from other channels, including ones the server auto-joins it to, is ignored.
+
+# Leave (PART) other channels the bot finds itself in, once per connection.
+# Keep this off if the bot shares a nick with your own IRC client: on servers that allow
+# several connections per account, a PART can take your own client out of the channel too.
+# partunlisted: false
 
 # IRC server connection details
 # server: irc.libera.chat       # Default: localhost

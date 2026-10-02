@@ -64,6 +64,9 @@ type BotConfig struct {
 	URLWatcherSilent   bool
 	Sandbox            bool
 	IgnorePrivate      bool
+	// PartUnlisted makes the bot leave channels other than Server.Channel. Off by default: on a
+	// server where the bot shares its owner's nick, a PART can pull the owner out too.
+	PartUnlisted bool
 	// Flood protection: more than FloodMessages from one nick within
 	// FloodWindow auto-ignores them for FloodTimeout. 0 messages disables it.
 	FloodMessages int
@@ -229,6 +232,7 @@ func GetFlags() []cli.Flag {
 		&cli.BoolFlag{Name: "urlwatchersilent", Usage: "run URL watcher without sending a reply in chat; response is discarded", Sources: src("urlwatchersilent", "METALD_URLWATCHERSILENT")},
 		&cli.BoolFlag{Name: "sandbox", Usage: "run shell/bash/MCP tools inside a platform sandbox (macOS sandbox-exec, Linux bubblewrap)", Sources: src("sandbox", "METALD_SANDBOX")},
 		&cli.BoolFlag{Name: "ignoreprivate", Usage: "ignore direct/private messages entirely (no response, no commands)", Sources: src("ignoreprivate", "METALD_IGNOREPRIVATE")},
+		&cli.BoolFlag{Name: "partunlisted", Usage: "leave (PART) any channel other than the configured one, once per connection; the bot is silent there either way", Sources: src("partunlisted", "METALD_PARTUNLISTED")},
 		&cli.IntFlag{Name: "floodmessages", Value: 5, Usage: "messages from one nick within floodwindow that trigger an auto-timeout (0 disables)", Sources: src("floodmessages", "METALD_FLOODMESSAGES")},
 		&cli.StringSliceFlag{Name: "screennicks", Usage: "nicks whose messages are screened by a classifier before answering (empty disables)", Sources: src("screennicks", "METALD_SCREENNICKS")},
 		&cli.StringFlag{Name: "screenrefusal", Value: "no.", Usage: "what to say when a screened message is refused", Sources: src("screenrefusal", "METALD_SCREENREFUSAL")},
@@ -322,6 +326,7 @@ func (c *Configuration) PrintConfig() {
 		{"urlwatchersilent", fmt.Sprintf("%t", c.Bot.URLWatcherSilent)},
 		{"sandbox", fmt.Sprintf("%t", c.Bot.Sandbox)},
 		{"ignoreprivate", fmt.Sprintf("%t", c.Bot.IgnorePrivate)},
+		{"partunlisted", fmt.Sprintf("%t", c.Bot.PartUnlisted)},
 		{"sessionduration", c.Session.TTL.String()},
 		{"openaikey", mask(c.API.OpenAIKey)},
 		{"anthropickey", mask(c.API.AnthropicKey)},
@@ -391,6 +396,7 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			URLWatcherSilent:   c.Bool("urlwatchersilent"),
 			Sandbox:            c.Bool("sandbox"),
 			IgnorePrivate:      c.Bool("ignoreprivate"),
+			PartUnlisted:       c.Bool("partunlisted"),
 			FloodMessages:      c.Int("floodmessages"),
 			ScreenNicks:        c.StringSlice("screennicks"),
 			ScreenRefusal:      c.String("screenrefusal"),
