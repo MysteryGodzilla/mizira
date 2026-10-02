@@ -181,7 +181,8 @@ Commands start with the command prefix, `+` by default (`commandprefix: "!"` to 
 | `+models` / `+models <name>` | yes | list the models an OpenAI-compatible backend (`openaiurl`) serves, or switch to one |
 | `+backend` | yes | check that the OpenAI-compatible backend answers |
 | `+admins` / `+admins add <hostmask>` / `+admins remove <hostmask>` | yes | manage admins |
-| `+ignore <nick> [duration]` / `+unignore <nick>` | yes | stop answering someone for a while (default 1h) |
+| `+ignore <nick> [duration] [reason]` / `+unignore <nick>` | yes | stop answering someone for a while (default 1h) |
+| `+ignore` / `+ignore list` | yes | who is ignored, time left, and how: flood, the bot (and whose message it was answering), or an admin, with the reason |
 | `+pause` / `+resume` / `+stop` | yes | pause: start nothing new, let running replies finish. stop: cancel everything now. Both persist across restarts until `+resume`; admin commands still work meanwhile |
 | `+bots list` / `+bots add nick\|prefix <value>` / `+bots remove nick\|prefix <value>` | yes | manage who counts as another bot |
 | `+screen <nick>` / `+unscreen <nick>` / `+screen list` | yes | put a nick behind inbound and outbound screening, dropping their earlier turns |

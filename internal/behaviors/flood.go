@@ -6,6 +6,7 @@ package behaviors
 
 import (
 	"fmt"
+	"time"
 
 	"B4reMetal/metald/internal/core"
 	"B4reMetal/metald/internal/irc"
@@ -39,7 +40,10 @@ func CheckFlood(ctx irc.ChatContextInterface) bool {
 	ctx.Reply(fmt.Sprintf("%s: too many messages too fast. ignoring you for %s.",
 		source, cfg.Bot.FloodTimeout))
 
-	expiry := core.Ignores().Add(ctx.GetNetwork(), source, cfg.Bot.FloodTimeout)
+	expiry := core.Ignores().AddWithInfo(ctx.GetNetwork(), source, cfg.Bot.FloodTimeout, core.IgnoreInfo{
+		Kind:   core.IgnoreByFlood,
+		Reason: fmt.Sprintf("%d messages in %s", count, shortDuration(cfg.Bot.FloodWindow)),
+	})
 	// Clear the history so they resume from a clean slate when the timeout
 	// lapses, instead of instantly re-tripping on their first message back.
 	core.Flood().Reset(ctx.GetNetwork(), source)
@@ -59,4 +63,12 @@ func CheckFlood(ctx irc.ChatContextInterface) bool {
 	)
 
 	return true
+}
+
+// shortDuration writes whole minutes as "1m" rather than Go's "1m0s".
+func shortDuration(d time.Duration) string {
+	if d >= time.Minute && d%time.Minute == 0 {
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	}
+	return d.String()
 }

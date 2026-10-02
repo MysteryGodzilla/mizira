@@ -68,7 +68,12 @@ func newIrcIgnoreTool() tools.Tool {
 			}
 			duration := time.Duration(minutes) * time.Minute
 
-			expiry := core.Ignores().Add(chatCtx.GetNetwork(), nick, duration)
+			// By is the speaker the bot was answering: the person to ask "why?" (A11).
+			expiry := core.Ignores().AddWithInfo(chatCtx.GetNetwork(), nick, duration, core.IgnoreInfo{
+				Kind:   core.IgnoreByBot,
+				By:     chatCtx.GetSource(),
+				Reason: args.String("reason"),
+			})
 			chatCtx.GetLogger().Info("self_ignore",
 				"nick", nick,
 				"minutes", minutes,

@@ -84,3 +84,11 @@ func TestFloodAnnouncesOnce(t *testing.T) {
 		t.Fatalf("expected exactly 1 announcement, got %d: %v", len(ctx.Replies), ctx.Replies)
 	}
 }
+
+func TestShortDuration(t *testing.T) {
+	for d, want := range map[time.Duration]string{time.Minute: "1m", 30 * time.Second: "30s", 90 * time.Second: "1m30s", 10 * time.Minute: "10m"} {
+		if got := shortDuration(d); got != want {
+			t.Errorf("shortDuration(%v) = %q, want %q", d, got, want)
+		}
+	}
+}

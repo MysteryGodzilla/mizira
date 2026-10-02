@@ -126,3 +126,22 @@ func TestSelfIgnoreActuallyIgnores(t *testing.T) {
 		t.Fatal("nick should be ignored after the tool runs")
 	}
 }
+
+// A11: the record must say whose message the bot was answering, so the operator can ask why.
+func TestSelfIgnoreRecordsWhoAndWhy(t *testing.T) {
+	mock := mocktest.NewMockContext().WithSource("alice")
+	mock.GetConfig().Server.Name = "self-ignore-details"
+	ctx := InjectContext(context.Background(), mock)
+	defer core.Ignores().Remove("self-ignore-details", "bob")
+
+	runIgnoreTool(t, ctx, tools.Args{"nick": "bob", "minutes": 15, "reason": "kept\nspamming links"})
+
+	entries := core.Ignores().List("self-ignore-details")
+	if len(entries) != 1 {
+		t.Fatalf("entries = %+v", entries)
+	}
+	e := entries[0]
+	if e.Kind != core.IgnoreByBot || e.By != "alice" || e.Reason != "kept spamming links" {
+		t.Errorf("entry = %+v, want bot / alice / one-line reason", e)
+	}
+}
