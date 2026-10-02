@@ -5,8 +5,6 @@
 package behaviors
 
 import (
-	"strings"
-
 	"github.com/lrstanley/girc"
 
 	"B4reMetal/metald/internal/commands"
@@ -55,13 +53,14 @@ func (b *AddressedBehavior) Check(ctx irc.ChatContextInterface, event *girc.Even
 	return ctx.IsAddressed() || ctx.IsPrivate()
 }
 
-// isCommand reports whether the message starts with a registered +command.
+// isCommand reports whether the message is a registered +command for this bot. With
+// commandsneedname on, that means "Mizira +name", not a bare "+name" meant for another bot.
 func (b *AddressedBehavior) isCommand(ctx irc.ChatContextInterface, event *girc.Event) bool {
-	fields := strings.Fields(event.Last())
-	if len(fields) == 0 {
+	words, ok := irc.CommandWords(ctx.GetConfig(), ctx.GetBotNick(), event.Last())
+	if !ok {
 		return false
 	}
-	_, ok := b.CmdRegistry.Get(irc.CanonicalCommand(fields[0], ctx.GetConfig().Bot.CommandPrefix))
+	_, ok = b.CmdRegistry.Get(irc.CanonicalCommand(words[0], ctx.GetConfig().Bot.CommandPrefix))
 	return ok
 }
 

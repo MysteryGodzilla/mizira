@@ -12,7 +12,6 @@ import (
 	"log/slog"
 	"os"
 	"regexp"
-	"strings"
 
 	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/lrstanley/girc"
@@ -32,6 +31,7 @@ type ChatContext struct {
 	client    *girc.Client
 	event     *girc.Event
 	args      []string
+	isCommand bool // the message is a command for this bot (see CommandWords)
 	logger    *slog.Logger
 	requestID string
 	fatalCh   chan<- error
@@ -58,13 +58,18 @@ func NewChatContext(parentctx context.Context, config *config.Configuration, sys
 		channel = e.Params[0]
 	}
 
+	// A command addressed by name ("Mizira +memories") loses the name here, so commands see their
+	// own name first, as before.
+	args, isCommand := CommandWords(config, ircclient.GetNick(), e.Last())
+
 	ctx := ChatContext{
 		Context:   timedctx,
 		Config:    config,
 		Sys:       system,
 		client:    ircclient,
 		event:     e,
-		args:      strings.Fields(e.Last()),
+		args:      args,
+		isCommand: isCommand,
 		requestID: requestID,
 		fatalCh:   fatalCh,
 		logger: slog.Default().With(
@@ -446,7 +451,13 @@ func (c ChatContext) IsBotLine() bool {
 	return ClassifyLine(c.Config, c.event.Source.Name, c.event.Last()) == BotLine
 }
 
+// GetCommand returns the command this message runs, or "" for ordinary chat. A "+word" that
+// isn't a command for this bot (e.g. no name when commandsneedname is on) is chat, so a line
+// that merely mentions the bot can't sneak a command past the name rule.
 func (c ChatContext) GetCommand() string {
+	if !c.isCommand || len(c.args) == 0 {
+		return ""
+	}
 	return CanonicalCommand(c.args[0], c.Config.Bot.CommandPrefix)
 }
 

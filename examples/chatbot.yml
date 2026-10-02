@@ -220,6 +220,10 @@ tool:
 # the first word of the message. Live: +set commandprefix !
 commandprefix: "+"
 
+# Commands only work when addressed by name first ("chatbot +help"). Bots in the same channel
+# often share the "+" prefix, and one bare "+help" would otherwise trigger all of them.
+# commandsneedname: true
+
 # How many requests are handled at once, across all networks. Each one works
 # from a snapshot of the conversation and commits its question and answer as
 # one block when it finishes. 1 = strictly one at a time. Live: +set maxconcurrent N

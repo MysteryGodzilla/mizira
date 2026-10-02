@@ -99,3 +99,21 @@ func TestBotLineSkipsNonAddressedAndURLWatcher(t *testing.T) {
 		t.Error("non-addressed mode must not answer bot lines")
 	}
 }
+
+// With commandsneedname on, a bare "+version" is for other bots; "testbot +version" is ours.
+func TestCommandsNeedName(t *testing.T) {
+	b := addressedWithVersion()
+	bare := &girc.Event{Command: girc.PRIVMSG, Params: []string{"#test", "+version"}}
+	named := &girc.Event{Command: girc.PRIVMSG, Params: []string{"#test", "testbot +version"}}
+
+	// The mock is addressed by default; a bare "+version" doesn't contain the name, so it isn't.
+	ctx := mocktest.NewMockContext().WithArgs("+version").WithAddressed(false)
+	ctx.GetConfig().Bot.CommandsNeedName = true
+	ctx.GetConfig().Bot.Trigger = "testbot"
+	if b.Check(ctx, bare) {
+		t.Error("a bare command must not run when commands need the name")
+	}
+	if !b.Check(ctx.WithAddressed(true), named) {
+		t.Error("a named command must run")
+	}
+}
