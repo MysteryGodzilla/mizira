@@ -110,3 +110,36 @@ func TestChunker_Flush(t *testing.T) {
 		t.Error("expected flush to emit remaining content")
 	}
 }
+
+func TestChunkerHoldKeepsOrderUntilReleased(t *testing.T) {
+	out := make(chan string, 10)
+	c := NewChunker(out, 400)
+	c.SetHold(func(line string) bool { return line == "claim" })
+	c.Write("before\nclaim\nafter\n")
+	if got := len(out); got != 1 || !c.Holding() {
+		t.Fatalf("want 1 line sent and the rest held, got %d sent", got)
+	}
+	c.Release()
+	close(out)
+	var got []string
+	for l := range out {
+		got = append(got, l)
+	}
+	if len(got) != 3 || got[1] != "claim" || got[2] != "after" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestChunkerDropHeld(t *testing.T) {
+	out := make(chan string, 10)
+	c := NewChunker(out, 400)
+	c.SetHold(func(line string) bool { return line == "claim" })
+	c.Write("claim\nafter\n")
+	if dropped := c.DropHeld(); len(dropped) != 2 || len(out) != 0 || c.Holding() {
+		t.Fatalf("dropped %q, %d sent", dropped, len(out))
+	}
+	c.Write("claim\n")
+	if n := c.Discard(); n != len("claim") || c.Holding() {
+		t.Fatalf("Discard returned %d", n)
+	}
+}
