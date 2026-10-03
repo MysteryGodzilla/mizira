@@ -17,7 +17,7 @@ import (
 type PromptCommand struct{}
 
 func (c *PromptCommand) Name() string    { return "+prompt" }
-func (c *PromptCommand) AdminOnly() bool { return false }
+func (c *PromptCommand) AdminOnly() bool { return true } // a persona swap is a prompt break waiting to happen
 
 // maxUserPrompt bounds what one message can install.
 const maxUserPrompt = 2000

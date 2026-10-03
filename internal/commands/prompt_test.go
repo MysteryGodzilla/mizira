@@ -141,9 +141,10 @@ func TestResetLeavesNoPersonaInRebuiltHistory(t *testing.T) {
 	}
 }
 
-func TestPromptIsNotAdminOnly(t *testing.T) {
-	if (&PromptCommand{}).AdminOnly() {
-		t.Error("+prompt is meant to be usable by anyone; tool removal is what makes that safe")
+// Removing tools doesn't stop a stranger turning the persona abusive, as a live channel showed.
+func TestPromptIsAdminOnly(t *testing.T) {
+	if !(&PromptCommand{}).AdminOnly() {
+		t.Error("+prompt must be admin-only")
 	}
 }
 
