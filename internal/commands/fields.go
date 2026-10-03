@@ -8,6 +8,7 @@ import (
 	"B4reMetal/metald/internal/core"
 	"B4reMetal/metald/internal/irc"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"time"
@@ -104,20 +105,6 @@ var configFields = map[string]configField{
 			return nil
 		},
 		getter: func(c *config.Configuration) string { return fmt.Sprintf("%f", c.Model.Temperature) },
-	},
-	"top_p": {
-		setter: func(c *config.Configuration, v string) error {
-			f, err := strconv.ParseFloat(v, 32)
-			if err != nil {
-				return fmt.Errorf("invalid value for top_p. Please provide a valid float")
-			}
-			if f < 0 || f > 1 {
-				return fmt.Errorf("invalid value for top_p. Please provide a float between 0 and 1")
-			}
-			c.Model.TopP = float32(f)
-			return nil
-		},
-		getter: func(c *config.Configuration) string { return fmt.Sprintf("%f", c.Model.TopP) },
 	},
 	"openaiurl": {
 		setter: func(c *config.Configuration, v string) error { c.API.OpenAIURL = v; return nil },
@@ -327,4 +314,44 @@ func maskAPIKey(key string) string {
 		return strings.Repeat("*", len(key))
 	}
 	return key[:4] + strings.Repeat("*", len(key)-4)
+}
+
+func init() {
+	for _, key := range config.SamplingKeys {
+		configFields[key] = samplingField(key)
+	}
+}
+
+// samplingField sets one sampling value, or clears it with "default" so the server's own applies.
+// The map is replaced, not edited, since requests in flight may be reading the old one.
+func samplingField(key string) configField {
+	return configField{
+		setter: func(c *config.Configuration, v string) error {
+			next := maps.Clone(c.Model.Sampling)
+			if next == nil {
+				next = map[string]float64{}
+			}
+			if strings.EqualFold(strings.TrimSpace(v), "default") {
+				delete(next, key)
+				c.Model.Sampling = next
+				return nil
+			}
+			f, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+			if err != nil {
+				return fmt.Errorf("invalid value for %s: give a number, or \"default\" for the server's own", key)
+			}
+			if err := config.CheckSampling(key, f); err != nil {
+				return err
+			}
+			next[key] = f
+			c.Model.Sampling = next
+			return nil
+		},
+		getter: func(c *config.Configuration) string {
+			if v, ok := c.Model.Sampling[key]; ok {
+				return strconv.FormatFloat(v, 'f', -1, 64)
+			}
+			return "default"
+		},
+	}
 }

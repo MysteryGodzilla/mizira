@@ -126,9 +126,9 @@ type ModelConfig struct {
 	Model          string
 	MaxTokens      int
 	Temperature    float32
-	TopP           float32
-	ThinkingEffort string // off, low, medium, high
-	Stream         bool   // true = streaming (default), false = non-streaming
+	Sampling       map[string]float64 // SamplingKeys that are set; replaced whole, never edited in place
+	ThinkingEffort string             // off, low, medium, high
+	Stream         bool               // true = streaming (default), false = non-streaming
 }
 
 type SessionConfig struct {
@@ -242,7 +242,11 @@ func GetFlags() []cli.Flag {
 		&cli.StringFlag{Name: "model", Value: "ollama/llama3.2", Usage: "model to be used for responses", Sources: src("model", "METALD_MODEL")},
 		&cli.DurationFlag{Name: "apitimeout", Aliases: []string{"t"}, Value: time.Minute * 5, Usage: "timeout for each completion request", Sources: src("apitimeout", "METALD_APITIMEOUT")},
 		&cli.FloatFlag{Name: "temperature", Value: 0.7, Usage: "temperature for the completion", Sources: src("temperature", "METALD_TEMPERATURE")},
-		&cli.FloatFlag{Name: "top_p", Value: 1.0, Usage: "top P value for the completion", Sources: src("top_p", "METALD_TOP_P")},
+		&cli.FloatFlag{Name: "top_p", Usage: "nucleus sampling, 0-1 (unset: the server's default)", Sources: src("top_p", "METALD_TOP_P")},
+		&cli.FloatFlag{Name: "top_k", Usage: "sample from the k likeliest tokens, 0-1000 (unset: the server's default)", Sources: src("top_k", "METALD_TOP_K")},
+		&cli.FloatFlag{Name: "min_p", Usage: "drop tokens below this share of the likeliest, 0-1 (unset: the server's default)", Sources: src("min_p", "METALD_MIN_P")},
+		&cli.FloatFlag{Name: "presence_penalty", Usage: "penalise tokens already used, -2 to 2 (unset: the server's default)", Sources: src("presence_penalty", "METALD_PRESENCE_PENALTY")},
+		&cli.FloatFlag{Name: "repeat_penalty", Usage: "llama.cpp repetition penalty, 0-2, 1 = off (unset: the server's default)", Sources: src("repeat_penalty", "METALD_REPEAT_PENALTY")},
 		&cli.StringFlag{Name: "thinkingeffort", Value: "off", Usage: "thinking effort level: off, low, medium, high", Sources: src("thinkingeffort", "METALD_THINKINGEFFORT")},
 		&cli.BoolFlag{Name: "stream", Value: true, Usage: "enable streaming responses", Sources: src("stream", "METALD_STREAM")},
 		&cli.StringSliceFlag{Name: "tool", Usage: "tools to load (shell scripts, MCP server JSON files, or native tools like irc__op)", Sources: src("tool", "METALD_TOOL")},
@@ -373,7 +377,7 @@ func (c *Configuration) PrintConfig() {
 		{"ollamaurl", c.API.OllamaURL},
 		{"model", c.Model.Model},
 		{"temperature", fmt.Sprintf("%f", c.Model.Temperature)},
-		{"topp", fmt.Sprintf("%f", c.Model.TopP)},
+		{"sampling", FormatSampling(c.Model.Sampling)},
 		{"thinkingeffort", c.Model.ThinkingEffort},
 		{"stream", fmt.Sprintf("%t", c.Model.Stream)},
 		{"prompt", c.Bot.Prompt},
@@ -468,7 +472,7 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			Model:          c.String("model"),
 			MaxTokens:      c.Int("maxtokens"),
 			Temperature:    float32(c.Float("temperature")),
-			TopP:           float32(c.Float("top_p")),
+			Sampling:       readSampling(c),
 			ThinkingEffort: c.String("thinkingeffort"),
 			Stream:         c.Bool("stream"),
 		},
@@ -499,6 +503,13 @@ func NewConfiguration(c *cli.Command) *Configuration {
 		os.Exit(1)
 	}
 
+	for key, v := range config.Model.Sampling {
+		if err := CheckSampling(key, v); err != nil {
+			slog.Error("sampling_invalid", "error", err.Error())
+			os.Exit(1)
+		}
+	}
+
 	nets, err := parseNetworks(getConfigPath(), config.Server)
 	if err != nil {
 		slog.Error("networks_config_invalid", "error", err.Error())
@@ -523,4 +534,15 @@ func NewConfiguration(c *cli.Command) *Configuration {
 	}
 
 	return config
+}
+
+// readSampling collects the sampling settings that config, flags or environment actually set.
+func readSampling(c *cli.Command) map[string]float64 {
+	out := map[string]float64{}
+	for _, key := range SamplingKeys {
+		if c.IsSet(key) {
+			out[key] = c.Float(key)
+		}
+	}
+	return out
 }

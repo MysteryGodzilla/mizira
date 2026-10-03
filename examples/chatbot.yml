@@ -78,7 +78,15 @@ model: anthropic/claude-sonnet-4-5-20250929
 # Generation parameters
 maxtokens: 20000                # Maximum response length
 temperature: 1.0                # 0.0-2.0, higher = more creative
-# top_p: 1.0                    # 0.0-1.0, nucleus sampling parameter
+# Optional sampling settings. Leave one out and it is not sent, so the model
+# server's own default applies (llama.cpp: top_k 40, top_p 0.95, min_p 0.05,
+# no penalties). Models differ; each is changeable live with +set, and
+# "+set <key> default" goes back to the server's value.
+# top_p: 0.95                   # 0-1, nucleus sampling
+# top_k: 64                     # 0-1000, whole number
+# min_p: 0.05                   # 0-1
+# presence_penalty: 0.0         # -2 to 2; penalties can break tool-call syntax
+# repeat_penalty: 1.0           # 0-2, 1 = off (llama.cpp and compatible servers)
 # apitimeout: 5m                # API request timeout
 
 # Thinking/reasoning mode for models that support it (Claude, o1, DeepSeek, etc.)

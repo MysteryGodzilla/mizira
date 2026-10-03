@@ -46,7 +46,6 @@ func DefaultTestConfig() *config.Configuration {
 			Model:          "test/model",
 			MaxTokens:      100,
 			Temperature:    0.7,
-			TopP:           1.0,
 			ThinkingEffort: "off",
 		},
 		Session: &config.SessionConfig{

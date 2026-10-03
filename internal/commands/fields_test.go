@@ -34,3 +34,27 @@ func TestAPIKeyGettersMask(t *testing.T) {
 		}
 	}
 }
+
+func TestSamplingFieldSetAndDefault(t *testing.T) {
+	cfg := &config.Configuration{Model: &config.ModelConfig{}}
+	f := configFields["top_p"]
+	if got := f.getter(cfg); got != "default" {
+		t.Fatalf("unset getter = %q", got)
+	}
+	before := cfg.Model.Sampling
+	if err := f.setter(cfg, "0.9"); err != nil || f.getter(cfg) != "0.9" {
+		t.Fatalf("set: %v, got %q", err, f.getter(cfg))
+	}
+	if before != nil {
+		t.Fatal("the old map must not be edited in place")
+	}
+	if err := f.setter(cfg, "1.5"); err == nil {
+		t.Error("out of range value accepted")
+	}
+	if err := f.setter(cfg, "DEFAULT"); err != nil || f.getter(cfg) != "default" {
+		t.Fatalf("default: %v, got %q", err, f.getter(cfg))
+	}
+	if _, ok := configFields["repeat_penalty"]; !ok {
+		t.Error("every sampling key needs a +set field")
+	}
+}
