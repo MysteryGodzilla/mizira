@@ -31,7 +31,7 @@ func StripSpeakerTags(line string) string {
 		if loc == nil {
 			return line
 		}
-		rest := strings.TrimRight(line[loc[1]:], " 	")
+		rest := strings.TrimRight(line[loc[1]:], " \t")
 		switch close := strings.IndexByte(rest, ')'); {
 		case close == -1:
 			line = rest
