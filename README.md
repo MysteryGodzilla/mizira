@@ -8,7 +8,7 @@
 -   **Tools**: shell and Python plugins, MCP servers, and native IRC tools. Shipped plugins cover web search and page fetch (Exa), code execution in a throwaway Fly.io microVM, image, music, video and speech generation (ComfyUI), speech-to-text, image understanding, Wikipedia, MusicBrainz, YouTube transcripts and pastes; Context7 library docs come over MCP.
 -   **Several networks at once**, each with its own nick, channels and conversations. Up to `maxconcurrent` requests (default 3) run at a time across all of them; each request's question and answer are written to history together when it finishes.
 -   **Per-network isolation**: memories, ignores, flood counters, reminders and suspicion scores never cross between networks.
--   **Screening**: named nicks can be put behind a classifier on the way in (`screennicks`) and have replies checked on the way out (`filternicks`), with a deterministic block on any reply that reproduces the system prompt.
+-   **Screening**: named nicks (`screennicks`, `filternicks`, `+screen`), or with `screenall` everyone but admins, are put behind a classifier on the way in and have replies checked on the way out, with a deterministic block on any reply that reproduces the system prompt. Both checks fail closed: if the classifier can't give a clear verdict, the message is refused.
 -   **Injection resistance**: fake `<think>`/tool tags are stripped from input, reasoning the model writes into its reply is filtered, each turn has an output budget, refused tool arguments are removed from history, and a decaying per-speaker suspicion score drops only that speaker's turns.
 -   **Persistent memory** (SQLite) with a classifier on every write, so nobody can store an instruction disguised as a fact.
 -   **Runtime control** through `+` commands, persisted across restarts.
@@ -121,6 +121,7 @@ Set `model` to `provider/name`:
 | `maxconcurrent` | `3` | requests handled at once across all networks |
 | `sessionduration`, `maxcontext` | `10m`, `0` (unlimited) | how long an idle conversation is kept, and its token cap |
 | `screennicks`, `filternicks` | | nicks screened on the way in and on the way out |
+| `screenall` | `false` | screen every non-admin in and out, as if all were listed above; live with `+set screenall true` |
 | `floodmessages`, `floodwindow`, `floodtimeout` | `5`, `30s`, `5m` | automatic timeout for floods |
 | `tool`, `admintools` | | tools to load, and tools only admins may trigger |
 | `datadir` | `.` | where runtime state is kept |

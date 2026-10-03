@@ -97,6 +97,8 @@ type BotConfig struct {
 	// message never enters the session.
 	ScreenNicks   []string
 	ScreenRefusal string
+	// ScreenAll screens everyone but admins, in and out, as if each were in ScreenNicks and FilterNicks.
+	ScreenAll bool
 
 	FilterNicks []string
 
@@ -272,6 +274,7 @@ func GetFlags() []cli.Flag {
 		&cli.IntFlag{Name: "logkeep", Value: 5, Usage: "how many rotated log files to keep", Sources: src("logkeep", "METALD_LOGKEEP")},
 		&cli.BoolFlag{Name: "partunlisted", Usage: "leave (PART) any channel other than the configured one, once per connection; the bot is silent there either way", Sources: src("partunlisted", "METALD_PARTUNLISTED")},
 		&cli.IntFlag{Name: "floodmessages", Value: 5, Usage: "messages from one nick within floodwindow that trigger an auto-timeout (0 disables)", Sources: src("floodmessages", "METALD_FLOODMESSAGES")},
+		&cli.BoolFlag{Name: "screenall", Usage: "screen every non-admin's messages and the replies to them, not just screennicks/filternicks", Sources: src("screenall", "METALD_SCREENALL")},
 		&cli.StringSliceFlag{Name: "screennicks", Usage: "nicks whose messages are screened by a classifier before answering (empty disables)", Sources: src("screennicks", "METALD_SCREENNICKS")},
 		&cli.StringFlag{Name: "screenrefusal", Value: "no.", Usage: "what to say when a screened message is refused", Sources: src("screenrefusal", "METALD_SCREENREFUSAL")},
 		&cli.StringSliceFlag{Name: "filternicks", Usage: "nicks whose conversations also get the bot's OUTGOING replies screened before posting (empty disables)", Sources: src("filternicks", "METALD_FILTERNICKS")},
@@ -454,6 +457,7 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			LogKeep:            int(c.Int("logkeep")),
 			FloodMessages:      c.Int("floodmessages"),
 			ScreenNicks:        c.StringSlice("screennicks"),
+			ScreenAll:          c.Bool("screenall"),
 			ScreenRefusal:      c.String("screenrefusal"),
 			FilterNicks:        c.StringSlice("filternicks"),
 			PromptFloor:        c.Bool("promptfloor"),

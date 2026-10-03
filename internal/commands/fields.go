@@ -36,6 +36,17 @@ var configFields = map[string]configField{
 		},
 		getter: func(c *config.Configuration) string { return fmt.Sprintf("%t", c.Bot.Addressed) },
 	},
+	"screenall": {
+		setter: func(c *config.Configuration, v string) error {
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return fmt.Errorf("invalid value for screenall. Please provide 'true' or 'false'")
+			}
+			c.Bot.ScreenAll = b
+			return nil
+		},
+		getter: func(c *config.Configuration) string { return fmt.Sprintf("%t", c.Bot.ScreenAll) },
+	},
 	"trigger": {
 		setter: func(c *config.Configuration, v string) error { c.Bot.Trigger = v; return nil },
 		getter: func(c *config.Configuration) string {

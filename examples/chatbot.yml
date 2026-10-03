@@ -212,6 +212,8 @@ tool:
 # Nicks whose messages go through a safety classifier before the model sees
 # them. A refused message never enters history.
 #screennicks: [someone]
+# Screen everyone but admins, in and out (costs a classifier call per message).
+#screenall: true
 #screenrefusal: "no."
 
 # Nicks whose conversations also get the bot's OUTGOING reply screened before

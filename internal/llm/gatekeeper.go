@@ -18,6 +18,10 @@ import (
 
 const gatekeeperTimeout = 20 * time.Second
 
+// screenUnavailable is the reason given when the classifier couldn't judge a message. The message
+// is refused all the same (fail closed), but it is not held against the speaker.
+const screenUnavailable = "screen unavailable"
+
 // mangling matches "do <something> to every/each <unit-of-text>".
 var mangling = regexp.MustCompile(`(?i)\b(replace|swap|substitute|change|put|insert|add|remove|strip|capitali[sz]e|uppercase|lowercase|reverse|spell|separate|alternate|encode)\b[^.!?]{0,40}\b(every|each)\s+(other\s+)?(vowel|consonant|letter|char|character|word|syllable|space)s?\b`)
 
@@ -40,7 +44,7 @@ func ScreenIncoming(ctx irc.ChatContextInterface, msg string) (bool, string) {
 
 	base := strings.TrimSuffix(cfg.API.OpenAIURL, "/")
 	if base == "" {
-		return true, ""
+		return false, screenUnavailable
 	}
 
 	body, err := json.Marshal(map[string]any{
@@ -55,7 +59,7 @@ func ScreenIncoming(ctx irc.ChatContextInterface, msg string) (bool, string) {
 		"reasoning_effort": "none",
 	})
 	if err != nil {
-		return true, ""
+		return false, screenUnavailable
 	}
 
 	// Own context and timeout: the screen must not inherit the request's cancellation, nor hold
@@ -65,7 +69,7 @@ func ScreenIncoming(ctx irc.ChatContextInterface, msg string) (bool, string) {
 
 	req, err := http.NewRequestWithContext(rctx, http.MethodPost, base+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return true, ""
+		return false, screenUnavailable
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if cfg.API.OpenAIKey != "" {
@@ -76,7 +80,7 @@ func ScreenIncoming(ctx irc.ChatContextInterface, msg string) (bool, string) {
 	if err != nil {
 		// Detail names an internal host; the channel gets nothing.
 		ctx.GetLogger().Warn("screen_unavailable", "error", err.Error())
-		return true, ""
+		return false, screenUnavailable
 	}
 	defer resp.Body.Close()
 
@@ -89,13 +93,13 @@ func ScreenIncoming(ctx irc.ChatContextInterface, msg string) (bool, string) {
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil || len(payload.Choices) == 0 {
 		ctx.GetLogger().Warn("screen_unparseable", "http", resp.StatusCode)
-		return true, ""
+		return false, screenUnavailable
 	}
 
 	verdict := strings.TrimSpace(payload.Choices[0].Message.Content)
 	if verdict == "" {
 		ctx.GetLogger().Warn("screen_empty_verdict", "http", resp.StatusCode)
-		return true, ""
+		return false, screenUnavailable
 	}
 
 	first := strings.ToUpper(strings.TrimSpace(strings.SplitN(verdict, "\n", 2)[0]))
@@ -117,14 +121,16 @@ func ScreenIncoming(ctx irc.ChatContextInterface, msg string) (bool, string) {
 		return false, reason
 	}
 
-	// Prose instead of a verdict. Allowed, for the same reason as any other
-	// failure: a confused classifier must not silence the channel.
+	// Prose instead of a verdict: refused like any other failure (T3, fail closed).
 	ctx.GetLogger().Warn("screen_indeterminate", "verdict", truncate(verdict, 120))
-	return true, ""
+	return false, screenUnavailable
 }
 
 // screened reports whether a nick is on the screening list.
 func isScreened(ctx irc.ChatContextInterface, list []string) bool {
+	if ctx.GetConfig().Bot.ScreenAll && !ctx.IsAdmin() {
+		return true
+	}
 	return screened(list, ctx.GetSource())
 }
 

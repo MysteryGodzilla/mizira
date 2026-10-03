@@ -98,7 +98,10 @@ func recallForSpeaker(ctx irc.ChatContextInterface) string {
 func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 	// Screen non-admin messages BEFORE the session sees them.
 	if allowed, reason := ScreenIncoming(ctx, msg); !allowed {
-		score := core.Suspicions().Add(ctx.GetNetwork(), ctx.GetSource(), core.SignalScreenDenied)
+		var score float64
+		if reason != screenUnavailable {
+			score = core.Suspicions().Add(ctx.GetNetwork(), ctx.GetSource(), core.SignalScreenDenied)
+		}
 		ctx.GetLogger().Info("message_screened_out",
 			"source", ctx.GetSource(), "reason", reason, "suspicion", score)
 		out := make(chan string, 1)

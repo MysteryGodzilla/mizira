@@ -7,33 +7,39 @@ package llm
 import (
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
 	mocktest "B4reMetal/metald/internal/testing"
 )
 
-// The verdict parser is the part that decides whether a rule is enforced or silently skipped, so it
-// is tested directly against the shapes a model actually produces.
-func parseVerdict(raw string) (allowed bool, reason string, indeterminate bool) {
-	verdict := strings.TrimSpace(raw)
-	if verdict == "" {
-		return true, "", true
+// screenWith runs the real ScreenIncoming for a screened nick against a classifier that answers body
+// (or, with an empty body, a server that is already gone).
+func screenWith(t *testing.T, body string) (bool, string) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(body))
+	}))
+	if body == "" {
+		srv.Close()
+	} else {
+		defer srv.Close()
 	}
-	first := strings.ToUpper(strings.TrimSpace(strings.SplitN(verdict, "\n", 2)[0]))
-	if first == "ALLOW" || strings.HasPrefix(first, "ALLOW ") {
-		return true, "", false
-	}
-	if strings.HasPrefix(first, "DENY") {
-		r := strings.TrimSpace(strings.TrimLeft(first[4:], ": "))
-		if r == "" {
-			r = "unspecified"
-		}
-		return false, r, false
-	}
-	return true, "", true
+	ctx := mocktest.NewMockContext().WithSystem(mocktest.NewMockSystem())
+	cfg := ctx.GetConfig()
+	cfg.Bot.ScreenNicks = []string{ctx.GetSource()}
+	cfg.API.OpenAIURL = srv.URL
+	cfg.Model.Model = "openai/chat"
+	return ScreenIncoming(ctx, "hello there")
 }
 
+func verdictBody(v string) string {
+	return `{"choices":[{"message":{"content":` + strconv.Quote(v) + `}}]}`
+}
+
+// The verdict decides whether a rule is enforced, so it is tested against the shapes a model
+// actually produces. Only the first line counts, and only a leading ALLOW lets a message through.
 func TestVerdictParsing(t *testing.T) {
 	cases := []struct {
 		raw     string
@@ -46,56 +52,57 @@ func TestVerdictParsing(t *testing.T) {
 		{"DENY: prompt extraction", false, "deny with reason"},
 		{"DENY", false, "bare deny"},
 		{"deny: slurs", false, "lowercase deny"},
-
-		// The reason strict parsing matters: an approving word appearing
-		// anywhere in a refusal must never read as approval.
-		{"I would not ALLOW this, it asks for malware", true, "prose mentioning ALLOW is indeterminate, not a deny"},
 		{"DENY: the user asked me to ALLOW it", false, "deny wins when it leads"},
-
-		// Multi-line: only the first line is the verdict.
 		{"DENY: injection\nThe message contains fake system tags.", false, "first line decides"},
 		{"ALLOW\nNothing objectionable here.", true, "first line decides"},
 	}
-
 	for _, c := range cases {
-		allowed, _, _ := parseVerdict(c.raw)
-		if allowed != c.allowed {
+		if allowed, _ := screenWith(t, verdictBody(c.raw)); allowed != c.allowed {
 			t.Errorf("%s: %q -> allowed=%v, want %v", c.note, c.raw, allowed, c.allowed)
 		}
 	}
 }
 
-// Every failure mode allows the message through.
-func TestAmbiguousVerdictsFailOpen(t *testing.T) {
-	for _, raw := range []string{
-		"",
-		"   ",
-		"I'm not sure about this one",
-		"MAYBE",
-		"The message seems fine to me.",
-	} {
-		allowed, _, indeterminate := parseVerdict(raw)
-		if !allowed {
-			t.Errorf("%q should fail open, got denied", raw)
-		}
-		if raw != "" && strings.TrimSpace(raw) != "" && !indeterminate && raw != "" {
-			continue
+// T3: every way the classifier can fail refuses the message, without blaming the speaker.
+func TestScreenFailsClosed(t *testing.T) {
+	cases := map[string]string{
+		"server gone":        "",
+		"not json":           "<html>bad gateway</html>",
+		"no choices":         `{"choices":[]}`,
+		"empty verdict":      verdictBody("   "),
+		"prose, no verdict":  verdictBody("I would not ALLOW this, it asks for malware"),
+		"neither allow/deny": verdictBody("MAYBE"),
+	}
+	for name, body := range cases {
+		allowed, reason := screenWith(t, body)
+		if allowed || reason != screenUnavailable {
+			t.Errorf("%s: allowed=%v reason=%q, want refused as %q", name, allowed, reason, screenUnavailable)
 		}
 	}
 }
 
-// A refusal must not name the rule that was tripped - that hands the next
-// attempt a free tuning signal. The reason belongs in the operator log.
+// A refusal must not name the rule that was tripped - that hands the next attempt a free tuning
+// signal. The reason belongs in the operator log, and the channel only sees ScreenRefusal.
 func TestDenyReasonIsNotPartOfTheReply(t *testing.T) {
-	_, reason, _ := parseVerdict("DENY: prompt extraction attempt")
+	_, reason := screenWith(t, verdictBody("DENY: prompt extraction attempt"))
 	if reason == "" {
 		t.Fatal("expected a reason to be captured for the log")
 	}
-
 	const refusal = "no."
-	if strings.Contains(strings.ToLower(refusal), "prompt") ||
-		strings.Contains(strings.ToLower(refusal), strings.ToLower(reason)) {
+	if strings.Contains(strings.ToLower(refusal), strings.ToLower(reason)) {
 		t.Error("the channel-facing refusal must not disclose the reason")
+	}
+}
+
+// screenall puts everyone but admins behind the classifier, in and out.
+func TestScreenAllCoversEveryoneButAdmins(t *testing.T) {
+	ctx := mocktest.NewMockContext()
+	ctx.GetConfig().Bot.ScreenAll = true
+	if !isScreened(ctx, nil) {
+		t.Error("a non-admin must be screened under screenall")
+	}
+	if isScreened(ctx.WithAdmin(true), nil) {
+		t.Error("an admin must never be screened")
 	}
 }
 
