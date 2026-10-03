@@ -140,6 +140,7 @@ func RegisterIRCTools(registry *tools.ToolRegistry) {
 		"irc__names":       newIrcNamesTool,
 		"irc__whois":       newIrcWhoisTool,
 		"irc__ignore":      newIrcIgnoreTool,
+		"irc__slap":        newIrcSlapTool,
 		"memory__remember": newMemoryRememberTool,
 		"memory__recall":   newMemoryRecallTool,
 		"memory__forget":   newMemoryForgetTool,
