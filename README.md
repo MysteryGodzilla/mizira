@@ -199,6 +199,7 @@ These run inside the bot and are listed in `tool:` by name:
 -   `irc__names`, `irc__whois`: who is in the channel.
 -   `irc__action`: send a `/me` action.
 -   `irc__ignore`: let the bot mute someone itself, for at most an hour. Admins can't be muted.
+-   `irc__slap`: the old IRC joke, `/me slaps bob around a bit with a large trout` (or whatever fits). The target must be in the channel; each nick at most once per two minutes. A plain "<bot> slap bob with a noodle" runs it directly.
 -   `irc__remind`, `irc__reminders`: schedule, list and cancel reminders.
 -   `memory__remember`, `memory__recall`, `memory__forget`: the bot's long-term memory, checked by `memorypolicy` on every write.
 
