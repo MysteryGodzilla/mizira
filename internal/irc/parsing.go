@@ -18,40 +18,108 @@ func isTriggerWordChar(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
 }
 
-// CheckAddressed reports whether trigger appears anywhere in message as a whole word or
-// phrase, case-insensitively.
+// CheckAddressed reports whether message calls on trigger (case-insensitive, whole words), rather
+// than just mentioning it. "bot do this", "hey bot, ...", "what do you think bot?" call on it;
+// "did you see what bot did", "alice say hi to bot" and "alice: bot is great" only talk about it.
+// A leading tag such as "[otherbot]" is skipped first. An empty trigger matches everything.
 func CheckAddressed(message, trigger string) bool {
-	// If trigger is empty, it matches everything (legacy behavior)
 	if trigger == "" {
 		return true
 	}
-
-	msg := []rune(message)
-	trig := []rune(trigger)
-	if len(trig) == 0 || len(trig) > len(msg) {
+	trig := strings.Fields(strings.ToLower(trigger))
+	words := strings.Fields(message)
+	if len(trig) == 0 {
 		return false
 	}
+	if len(words) > 0 && strings.HasPrefix(words[0], "[") && strings.HasSuffix(words[0], "]") {
+		words = words[1:]
+	}
+	at := findWords(words, trig)
+	if at < 0 {
+		return false
+	}
+	before, after := words[:at], words[at+len(trig):]
 
-	for i := 0; i+len(trig) <= len(msg); i++ {
+	// "alice: ..." or "alice, ..." opens by talking to someone else.
+	if len(before) > 0 && strings.ContainsAny(lastRune(before[0]), ":,") && !fillerWords[bareAddressWord(before[0])] {
+		return false
+	}
+	allFiller := true
+	for _, w := range before {
+		if !fillerWords[bareAddressWord(w)] {
+			allFiller = false
+			break
+		}
+	}
+	if allFiller {
+		return true
+	}
+	// Called at the end: "what do you think bot?". Not after a word that makes it the object:
+	// "say hi to bot", "who is bot".
+	if len(after) == 0 || allPunctuation(after) {
+		return !objectMarkers[bareAddressWord(before[len(before)-1])]
+	}
+	// Called mid-line, set off by commas: "ok so, bot, what now?"
+	name := words[at+len(trig)-1]
+	prev := before[len(before)-1]
+	return strings.ContainsAny(lastRune(name), ",:") && strings.ContainsAny(lastRune(prev), ",.!?")
+}
+
+// fillerWords may come before the name of someone being called: "hey bot", "thanks bot".
+var fillerWords = map[string]bool{
+	"": true, "hey": true, "hi": true, "hello": true, "heya": true, "hiya": true, "yo": true, "oi": true,
+	"ok": true, "okay": true, "oh": true, "ah": true, "so": true, "well": true, "and": true, "but": true,
+	"thanks": true, "thank": true, "you": true, "ty": true, "thx": true, "please": true, "pls": true,
+	"sorry": true, "good": true, "morning": true, "night": true, "evening": true, "afternoon": true,
+	"gm": true, "gn": true, "welcome": true, "back": true, "dear": true, "lol": true, "haha": true,
+}
+
+// objectMarkers before a trailing name make it the object of the sentence, not someone called.
+var objectMarkers = map[string]bool{
+	"to": true, "at": true, "about": true, "with": true, "for": true, "from": true, "of": true,
+	"is": true, "was": true, "are": true, "and": true, "or": true, "than": true, "like": true,
+	"by": true, "on": true, "in": true, "tell": true, "ask": true, "told": true, "asked": true,
+	"see": true, "saw": true, "meet": true, "met": true, "love": true, "hate": true, "said": true,
+	"says": true, "does": true, "did": true, "slap": true, "ignore": true, "ping": true, "the": true,
+}
+
+// findWords returns the index in words where want starts, comparing words without punctuation.
+func findWords(words, want []string) int {
+	for i := 0; i+len(want) <= len(words); i++ {
 		match := true
-		for j, r := range trig {
-			if unicode.ToLower(msg[i+j]) != unicode.ToLower(r) {
+		for j, w := range want {
+			if bareAddressWord(words[i+j]) != w {
 				match = false
 				break
 			}
 		}
-		if !match {
-			continue
-		}
-
-		beforeOK := i == 0 || !isTriggerWordChar(msg[i-1])
-		after := i + len(trig)
-		afterOK := after == len(msg) || !isTriggerWordChar(msg[after])
-		if beforeOK && afterOK {
-			return true
+		if match {
+			return i
 		}
 	}
-	return false
+	return -1
+}
+
+// bareAddressWord lowercases w and trims punctuation and a leading "@" from both ends.
+func bareAddressWord(w string) string {
+	return strings.ToLower(strings.TrimFunc(w, func(r rune) bool { return !isTriggerWordChar(r) && r != '\'' }))
+}
+
+func lastRune(w string) string {
+	r := []rune(w)
+	if len(r) == 0 {
+		return ""
+	}
+	return string(r[len(r)-1])
+}
+
+func allPunctuation(words []string) bool {
+	for _, w := range words {
+		if bareAddressWord(w) != "" {
+			return false
+		}
+	}
+	return true
 }
 
 // CheckAdmin returns true if hostmask matches any admin mask in the list. Masks may use the

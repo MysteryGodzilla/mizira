@@ -15,22 +15,37 @@ func TestCheckAddressed(t *testing.T) {
 		nick    string
 		want    bool
 	}{
-		{"exact with colon", "bot: hello", "bot", true},
-		{"exact with space", "bot hello", "bot", true},
-		{"exact with comma", "bot, hello", "bot", true},
-		{"embedded in longer word, prefix position", "botter hello", "bot", false},
-		{"embedded in longer word, mid message", "hey heybot there", "bot", false},
-		{"anywhere in middle, standalone word", "hello bot there", "bot", true},
-		{"anywhere at end, standalone word", "hello there bot", "bot", true},
-		{"anywhere with punctuation before", "hey, bot!", "bot", true},
+		// Calling on the bot.
+		{"name first with colon", "bot: hello", "bot", true},
+		{"name first with space", "bot hello", "bot", true},
+		{"name first with comma", "bot, hello", "bot", true},
+		{"at-mention", "@bot hi", "bot", true},
+		{"greeting before", "hey bot, how are you", "bot", true},
+		{"greeting with punctuation", "hey, bot!", "bot", true},
+		{"thanks before", "thank you bot", "bot", true},
+		{"good morning", "Good morning Bot", "bot", true},
+		{"question ending in name", "What do you think bot?", "bot", true},
+		{"praise ending in name", "nice one bot", "bot", true},
+		{"set off by commas", "ok so, bot, what now?", "bot", true},
+		{"after another bot's tag", "[otherbot] bot, it's me", "bot", true},
+		{"just the name", "bot", "bot", true},
+		{"multi-word trigger after filler", "yo hey bot wake up", "hey bot", true},
+		// Only talking about it.
+		{"subject mid-line", "Hey alice did you see what bot did", "bot", false},
+		{"object at the end", "alice say hi to bot", "bot", false},
+		{"question about it", "who the fuck is bot", "bot", false},
+		{"addressed to someone else", "alice: who is bot", "bot", false},
+		{"addressed to someone else with comma", "greg, bot is a fork", "bot", false},
+		{"other bot's tag then someone else", "[otherbot] greg, bot is my sister", "bot", false},
+		{"mid-line plain", "i think bot is cute", "bot", false},
+		{"possessive", "bot's code is neat", "bot", false},
+		{"embedded in longer word", "botter hello", "bot", false},
+		{"embedded mid message", "hey heybot there", "bot", false},
+		{"all caps longer word", "ROBOTS hello", "bot", false},
+		{"multi-word trigger embedded", "xhey botx wake up", "hey bot", false},
 		{"empty message", "", "bot", false},
 		{"empty nick", "bot: hello", "", true}, // empty trigger matches everything
-		{"case insensitive - capitalized message", "Bot: hello", "bot", true},
-		{"case insensitive - capitalized trigger config", "bot: hello", "Bot", true},
-		{"case insensitive - all caps still respects word boundary", "ROBOTS hello", "bot", false},
-		{"just nick", "bot", "bot", true},
-		{"multi-word trigger anywhere", "yo hey bot wake up", "hey bot", true},
-		{"multi-word trigger embedded in larger words", "xhey botx wake up", "hey bot", false},
+		{"case insensitive trigger", "bot: hello", "Bot", true},
 	}
 
 	for _, tt := range tests {
