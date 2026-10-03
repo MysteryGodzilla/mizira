@@ -22,6 +22,33 @@ type Chunker struct {
 	maxLines  int
 	sent      int
 	truncated bool
+
+	// hold, when set, keeps back a line it returns true for and every line after it, so a reply
+	// stays in order while the caller decides whether to Release or DropHeld.
+	hold func(line string) bool
+	held []string
+}
+
+// SetHold installs the check that decides which lines to keep back.
+func (c *Chunker) SetHold(hold func(line string) bool) { c.hold = hold }
+
+// Holding reports whether lines are being kept back.
+func (c *Chunker) Holding() bool { return len(c.held) > 0 }
+
+// Release sends the lines kept back, in order.
+func (c *Chunker) Release() {
+	held := c.held
+	c.held = nil
+	for _, line := range held {
+		c.send(line)
+	}
+}
+
+// DropHeld throws away the lines kept back and returns them.
+func (c *Chunker) DropHeld() []string {
+	held := c.held
+	c.held = nil
+	return held
 }
 
 // SetMaxLines caps how many lines this chunker will emit. Anything after that is dropped.
@@ -36,6 +63,16 @@ func (c *Chunker) emit(line string) {
 	if line = StripSpeakerTags(line); isBlankLine(line) {
 		return
 	}
+	// hold runs on every line, so a second claim behind the first is still seen.
+	if (c.hold != nil && c.hold(line)) || c.Holding() {
+		c.held = append(c.held, line)
+		return
+	}
+	c.send(line)
+}
+
+// send posts one line, unless the line cap has been reached.
+func (c *Chunker) send(line string) {
 	if c.maxLines > 0 && c.sent >= c.maxLines {
 		c.truncated = true
 		return
@@ -126,5 +163,8 @@ func (c *Chunker) Flush() {
 func (c *Chunker) Discard() int {
 	n := c.buffer.Len()
 	c.buffer.Reset()
+	for _, line := range c.DropHeld() {
+		n += len(line)
+	}
 	return n
 }
