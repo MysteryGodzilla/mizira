@@ -56,6 +56,9 @@ func (c *Chunker) DropHeld() []string {
 // SetMaxLines caps how many lines this chunker will emit. Anything after that is dropped.
 func (c *Chunker) SetMaxLines(n int) { c.maxLines = n }
 
+// Sent reports how many lines have gone out.
+func (c *Chunker) Sent() int { return c.sent }
+
 // Truncated reports whether lines were dropped because of the line cap.
 func (c *Chunker) Truncated() bool { return c.truncated }
 

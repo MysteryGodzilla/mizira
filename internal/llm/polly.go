@@ -105,6 +105,9 @@ func (p *PollyLLM) ChatCompletionStream(chatCtx core.ChatContextInterface, req *
 
 		cb.flush()
 		reply := resp.AllMessages
+		if cb.looped {
+			reply = withReplyText(reply, cb.loopKept)
+		}
 		if kinds := cb.unbackedClaims(); len(kinds) > 0 {
 			reply = retryUnbackedClaim(chatCtx, agent, req, chunker, claimTools, reply, kinds)
 			if errors.Is(chatCtx.Err(), context.Canceled) {
@@ -190,6 +193,9 @@ type callbackHandler struct {
 	reasoningStray   int                 // last logged value of reasoning.Stray
 	contentBytes     int                 // visible content this turn has streamed
 	overBudget       bool                // budget spent; suppress the rest of the turn
+	visible          strings.Builder     // the reply's text so far, for the loop guard
+	looped           bool                // the reply fell into a phrase loop; suppress the rest
+	loopKept         string              // what the reply said before the loop
 	claimTools       map[string]bool     // tools a claim is checked against; nil checks nothing
 	toolsRun         map[string]bool     // tools started this request
 	claims           map[irc.ClaimKind]bool
@@ -319,6 +325,10 @@ func (h *callbackHandler) onContent(content string) {
 			"blocks", h.reasoning.Blocks, "stray_closers", h.reasoning.Stray)
 	}
 
+	if h.looped || h.guardLoop(content) {
+		return
+	}
+
 	// Budget latch.
 	if h.overBudget {
 		return
@@ -337,6 +347,40 @@ func (h *callbackHandler) onContent(content string) {
 		h.hadContent = true
 	}
 	h.chunker.Write(content)
+}
+
+// guardLoop watches the reply for a phrase loop. When one starts it latches like the budget does:
+// what was buffered is dropped, and unless lines already went out, only the text up to the first
+// copy of the looping phrase is sent. The clean text is kept so history never holds the loop, which the model would copy.
+func (h *callbackHandler) guardLoop(content string) bool {
+	h.visible.WriteString(content)
+	text := h.visible.String()
+	off, ok := loopStart(text)
+	if !ok {
+		return false
+	}
+	h.looped = true
+	h.loopKept = strings.TrimSpace(text[:off])
+	h.chunker.Discard()
+	if h.chunker.Sent() == 0 {
+		h.hadContent = true
+		h.chunker.Write(h.loopKept)
+	}
+	h.chatCtx.GetLogger().Warn("reply_loop_cut",
+		"kept", truncateForLog(h.loopKept), "loop", truncateForLog(text[off:]))
+	return true
+}
+
+// withReplyText swaps the text of the closing assistant message, the reply the channel saw.
+func withReplyText(msgs []messages.ChatMessage, text string) []messages.ChatMessage {
+	out := slices.Clone(msgs)
+	for i := len(out) - 1; i >= 0; i-- {
+		if out[i].Role == messages.MessageRoleAssistant && len(out[i].ToolCalls) == 0 {
+			out[i].Content = text
+			break
+		}
+	}
+	return out
 }
 
 // discard drops everything a dead request was still holding and returns how much it dropped.

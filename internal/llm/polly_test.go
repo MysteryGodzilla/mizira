@@ -5,6 +5,7 @@
 package llm
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -277,8 +278,10 @@ func TestOnContent_BudgetLatchesRunawayTurn(t *testing.T) {
 	chunker := irc.NewChunker(output, 350)
 	h := newCallbackHandler(ctx, chunker, ctx.GetConfig())
 
-	line := strings.Repeat("deliberating about the checker, ", 8) + "\n"
+	// Varied text: a repeating one would be cut by the loop guard before the budget is reached.
+	line := ""
 	for i := 0; i < 15; i++ {
+		line = variedText(i*40, 40) + "\n"
 		h.onContent(line)
 	}
 	h.flush()
@@ -330,7 +333,7 @@ func TestOnComplete_BudgetedTurnStillPostsToolURL(t *testing.T) {
 
 	h.onToolEnd(messages.ChatMessageToolCall{Name: "musicgen__song"},
 		"url: https://files.example.com/u/abc.flac", time.Millisecond, nil)
-	h.onContent(strings.Repeat("rambling on and on and on. ", 200))
+	h.onContent(variedText(0, 900))
 	h.onComplete(&messages.ChatMessage{})
 	h.flush()
 	close(output)
@@ -380,4 +383,13 @@ func TestDrainQueuedEmptiesBacklog(t *testing.T) {
 	if n := drainQueued(ch); n != 0 {
 		t.Errorf("draining an empty channel returned %d", n)
 	}
+}
+
+// variedText is n distinct words starting at word number from, so the loop guard never fires.
+func variedText(from, n int) string {
+	words := make([]string, n)
+	for i := range words {
+		words[i] = fmt.Sprintf("word%d", from+i)
+	}
+	return strings.Join(words, " ")
 }

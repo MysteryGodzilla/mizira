@@ -98,5 +98,8 @@ func retryUnbackedClaim(chatCtx core.ChatContextInterface, agent *llm.Agent, req
 		return append(kept, messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: fallback})
 	}
 	log.Info("claim_retry_done", "claims", kinds, "tool_count", cb.toolCount)
+	if cb.looped {
+		return append(kept, withReplyText(resp.AllMessages, cb.loopKept)...)
+	}
 	return append(kept, resp.AllMessages...)
 }
