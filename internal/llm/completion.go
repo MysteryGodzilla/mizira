@@ -152,6 +152,14 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 		}
 	}
 
+	// T23: a plain "remember …" or "ignore bob" runs its tool before the model replies.
+	if !restricted {
+		if forced := forceIntentTool(ctx, req, msg); len(forced) > 0 {
+			req.Messages = append(req.Messages, forced...)
+			setPending(req, append([]messages.ChatMessage{cmsg}, forced...)...)
+		}
+	}
+
 	// Get response stream from LLM
 	stream := sys.GetLLM().ChatCompletionStream(ctx, req)
 
@@ -209,18 +217,18 @@ func outboundScreened(ctx irc.ChatContextInterface) bool {
 	return isScreened(ctx, ctx.GetConfig().Bot.FilterNicks)
 }
 
-// pending holds each in-flight request's own user message until the
-// exchange is committed.
+// pending holds each in-flight request's own user message, and any tool call forced for it,
+// until the exchange is committed.
 var pending sync.Map
 
-func setPending(req *CompletionRequest, msg messages.ChatMessage) { pending.Store(req, msg) }
+func setPending(req *CompletionRequest, msgs ...messages.ChatMessage) { pending.Store(req, msgs) }
 
 func takePending(req *CompletionRequest) []messages.ChatMessage {
 	v, ok := pending.LoadAndDelete(req)
 	if !ok {
 		return nil
 	}
-	return []messages.ChatMessage{v.(messages.ChatMessage)}
+	return v.([]messages.ChatMessage)
 }
 
 // commitExchange appends a finished request's messages to the session as

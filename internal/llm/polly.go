@@ -73,6 +73,9 @@ func (p *PollyLLM) ChatCompletionStream(chatCtx core.ChatContextInterface, req *
 		claimTools := claimableTools(registry)
 		cb := newCallbackHandler(chatCtx, chunker, cfg)
 		cb.watchClaims(claimTools)
+		for _, name := range forcedToolsRun(req.Messages) {
+			cb.toolsRun[name] = true
+		}
 
 		resp, err := agent.Run(chatCtx, req, cb.build())
 
