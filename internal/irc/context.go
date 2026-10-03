@@ -240,11 +240,16 @@ func (c ChatContext) Reply(message string) {
 
 	c.logger.Debug("reply_sent", "message", message)
 
-	message = RenderIRCFormatting(message)
+	c.client.Cmd.Reply(*c.event, c.withPrefix(RenderIRCFormatting(message)))
+}
+
+// withPrefix marks a line as the bot's. On a shared account an unmarked line, an action above
+// all ("* alice slaps bob"), reads as the account owner's own.
+func (c ChatContext) withPrefix(message string) string {
 	if prefix := c.Config.EffectiveResponsePrefix(); prefix != "" {
-		message = prefix + " " + message
+		return prefix + " " + message
 	}
-	c.client.Cmd.Reply(*c.event, message)
+	return message
 }
 
 // mayReplyHere is the A13 send-side check for replies: the place the event happened must be
@@ -294,7 +299,7 @@ func (c ChatContext) SendAction(target, message string) {
 	if !c.mayTarget(target, "action") {
 		return
 	}
-	c.client.Cmd.Action(target, message)
+	c.client.Cmd.Action(target, c.withPrefix(message))
 }
 
 func (c ChatContext) ReplyAction(message string) {
@@ -310,10 +315,10 @@ func (c ChatContext) ReplyAction(message string) {
 	target := c.event.Params[0]
 	if !girc.IsValidChannel(target) {
 		// For PMs, send a regular message instead of an action
-		c.client.Cmd.Message(c.event.Source.Name, message)
+		c.client.Cmd.Message(c.event.Source.Name, c.withPrefix(message))
 		return
 	}
-	c.client.Cmd.Action(target, message)
+	c.client.Cmd.Action(target, c.withPrefix(message))
 }
 
 func (c ChatContext) SetMode(target, flags string, args ...string) bool {
