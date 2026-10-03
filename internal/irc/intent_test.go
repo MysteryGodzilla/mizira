@@ -64,3 +64,19 @@ func TestToolIntentSlapIsComplete(t *testing.T) {
 		t.Errorf("no object should leave it to the trout: %+v", got)
 	}
 }
+
+// "with something you think of" leaves the object to the model instead of slapping with that phrase.
+func TestToolIntentSlapDelegatesObject(t *testing.T) {
+	cfg := &config.Configuration{Bot: &config.BotConfig{Trigger: "Mizira"}}
+	present := func(string) bool { return true }
+	for _, msg := range []string{
+		"(nick:alice) Mizira slap bob with something else you think of",
+		"(nick:alice) Mizira slap bob with whatever you want",
+		"(nick:alice) Mizira slap bob with anything",
+	} {
+		got, _ := ToolIntent(cfg, "Mizira", msg, present)
+		if got.Complete || got.Args["nick"] != "bob" || got.Args["object"] != nil {
+			t.Errorf("%q: got %+v", msg, got)
+		}
+	}
+}

@@ -78,10 +78,17 @@ func ToolIntent(cfg *config.Configuration, botNick, msg string, inChannel func(n
 				break
 			}
 		}
+		// "with something you think of" hands the choice back: the model picks the object.
+		if delegatedObject.MatchString(object) {
+			return Intent{Tool: "irc__slap", Args: map[string]any{"nick": target}}, true
+		}
 		return Intent{Tool: "irc__slap", Args: map[string]any{"nick": target, "object": object}, Complete: true}, true
 	}
 	return Intent{}, false
 }
+
+// delegatedObject is a slap object that leaves the choice to the bot.
+var delegatedObject = regexp.MustCompile(`(?i)\b(you (think|choose|pick|want|like|decide)|your choice|whatever|something|anything)\b`)
 
 // bareWord lowercases a word and drops the punctuation around it.
 func bareWord(w string) string {
