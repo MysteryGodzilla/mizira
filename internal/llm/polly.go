@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -69,7 +70,9 @@ func (p *PollyLLM) ChatCompletionStream(chatCtx core.ChatContextInterface, req *
 
 		chunker := irc.NewChunker(output, maxChunkSize)
 		chunker.SetMaxLines(cfg.Bot.MaxReplyLines)
+		claimTools := claimableTools(registry)
 		cb := newCallbackHandler(chatCtx, chunker, cfg)
+		cb.watchClaims(claimTools)
 
 		resp, err := agent.Run(chatCtx, req, cb.build())
 
@@ -97,13 +100,22 @@ func (p *PollyLLM) ChatCompletionStream(chatCtx core.ChatContextInterface, req *
 		}
 
 		cb.flush()
+		reply := resp.AllMessages
+		if kinds := cb.unbackedClaims(); len(kinds) > 0 {
+			reply = retryUnbackedClaim(chatCtx, agent, req, chunker, claimTools, reply, kinds)
+			if errors.Is(chatCtx.Err(), context.Canceled) {
+				takePending(req)
+				chatCtx.GetLogger().Debug("output_discarded_cancelled")
+				return
+			}
+		}
 		if chunker.Truncated() {
 			// Not a suspicion signal: asking for a long story is normal, not an attack.
 			chatCtx.GetLogger().Info("reply_line_limit", "limit", cfg.Bot.MaxReplyLines)
 		}
 
 		commitExchange(chatCtx.GetSession(),
-			append(takePending(req), redactRefusedArguments(resp.AllMessages)...))
+			append(takePending(req), redactRefusedArguments(reply)...))
 
 		source := chatCtx.GetSource()
 		if score := core.Suspicions().Score(chatCtx.GetNetwork(), source); score >= core.SuspicionQuarantine {
@@ -174,6 +186,9 @@ type callbackHandler struct {
 	reasoningStray   int                 // last logged value of reasoning.Stray
 	contentBytes     int                 // visible content this turn has streamed
 	overBudget       bool                // budget spent; suppress the rest of the turn
+	claimTools       map[string]bool     // tools a claim is checked against; nil checks nothing
+	toolsRun         map[string]bool     // tools started this request
+	claims           map[irc.ClaimKind]bool
 }
 
 // maxTurnContent bounds how much visible text ONE request may post.
@@ -186,7 +201,40 @@ func newCallbackHandler(chatCtx core.ChatContextInterface, chunker *irc.Chunker,
 		cfg:            cfg,
 		startTime:      time.Now(),
 		announcedTools: make(map[string]bool),
+		toolsRun:       make(map[string]bool),
+		claims:         make(map[irc.ClaimKind]bool),
 	}
+}
+
+// watchClaims makes the chunker hold back a line claiming an action whose tool hasn't run yet.
+func (h *callbackHandler) watchClaims(claimTools map[string]bool) {
+	h.claimTools = claimTools
+	h.chunker.SetHold(h.holdClaim)
+}
+
+func (h *callbackHandler) holdClaim(line string) bool {
+	kind, ok := irc.DetectClaim(line)
+	if !ok {
+		return false
+	}
+	tool := irc.ClaimTool[kind]
+	if !h.claimTools[tool] || h.toolsRun[tool] {
+		return false
+	}
+	h.claims[kind] = true
+	return true
+}
+
+// unbackedClaims lists the claims made this request whose tool never ran.
+func (h *callbackHandler) unbackedClaims() []irc.ClaimKind {
+	var out []irc.ClaimKind
+	for kind := range h.claims {
+		if !h.toolsRun[irc.ClaimTool[kind]] {
+			out = append(out, kind)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 func (h *callbackHandler) build() *llm.AgentCallbacks {
@@ -333,6 +381,12 @@ func (h *callbackHandler) onToolStart(calls []messages.ChatMessageToolCall) {
 	h.flush()
 
 	h.toolCount += len(calls)
+	for _, tc := range calls {
+		h.toolsRun[tc.Name] = true
+	}
+	if h.chunker.Holding() && len(h.unbackedClaims()) == 0 {
+		h.chunker.Release()
+	}
 
 	// Log each tool
 	for _, tc := range calls {
