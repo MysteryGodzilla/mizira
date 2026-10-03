@@ -16,7 +16,7 @@ import (
 func fullBot() *BotConfig {
 	return &BotConfig{
 		FloorPrompt: "a", GatekeeperPreamble: "b", GatekeeperPolicy: "c",
-		ClassifyPreamble: "d", ReplyScreenPolicy: "e", MemoryPolicy: "f", MemoryFrame: "g",
+		ClassifyPreamble: "d", ReplyScreenPolicy: "e", MemoryPolicy: "f", MemoryFrame: "g", ClaimNudge: "h",
 	}
 }
 

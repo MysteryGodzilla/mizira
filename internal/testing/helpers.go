@@ -40,6 +40,7 @@ func DefaultTestConfig() *config.Configuration {
 			ReplyScreenPolicy:  "test reply screen policy",
 			MemoryPolicy:       "test memory policy",
 			MemoryFrame:        "things you already know about {nick}:",
+			ClaimNudge:         "you said you would {action} but did not call the tool.",
 		},
 		Model: &config.ModelConfig{
 			Model:          "test/model",

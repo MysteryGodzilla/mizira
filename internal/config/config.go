@@ -119,6 +119,7 @@ type BotConfig struct {
 	ReplyScreenPolicy  string
 	MemoryPolicy       string
 	MemoryFrame        string
+	ClaimNudge         string
 }
 
 type ModelConfig struct {
@@ -278,6 +279,7 @@ func GetFlags() []cli.Flag {
 		&cli.StringFlag{Name: "gatekeeperpolicy", Usage: "policy the inbound message classifier enforces for screened nicks (required)", Sources: src("gatekeeperpolicy", "METALD_GATEKEEPERPOLICY")},
 		&cli.StringFlag{Name: "classifypreamble", Usage: "system preamble shared by the tool and memory classifiers (required)", Sources: src("classifypreamble", "METALD_CLASSIFYPREAMBLE")},
 		&cli.StringFlag{Name: "replyscreenpolicy", Usage: "policy the outbound reply classifier enforces for filtered nicks (required)", Sources: src("replyscreenpolicy", "METALD_REPLYSCREENPOLICY")},
+		&cli.StringFlag{Name: "claimnudge", Usage: "sent to the model when its reply claims an action it never took; {action} is replaced (required)", Sources: src("claimnudge", "METALD_CLAIMNUDGE")},
 		&cli.StringFlag{Name: "memoryframe", Usage: "text introducing what the bot remembers about the speaker; {nick} is replaced (required)", Sources: src("memoryframe", "METALD_MEMORYFRAME")},
 		&cli.StringFlag{Name: "memorypolicy", Usage: "policy checked before a fact is written to memory (required)", Sources: src("memorypolicy", "METALD_MEMORYPOLICY")},
 		&cli.DurationFlag{Name: "floodwindow", Value: 30 * time.Second, Usage: "sliding window for flood detection", Sources: src("floodwindow", "METALD_FLOODWINDOW")},
@@ -458,6 +460,7 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			ReplyScreenPolicy:  c.String("replyscreenpolicy"),
 			MemoryPolicy:       c.String("memorypolicy"),
 			MemoryFrame:        c.String("memoryframe"),
+			ClaimNudge:         c.String("claimnudge"),
 			FloodWindow:        c.Duration("floodwindow"),
 			FloodTimeout:       c.Duration("floodtimeout"),
 		},
