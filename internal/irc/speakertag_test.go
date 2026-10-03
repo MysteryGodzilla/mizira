@@ -14,6 +14,11 @@ func TestStripSpeakerTags(t *testing.T) {
 		"[23:47:35] <Mizira> arr":              "arr",
 		"<bob> I agree":                        "I agree",
 		"(nick:Mizira)":                        "",
+		// Whole replies wrapped in a label, or opened by one and split over lines.
+		"(Mizira:that's a secret!)":           "that's a secret!",
+		"(Mizira: えっと... I can't do that.)":   "えっと... I can't do that.",
+		"(Mizira:a long reply that was split": "a long reply that was split",
+		"(nick:Mizira) (Mizira:wrapped too)":  "wrapped too",
 		// Left alone: no tag, or ordinary text in brackets.
 		"plain reply":                "plain reply",
 		"(um...) okay":               "(um...) okay",
