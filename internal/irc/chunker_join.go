@@ -103,11 +103,11 @@ func lineGroups(text string) []string {
 	return groups
 }
 
-// joinGroup strips each line's speaker tag, then joins the lines with single spaces.
+// joinGroup cleans each line (CleanReplyLine), then joins them with single spaces.
 func joinGroup(g string) string {
 	var parts []string
 	for _, l := range strings.Split(g, "\n") {
-		if l = strings.TrimSpace(StripSpeakerTags(l)); l != "" {
+		if l = CleanReplyLine(l); l != "" {
 			parts = append(parts, l)
 		}
 	}

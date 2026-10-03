@@ -65,7 +65,7 @@ func (c *Chunker) Truncated() bool { return c.truncated }
 // emit sends one line, unless the line cap has been reached. A leading speaker tag the model
 // copied from the input format is removed first; a line that was only a tag is dropped.
 func (c *Chunker) emit(line string) {
-	if line = StripSpeakerTags(line); isBlankLine(line) {
+	if line = CleanReplyLine(line); isBlankLine(line) {
 		return
 	}
 	// hold runs on every line, so a second claim behind the first is still seen.
