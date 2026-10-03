@@ -70,6 +70,7 @@ func (p *PollyLLM) ChatCompletionStream(chatCtx core.ChatContextInterface, req *
 
 		chunker := irc.NewChunker(output, maxChunkSize)
 		chunker.SetMaxLines(cfg.Bot.MaxReplyLines)
+		chunker.SetJoinLines(true)
 		claimTools := claimableTools(registry)
 		cb := newCallbackHandler(chatCtx, chunker, cfg)
 		cb.watchClaims(claimTools)

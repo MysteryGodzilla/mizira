@@ -27,6 +27,8 @@ type Chunker struct {
 	// stays in order while the caller decides whether to Release or DropHeld.
 	hold func(line string) bool
 	held []string
+
+	joinLines bool // see SetJoinLines
 }
 
 // SetHold installs the check that decides which lines to keep back.
@@ -93,6 +95,10 @@ func NewChunker(output chan<- string, maxChunkSize int) *Chunker {
 // Write adds content to the buffer and emits complete lines immediately.
 // If the buffer grows too large, it forces a chunk to be emitted.
 func (c *Chunker) Write(content string) {
+	if c.joinLines {
+		c.writeJoined(content)
+		return
+	}
 	c.buffer.WriteString(content)
 
 	// Emit complete lines immediately
@@ -145,6 +151,10 @@ func (c *Chunker) extractBestSplitChunk() string {
 
 // Flush emits any remaining buffer content, still split at maxChunkSize.
 func (c *Chunker) Flush() {
+	if c.joinLines {
+		c.drainJoined(true)
+		return
+	}
 	for c.buffer.Len() > c.maxChunkSize {
 		chunk := c.extractBestSplitChunk()
 		if chunk == "" {
