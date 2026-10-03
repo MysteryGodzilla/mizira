@@ -298,3 +298,20 @@ func TestKnownThinkingEffortsUnchanged(t *testing.T) {
 		}
 	}
 }
+
+func TestApplySampling(t *testing.T) {
+	req := &CompletionRequest{}
+	applySampling(req, map[string]float64{"top_p": 0.9, "presence_penalty": 0.5, "top_k": 64, "min_p": 0.05})
+	if req.TopP == nil || *req.TopP != 0.9 || req.PresencePenalty == nil || *req.PresencePenalty != 0.5 {
+		t.Fatalf("OpenAI fields: %v %v", req.TopP, req.PresencePenalty)
+	}
+	if req.ExtraBody["top_k"] != 64 || req.ExtraBody["min_p"] != 0.05 {
+		t.Fatalf("extra body: %v", req.ExtraBody)
+	}
+
+	empty := &CompletionRequest{}
+	applySampling(empty, nil)
+	if empty.TopP != nil || empty.ExtraBody != nil {
+		t.Fatal("unset settings must not be sent")
+	}
+}

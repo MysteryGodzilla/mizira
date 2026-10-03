@@ -47,6 +47,7 @@ func NewCompletionRequest(config *config.Configuration, session sessions.Session
 		Tools:          tools,
 		ThinkingEffort: thinkingEffort,
 	}
+	applySampling(req, config.Model.Sampling)
 
 	// Set streaming mode (nil = streaming default, false = non-streaming)
 	if !config.Model.Stream {
@@ -243,4 +244,29 @@ func commitExchange(session sessions.Session, msgs []messages.ChatMessage) {
 	for _, m := range msgs {
 		session.AddMessage(m)
 	}
+}
+
+// applySampling puts the set sampling values on the request. top_p and presence_penalty are OpenAI
+// parameters; the rest are understood by OpenAI-compatible servers such as llama.cpp.
+func applySampling(req *CompletionRequest, sampling map[string]float64) {
+	for key, v := range sampling {
+		switch key {
+		case "top_p":
+			req.TopP = &v
+		case "presence_penalty":
+			req.PresencePenalty = &v
+		case "top_k":
+			req.ExtraBody = withExtra(req.ExtraBody, key, int(v))
+		default:
+			req.ExtraBody = withExtra(req.ExtraBody, key, v)
+		}
+	}
+}
+
+func withExtra(extra map[string]any, key string, v any) map[string]any {
+	if extra == nil {
+		extra = map[string]any{}
+	}
+	extra[key] = v
+	return extra
 }
