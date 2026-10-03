@@ -58,6 +58,11 @@ func ToolIntent(cfg *config.Configuration, botNick, msg string, inChannel func(n
 			return Intent{}, false
 		}
 		return Intent{Tool: ClaimTool[ClaimRemember]}, true
+	case "forget":
+		if recallWords[bareWord(next)] || strings.HasSuffix(text, "?") {
+			return Intent{}, false
+		}
+		return Intent{Tool: ClaimTool[ClaimForget]}, true
 	case "ignore", "mute":
 		target := strings.TrimRight(next, ",.:;!?")
 		if inChannel == nil || !inChannel(target) {

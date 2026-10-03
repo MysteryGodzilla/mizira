@@ -19,6 +19,9 @@ func TestDetectClaim(t *testing.T) {
 		{"Okay, I've stopped responding to bob.", ClaimIgnore},
 		{"o-okay, I'll stop talking to bob.", ClaimIgnore},
 		{"I'll ignore him for a bit", ClaimIgnore},
+		{"Okay, I've forgotten that you play the guitar.", ClaimForget},
+		{"ごめんね, I forgot that you play the guitar.", ClaimForget},
+		{"I'll never forget that!", ""},
 		{"W-well... I can remember that for you.", ClaimRemember},
 		// Not claims.
 		{"I still remember the raven story.", ""},

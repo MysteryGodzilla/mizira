@@ -13,12 +13,14 @@ type ClaimKind string
 const (
 	ClaimRemember ClaimKind = "remember"
 	ClaimIgnore   ClaimKind = "ignore"
+	ClaimForget   ClaimKind = "forget"
 )
 
 // ClaimTool is the tool that has to run for a claim to be true.
 var ClaimTool = map[ClaimKind]string{
 	ClaimRemember: "memory__remember",
 	ClaimIgnore:   "irc__ignore",
+	ClaimForget:   "memory__forget",
 }
 
 // A claim is a first-person promise or report ("I'll remember", "i've stopped replying to bob"),
@@ -35,6 +37,8 @@ var claimPatterns = []struct {
 }{
 	{ClaimRemember, regexp.MustCompile(claimSubject + claimGap +
 		`(?:remember|save|saved|store|stored|note|noted|make a note|keep (?:that|this|it) in mind)\b`)},
+	{ClaimForget, regexp.MustCompile(claimSubject + claimGap +
+		`(?:forget|forgot|forgotten|erase|erased|delete|deleted)\b`)},
 	{ClaimIgnore, regexp.MustCompile(claimSubject + claimGap +
 		`(?:ignore|ignored|ignoring|mute|muted|block|blocked|stop(?:ped)? (?:responding|replying|talking) to)\b`)},
 }
