@@ -80,3 +80,6 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
+
+// Fork adding top_p, presence_penalty and extra body fields (branch mizira-sampling).
+replace github.com/alexschlessinger/pollytool => github.com/MysteryGodzilla/polly v0.0.0-20261003103743-6245f5c62e30
