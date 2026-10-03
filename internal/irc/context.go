@@ -238,7 +238,7 @@ func (c ChatContext) Reply(message string) {
 		return
 	}
 
-	c.logger.Debug("reply_sent", "message", message)
+	c.logger.Info("reply_sent", "message", message)
 
 	c.client.Cmd.Reply(*c.event, c.withPrefix(RenderIRCFormatting(message)))
 }

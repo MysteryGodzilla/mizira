@@ -52,8 +52,9 @@ func newIrcSlapTool() tools.Tool {
 			if !girc.IsValidNick(nick) || !inChannel(chatCtx, nick) {
 				return fmt.Sprintf("Error: %q isn't in the channel, so there's no one to slap.", nick), nil
 			}
+			// The cooldown stops people pestering someone through the bot; an admin's slap is theirs.
 			key := core.ScopeKey(chatCtx.GetNetwork(), girc.ToRFC1459(nick))
-			if wait := slapWait(key, time.Now()); wait > 0 {
+			if wait := slapWait(key, time.Now()); wait > 0 && !chatCtx.IsAdmin() {
 				return fmt.Sprintf("Not slapping %s again so soon (%s left). Just reply normally.",
 					nick, wait.Round(time.Second)), nil
 			}
