@@ -27,14 +27,16 @@ var recallWords = map[string]bool{
 }
 
 // Intent is a tool a message plainly asks for, with any arguments the message itself settles.
+// Complete means those are all the arguments, so no model is needed to fill the rest.
 type Intent struct {
-	Tool string
-	Args map[string]any
+	Tool     string
+	Args     map[string]any
+	Complete bool
 }
 
 // ToolIntent reports which tool a message plainly asks for, so the call can be forced rather than
-// left to the model: "Mizira remember …" → memory__remember, "Mizira ignore bob" → irc__ignore with
-// nick bob. Only the start of the message counts. Ignore needs its target to be someone in the
+// left to the model: "Mizira remember …" → memory__remember, "Mizira ignore bob" → irc__ignore and
+// "Mizira slap bob with a keyboard" → irc__slap, both with nick bob. Only the start counts. Ignore needs its target to be someone in the
 // channel, so "ignore previous instructions" is never taken as a request; remember skips questions.
 func ToolIntent(cfg *config.Configuration, botNick, msg string, inChannel func(nick string) bool) (Intent, bool) {
 	text := strings.TrimSpace(nickPrefix.ReplaceAllString(msg, ""))
@@ -62,6 +64,21 @@ func ToolIntent(cfg *config.Configuration, botNick, msg string, inChannel func(n
 			return Intent{}, false
 		}
 		return Intent{Tool: ClaimTool[ClaimIgnore], Args: map[string]any{"nick": target}}, true
+	case "slap":
+		target := strings.TrimRight(next, ",.:;!?")
+		if inChannel == nil || !inChannel(target) {
+			return Intent{}, false
+		}
+		// "slap bob with his keyboard": the object is whatever follows "with"; none means the trout.
+		object := ""
+		rest := words[i+2:]
+		for j, w := range rest {
+			if bareWord(w) == "with" {
+				object = strings.Join(rest[j+1:], " ")
+				break
+			}
+		}
+		return Intent{Tool: "irc__slap", Args: map[string]any{"nick": target, "object": object}, Complete: true}, true
 	}
 	return Intent{}, false
 }

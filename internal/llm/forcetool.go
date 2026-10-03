@@ -56,8 +56,12 @@ func forceIntentTool(ctx irc.ChatContextInterface, req *CompletionRequest, msg s
 	}
 
 	log := ctx.GetLogger()
-	call, err := requestToolCall(ctx, tool, req.Messages)
-	if err != nil {
+	var call messages.ChatMessageToolCall
+	var err error
+	if intent.Complete {
+		args, _ := json.Marshal(intent.Args)
+		call = messages.ChatMessageToolCall{ID: "forced-" + ctx.GetRequestID(), Name: name, Arguments: string(args)}
+	} else if call, err = requestToolCall(ctx, tool, req.Messages); err != nil {
 		log.Warn("forced_tool_unavailable", "tool", name, "error", err.Error())
 		return nil
 	}
@@ -75,7 +79,7 @@ func forceIntentTool(ctx irc.ChatContextInterface, req *CompletionRequest, msg s
 		call.Arguments = string(fixed)
 	}
 
-	if ctx.GetConfig().Bot.ShowToolActions {
+	if ctx.GetConfig().Bot.ShowToolActions && !silentTools[name] {
 		ctx.ReplyAction("calling " + toolDisplayName(name))
 	}
 	log.Info("tool_started", "tool", name, "forced", true)

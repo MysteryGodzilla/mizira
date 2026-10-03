@@ -364,6 +364,9 @@ func (h *callbackHandler) beforeToolExecute(ctx context.Context, tc messages.Cha
 	return irc.InjectContext(ctx, h.chatCtx)
 }
 
+// silentTools are not announced with "calling X": their own /me action is what the channel sees.
+var silentTools = map[string]bool{"irc__action": true, "irc__slap": true}
+
 // toolDisplayName is what the channel sees in "calling X".
 var toolDisplayOverrides = map[string]string{
 	"musicgen__song":    "musicgen",
@@ -404,7 +407,7 @@ func (h *callbackHandler) onToolStart(calls []messages.ChatMessageToolCall) {
 	// (e.g. after a failed safety check) shouldn't re-announce "calling X" a second time.
 	var names []string
 	for _, tc := range calls {
-		if tc.Name == "irc__action" {
+		if silentTools[tc.Name] {
 			continue
 		}
 		displayName := toolDisplayName(tc.Name)
