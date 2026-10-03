@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/alexschlessinger/pollytool/schema"
@@ -119,58 +120,63 @@ func newMemoryRecallTool() tools.Tool {
 func newMemoryForgetTool() tools.Tool {
 	return &tools.Func{
 		Name: "memory__forget",
-		Desc: "Delete a memory you hold about someone, by its id (from " +
-			"memory__recall). Use it when someone asks you to forget something " +
-			"about them, or when a memory turns out to be wrong. Anyone may ask " +
-			"you to forget things about THEMSELVES; only operators may erase " +
-			"memories about other people.",
+		Desc: "Delete one memory you hold about someone, named by its words: who it is about and " +
+			"what it says (\"plays the guitar\"). Use it when someone asks you to forget something " +
+			"about them, or when a memory turns out to be wrong. Anyone may ask you to forget things " +
+			"about THEMSELVES; only operators may erase memories about other people.",
 		Params: schema.Params{
-			"id": schema.Int("The memory id to delete, from memory__recall"),
+			"subject": schema.S("Who the memory is about, usually a nick; the person asking if it's about them"),
+			"fact":    schema.S("Words from the memory to forget, e.g. \"plays the guitar\""),
 		},
-		Required: []string{"id"},
+		Required: []string{"fact"},
 		Run: func(ctx context.Context, args tools.Args) (string, error) {
 			chatCtx, err := validateContext(ctx)
 			if err != nil {
 				return "", err
+			}
+			subject := strings.TrimSpace(args.String("subject"))
+			if subject == "" {
+				subject = chatCtx.GetSource()
+			}
+			query := strings.TrimSpace(args.String("fact"))
+			if query == "" {
+				return "", fmt.Errorf("say which memory to forget, in its own words")
+			}
+			if !strings.EqualFold(subject, chatCtx.GetSource()) && !chatCtx.IsAdmin() {
+				chatCtx.GetLogger().Info("memory_forget_denied",
+					"subject", subject, "requested_by", chatCtx.GetSource())
+				return fmt.Sprintf("Refused: those memories are about %s, not about the person asking. Only they or an operator can remove them.", subject), nil
 			}
 			store, err := core.Memories()
 			if err != nil {
 				chatCtx.GetLogger().Error("memory_store_unavailable", "error", err.Error())
 				return "Error: memory is unavailable right now", nil
 			}
-
-			id := int64(args.Int("id", 0))
-			if id <= 0 {
-				return "", fmt.Errorf("a positive memory id is required")
-			}
-
-			mem, found, err := store.Get(chatCtx.GetNetwork(), id)
+			mems, err := store.Recall(chatCtx.GetNetwork(), subject, 50)
 			if err != nil {
 				chatCtx.GetLogger().Error("memory_lookup_failed", "error", err.Error())
 				return "Error: could not read memory", nil
 			}
-			if !found {
-				return fmt.Sprintf("No memory with id %d", id), nil
-			}
-			owner := mem.Subject
-			if !strings.EqualFold(owner, chatCtx.GetSource()) && !chatCtx.IsAdmin() {
-				chatCtx.GetLogger().Info("memory_forget_denied",
-					"id", id, "subject", owner, "requested_by", chatCtx.GetSource())
-				return fmt.Sprintf("Refused: memory %d is about %s, not about the person asking. Only they or an operator can remove it.", id, owner), nil
-			}
 
-			ok, err := store.Forget(chatCtx.GetNetwork(), id)
+			match, candidates := bestMemoryMatch(mems, query)
+			if match == nil {
+				if len(candidates) == 0 {
+					return fmt.Sprintf("Nothing remembered about %s matches %q. Say so plainly.", subject, query), nil
+				}
+				return fmt.Sprintf("More than one memory about %s could match %q: %s. Ask which one, or call "+
+					"again with more of its words.", subject, query, quoteFacts(candidates)), nil
+			}
+			ok, err := store.Forget(chatCtx.GetNetwork(), match.ID)
 			if err != nil {
 				chatCtx.GetLogger().Error("memory_forget_failed", "error", err.Error())
 				return "Error: could not forget that", nil
 			}
 			if !ok {
-				return fmt.Sprintf("No memory with id %d", id), nil
+				return fmt.Sprintf("Nothing remembered about %s matches %q.", subject, query), nil
 			}
-
 			chatCtx.GetLogger().Info("memory_forgotten",
-				"id", id, "subject", owner, "requested_by", chatCtx.GetSource())
-			return fmt.Sprintf("Forgot memory %d about %s.", id, owner), nil
+				"id", match.ID, "subject", match.Subject, "fact", match.Fact, "requested_by", chatCtx.GetSource())
+			return fmt.Sprintf("Forgot about %s: %q. Say briefly that it's forgotten.", subject, match.Fact), nil
 		},
 	}
 }
@@ -190,4 +196,69 @@ func looksLikeInstruction(subject, fact string) (string, bool) {
 		return "an order with no subject", true
 	}
 	return "", false
+}
+
+// forgetStopWords carry no meaning for matching a memory: "that", "the", "my".
+var forgetStopWords = map[string]bool{
+	"the": true, "and": true, "that": true, "this": true, "you": true, "your": true, "my": true,
+	"me": true, "i": true, "a": true, "an": true, "is": true, "are": true, "was": true, "to": true,
+	"of": true, "about": true, "for": true, "it": true, "they": true, "he": true, "she": true,
+	"his": true, "her": true, "their": true, "will": true, "be": true, "in": true, "on": true,
+}
+
+func memoryWords(s string) []string {
+	var out []string
+	for _, w := range strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
+		return !isTriggerWordChar(r) && r != '\''
+	}) {
+		if !forgetStopWords[w] {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// bestMemoryMatch picks the memory whose words cover most of query's. It returns nil and the tied
+// or near candidates when no single memory clearly matches, and nil, nil when none matches at all.
+func bestMemoryMatch(mems []core.Memory, query string) (*core.Memory, []core.Memory) {
+	want := memoryWords(query)
+	if len(want) == 0 {
+		return nil, nil
+	}
+	score := func(m core.Memory) float64 {
+		have := map[string]bool{}
+		for _, w := range memoryWords(m.Fact) {
+			have[w] = true
+		}
+		hits := 0
+		for _, w := range want {
+			if have[w] {
+				hits++
+			}
+		}
+		return float64(hits) / float64(len(want))
+	}
+	var best []core.Memory
+	top := 0.0
+	for _, m := range mems {
+		switch sc := score(m); {
+		case sc < 0.5:
+		case sc > top:
+			top, best = sc, []core.Memory{m}
+		case sc == top:
+			best = append(best, m)
+		}
+	}
+	if len(best) == 1 {
+		return &best[0], nil
+	}
+	return nil, best
+}
+
+func quoteFacts(mems []core.Memory) string {
+	parts := make([]string, 0, len(mems))
+	for _, m := range mems {
+		parts = append(parts, strconv.Quote(m.Fact))
+	}
+	return strings.Join(parts, ", ")
 }
