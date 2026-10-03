@@ -12,13 +12,15 @@ import (
 )
 
 func TestCheckSampling(t *testing.T) {
-	ok := map[string]float64{"top_p": 0.95, "top_k": 64, "min_p": 0, "presence_penalty": -1.5, "repeat_penalty": 1.1}
+	ok := map[string]float64{"top_p": 0.95, "top_k": 64, "min_p": 0, "presence_penalty": -1.5, "repeat_penalty": 1.1,
+		"dry_multiplier": 0.8, "dry_base": 1.75, "dry_allowed_length": 2, "dry_penalty_last_n": -1}
 	for k, v := range ok {
 		if err := CheckSampling(k, v); err != nil {
 			t.Errorf("CheckSampling(%s, %g) = %v", k, v, err)
 		}
 	}
-	bad := map[string]float64{"top_p": 1.5, "top_k": 2.5, "min_p": -0.1, "repeat_penalty": 3, "typical_p": 0.5}
+	bad := map[string]float64{"top_p": 1.5, "top_k": 2.5, "min_p": -0.1, "repeat_penalty": 3, "typical_p": 0.5,
+		"dry_allowed_length": 2.5, "dry_base": 0.5}
 	for k, v := range bad {
 		if CheckSampling(k, v) == nil {
 			t.Errorf("CheckSampling(%s, %g) accepted", k, v)

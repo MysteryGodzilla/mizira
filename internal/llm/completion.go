@@ -255,7 +255,7 @@ func applySampling(req *CompletionRequest, sampling map[string]float64) {
 			req.TopP = &v
 		case "presence_penalty":
 			req.PresencePenalty = &v
-		case "top_k":
+		case "top_k", "dry_allowed_length", "dry_penalty_last_n":
 			req.ExtraBody = withExtra(req.ExtraBody, key, int(v))
 		default:
 			req.ExtraBody = withExtra(req.ExtraBody, key, v)

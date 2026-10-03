@@ -116,7 +116,7 @@ Set `model` to `provider/name`:
 | `commandprefix` | `+` | what starts a command |
 | `responseprefix` | | text put in front of every reply line |
 | `model`, `maxtokens`, `temperature` | `ollama/llama3.2`, `16384`, `0.7` | model settings |
-| `top_p`, `top_k`, `min_p`, `presence_penalty`, `repeat_penalty` | unset | optional sampling; unset ones are not sent, so the server's default applies. `+set <key> default` clears one |
+| `top_p`, `top_k`, `min_p`, `presence_penalty`, `repeat_penalty`, `dry_multiplier`, `dry_base`, `dry_allowed_length`, `dry_penalty_last_n` | unset | optional sampling; unset ones are not sent, so the server's default applies. `+set <key> default` clears one |
 | `apitimeout` | `5m` | limit for one request, tool calls included |
 | `maxconcurrent` | `3` | requests handled at once across all networks |
 | `sessionduration`, `maxcontext` | `10m`, `0` (unlimited) | how long an idle conversation is kept, and its token cap |
