@@ -1,5 +1,5 @@
 import { Api } from "../lib/api";
-import type { Bots, Conversation, Feature, People, Reset, RunState, Setting, SettingChange, Tool } from "./types";
+import type { Bots, Conversation, Feature, Memory, People, Reset, RunState, Setting, SettingChange, Subject, Tool } from "./types";
 
 const q = (params: Record<string, string>) => new URLSearchParams(params).toString();
 
@@ -35,4 +35,15 @@ export class MzApi extends Api {
   tools = () => this.call<{ tools: Tool[] }>("GET", "tools").then((r) => r.tools);
   switchTool = (spec: string, on: boolean) => this.call<{ spec: string; on: boolean }>("PUT", "tools", { spec, on });
   resetTools = () => this.call<{ reset: boolean }>("DELETE", "tools/switches");
+
+  memorySubjects = (network: string) =>
+    this.call<{ subjects: Subject[]; perSubject: number }>("GET", `memories/subjects?${q({ network })}`);
+  memories = (network: string, by: { subject?: string; q?: string }) =>
+    this.call<{ memories: Memory[] }>("GET", `memories?${q({ network, subject: by.subject ?? "", q: by.q ?? "" })}`)
+      .then((r) => r.memories);
+  remember = (network: string, subject: string, fact: string) =>
+    this.call<{ id: number; merged: boolean }>("POST", "memories", { network, subject, fact });
+  editMemory = (network: string, id: number, fact: string) =>
+    this.call<{ id: number }>("PUT", `memories/${id}?${q({ network })}`, { fact });
+  forgetMemory = (network: string, id: number) => this.call<{ id: number }>("DELETE", `memories/${id}?${q({ network })}`);
 }

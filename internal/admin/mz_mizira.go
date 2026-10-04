@@ -49,6 +49,13 @@ type Mizira interface {
 	ToolCatalog() []ToolView
 	SwitchTool(spec string, on bool, by string) error
 	ResetToolSwitches(by string) error
+
+	// Memories. Edit and forget return ErrNoSuchMemory for an id not on the network.
+	MemorySubjects(network string) (subjects []SubjectView, perSubject int, err error)
+	Memories(network, subject, query string) ([]MemoryView, error)
+	AddMemory(network, subject, fact, by string) (id int64, merged bool, err error)
+	EditMemory(network string, id int64, fact, by string) error
+	ForgetMemory(network string, id int64, by string) error
 }
 
 // WithMizira adds the console's own pages. Without it the server is upstream's page as it was.
@@ -67,6 +74,7 @@ func (s *Server) mzRoutes(api *http.ServeMux) {
 	api.HandleFunc("PUT /mizira/state", s.setMizState)
 	s.mzPeopleRoutes(api)
 	s.mzSettingsRoutes(api)
+	s.mzMemoryRoutes(api)
 }
 
 type feature struct {

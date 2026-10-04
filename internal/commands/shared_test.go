@@ -78,3 +78,37 @@ func TestScreeningFromTwoWritersKeepsEveryNick(t *testing.T) {
 		t.Errorf("lost a nick: %v", cfg.Bot.ScreenNicks)
 	}
 }
+
+func TestOperatorMemoriesKeepTheCapAndMerge(t *testing.T) {
+	cfg := sharedCfg(t)
+	cfg.Server = &config.ServerConfig{Channel: "#test"}
+	cfg.Bot.MemoryPerSubject = 2
+	store, _ := core.Memories()
+	t.Cleanup(func() { store.ForgetSubject("console-net", "carol") })
+
+	id, merged, err := OperatorRemember(cfg, "console-net", "carol", "carol has a rat called Pip", "console:token", quiet)
+	if err != nil || merged {
+		t.Fatalf("add: %v %v", err, merged)
+	}
+	if again, merged, _ := OperatorRemember(cfg, "console-net", "carol", "Pip is carol's rat", "console:token", quiet); !merged || again != id {
+		t.Errorf("repeat: id %d merged %v", again, merged)
+	}
+	if _, _, err := OperatorRemember(cfg, "console-net", "carol", "carol plays go", "console:token", quiet); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := OperatorRemember(cfg, "console-net", "carol", "carol lives in Osaka", "console:token", quiet); err == nil {
+		t.Error("a third fact past a cap of 2 was saved")
+	}
+	if err := EditMemory("console-net", id, "carol has a pet rat called Pip", "console:token", quiet); err != nil {
+		t.Fatal(err)
+	}
+	if err := EditMemory("other-net", id, "x", "console:token", quiet); !errors.Is(err, ErrNoSuchMemory) {
+		t.Errorf("edit on another network: %v", err)
+	}
+	if err := ForgetMemory("console-net", id, "console:token", quiet); err != nil {
+		t.Fatal(err)
+	}
+	if err := ForgetMemory("console-net", id, "console:token", quiet); !errors.Is(err, ErrNoSuchMemory) {
+		t.Errorf("forget twice: %v", err)
+	}
+}

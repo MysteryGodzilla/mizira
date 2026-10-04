@@ -139,3 +139,31 @@ func TestRefusedSaveSuspicionOnlyWhenAsked(t *testing.T) {
 		}
 	}
 }
+
+// A repeat merges into the fact already held, keeping the longer wording, and isn't refused by the
+// cap it doesn't add to.
+func TestRepeatMergesEvenAtTheCap(t *testing.T) {
+	mock := mocktest.NewMockContext().WithSource("alice").WithAdmin(true)
+	cfg := mock.GetConfig()
+	cfg.Bot.Trigger = "botty"
+	cfg.Server.Name = "merge-cap"
+	cfg.API.OpenAIURL = ""
+	cfg.Bot.MemoryPerSubject = 1
+	store, _ := core.Memories()
+	t.Cleanup(func() { store.ForgetSubject("merge-cap", "botty") })
+
+	first := RememberChecked(mock, "botty", "botty loves green tea")
+	if !first.Saved || first.Merged {
+		t.Fatalf("first: %+v", first)
+	}
+	again := RememberChecked(mock, "botty", "botty really loves green tea lattes")
+	if !again.Merged || again.ID != first.ID {
+		t.Fatalf("repeat at the cap: %+v", again)
+	}
+	if held, _ := store.Recall("merge-cap", "botty", 5); len(held) != 1 || held[0].Fact != "botty really loves green tea lattes" {
+		t.Errorf("held: %+v", held)
+	}
+	if res := RememberChecked(mock, "botty", "botty plays the violin"); !res.Full {
+		t.Errorf("a new fact past the cap: %+v", res)
+	}
+}

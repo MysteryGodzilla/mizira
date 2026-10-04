@@ -19,6 +19,7 @@ import (
 	"B4reMetal/metald/internal/commands"
 	"B4reMetal/metald/internal/config"
 	"B4reMetal/metald/internal/core"
+	"B4reMetal/metald/internal/irc"
 )
 
 // console is the bot side of the operator console's own pages (admin.Mizira): every action runs the
@@ -263,4 +264,83 @@ func settingChange(key string) func(string, error) (admin.SettingChange, error) 
 		}
 		return admin.SettingChange{Key: key, Value: value}, nil
 	}
+}
+
+// botNick is the network's configured nick, for the room-memory check.
+func (c console) botNick(network string) string {
+	if n, ok := c.network(network); ok {
+		return n.Nick
+	}
+	return ""
+}
+
+func (c console) MemorySubjects(network string) ([]admin.SubjectView, int, error) {
+	store, err := core.Memories()
+	if err != nil {
+		return nil, 0, err
+	}
+	counts, err := store.SubjectCounts(network)
+	if err != nil {
+		return nil, 0, err
+	}
+	out := []admin.SubjectView{}
+	for _, s := range counts {
+		out = append(out, admin.SubjectView{Subject: s.Subject, Count: s.Count,
+			Room: irc.IsRoomSubject(c.cfg, c.botNick(network), s.Subject)})
+	}
+	return out, c.cfg.Bot.MemoryPerSubject, nil
+}
+
+// memoryPageLimit bounds one listing; a subject is capped well below it.
+const memoryPageLimit = 300
+
+func (c console) Memories(network, subject, query string) ([]admin.MemoryView, error) {
+	store, err := core.Memories()
+	if err != nil {
+		return nil, err
+	}
+	var list []core.Memory
+	switch {
+	case subject != "":
+		list, err = store.Recall(network, subject, memoryPageLimit)
+	case query != "":
+		list, err = store.Search(network, query, memoryPageLimit)
+	default:
+		list, err = store.List(network, 100)
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := []admin.MemoryView{}
+	for i, m := range list {
+		v := admin.MemoryView{ID: m.ID, Subject: m.Subject, Fact: m.Fact, Author: m.Author, Created: m.Created.Unix()}
+		// Repeats saved before merging existed: point each at an older one saying the same.
+		for _, older := range list[i+1:] {
+			if older.Subject == m.Subject && core.SameFact(m.Subject, m.Fact, older.Fact) {
+				v.SameAs = older.ID
+				break
+			}
+		}
+		out = append(out, v)
+	}
+	return out, nil
+}
+
+func (c console) AddMemory(network, subject, fact, by string) (int64, bool, error) {
+	return commands.OperatorRemember(c.cfg, network, subject, fact, by, core.GetLogger())
+}
+
+func (c console) EditMemory(network string, id int64, fact, by string) error {
+	return memoryErr(commands.EditMemory(network, id, fact, by, core.GetLogger()))
+}
+
+func (c console) ForgetMemory(network string, id int64, by string) error {
+	return memoryErr(commands.ForgetMemory(network, id, by, core.GetLogger()))
+}
+
+func memoryErr(err error) error {
+	if errors.Is(err, commands.ErrNoSuchMemory) {
+		return admin.ErrNoSuchMemory
+	}
+	return err
 }

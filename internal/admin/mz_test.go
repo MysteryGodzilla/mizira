@@ -26,6 +26,7 @@ type fakeMizira struct {
 	scores   []ScoreView
 	botNicks []string
 	setting  string
+	mems     []MemoryView
 }
 
 func (f *fakeMizira) RunState() string { return f.state }
@@ -144,7 +145,9 @@ func TestMiziraEndpointsNeedTheToken(t *testing.T) {
 		{"POST", "/api/v1/screens"}, {"DELETE", "/api/v1/screens?nick=bob"}, {"DELETE", "/api/v1/suspicion?network=net&key=bob"},
 		{"GET", "/api/v1/bots"}, {"POST", "/api/v1/bots"}, {"DELETE", "/api/v1/bots?kind=nick&value=bob"},
 		{"GET", "/api/v1/settings"}, {"PUT", "/api/v1/settings/maxreplylines"}, {"DELETE", "/api/v1/settings/maxreplylines"},
-		{"GET", "/api/v1/tools"}, {"PUT", "/api/v1/tools"}, {"DELETE", "/api/v1/tools/switches"}} {
+		{"GET", "/api/v1/tools"}, {"PUT", "/api/v1/tools"}, {"DELETE", "/api/v1/tools/switches"},
+		{"GET", "/api/v1/memories/subjects?network=net"}, {"GET", "/api/v1/memories?network=net"}, {"POST", "/api/v1/memories"},
+		{"PUT", "/api/v1/memories/1?network=net"}, {"DELETE", "/api/v1/memories/1?network=net"}} {
 		if code, _ := r.call(t, c[0], c[1], "wrong", `{"state":"stopped"}`); code != http.StatusUnauthorized {
 			t.Errorf("%s %s = %d, want 401", c[0], c[1], code)
 		}
@@ -425,5 +428,86 @@ func TestToolSwitchesFromTheConsole(t *testing.T) {
 	}
 	if code, _ := r.call(t, "DELETE", "/api/v1/tools/switches", "s3cret", ""); code != http.StatusOK {
 		t.Errorf("reset switches = %d", code)
+	}
+}
+
+func (f *fakeMizira) MemorySubjects(network string) ([]SubjectView, int, error) {
+	counts := map[string]int{}
+	for _, m := range f.mems {
+		counts[m.Subject]++
+	}
+	out := []SubjectView{}
+	for s, n := range counts {
+		out = append(out, SubjectView{Subject: s, Count: n, Room: s == "botty"})
+	}
+	return out, 40, nil
+}
+func (f *fakeMizira) Memories(network, subject, query string) ([]MemoryView, error) {
+	out := []MemoryView{}
+	for _, m := range f.mems {
+		if (subject == "" || m.Subject == subject) && (query == "" || strings.Contains(m.Fact, query)) {
+			out = append(out, m)
+		}
+	}
+	return out, nil
+}
+func (f *fakeMizira) AddMemory(network, subject, fact, by string) (int64, bool, error) {
+	if subject == "" || fact == "" {
+		return 0, false, errors.New("give a subject and a fact")
+	}
+	id := int64(len(f.mems) + 1)
+	f.mems = append(f.mems, MemoryView{ID: id, Subject: subject, Fact: fact, Author: by})
+	return id, false, nil
+}
+func (f *fakeMizira) EditMemory(network string, id int64, fact, by string) error {
+	for i := range f.mems {
+		if f.mems[i].ID == id {
+			f.mems[i].Fact = fact
+			return nil
+		}
+	}
+	return ErrNoSuchMemory
+}
+func (f *fakeMizira) ForgetMemory(network string, id int64, by string) error {
+	n := len(f.mems)
+	f.mems = slices.DeleteFunc(f.mems, func(m MemoryView) bool { return m.ID == id })
+	if len(f.mems) == n {
+		return ErrNoSuchMemory
+	}
+	return nil
+}
+
+func TestMemoriesFromTheConsole(t *testing.T) {
+	r, m := newMzRig(t)
+	if code, out := r.call(t, "POST", "/api/v1/memories", "s3cret", `{"network":"net","subject":"bob","fact":"bob plays chess"}`); code != http.StatusOK || out["id"] != float64(1) {
+		t.Fatalf("add = %d %v", code, out)
+	}
+	if m.mems[0].Author != "console:token" {
+		t.Errorf("author = %q", m.mems[0].Author)
+	}
+	if code, _ := r.call(t, "POST", "/api/v1/memories", "s3cret", `{"network":"net","subject":"","fact":"x"}`); code != http.StatusConflict {
+		t.Errorf("no subject = %d, want 409", code)
+	}
+	_, out := r.call(t, "GET", "/api/v1/memories/subjects?network=net", "s3cret", "")
+	if out["perSubject"] != float64(40) || len(out["subjects"].([]any)) != 1 {
+		t.Errorf("subjects = %v", out)
+	}
+	if _, out := r.call(t, "GET", "/api/v1/memories?network=net&q=chess", "s3cret", ""); len(out["memories"].([]any)) != 1 {
+		t.Errorf("search = %v", out)
+	}
+	if code, _ := r.call(t, "PUT", "/api/v1/memories/1?network=net", "s3cret", `{"fact":"bob plays chess on Sundays"}`); code != http.StatusOK || m.mems[0].Fact != "bob plays chess on Sundays" {
+		t.Errorf("edit = %d", code)
+	}
+	if code, _ := r.call(t, "PUT", "/api/v1/memories/x?network=net", "s3cret", `{"fact":"y"}`); code != http.StatusBadRequest {
+		t.Errorf("bad id = %d, want 400", code)
+	}
+	if code, _ := r.call(t, "DELETE", "/api/v1/memories/1?network=elsewhere", "s3cret", ""); code != http.StatusNotFound || len(m.mems) != 1 {
+		t.Errorf("forget on another network = %d", code)
+	}
+	if code, _ := r.call(t, "DELETE", "/api/v1/memories/1?network=net", "s3cret", ""); code != http.StatusOK || len(m.mems) != 0 {
+		t.Errorf("forget = %d", code)
+	}
+	if code, _ := r.call(t, "DELETE", "/api/v1/memories/1?network=net", "s3cret", ""); code != http.StatusNotFound {
+		t.Errorf("forget twice = %d, want 404", code)
 	}
 }

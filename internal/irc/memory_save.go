@@ -17,6 +17,7 @@ import (
 type RememberResult struct {
 	ID          int64  // set when saved
 	Saved       bool   // the fact was stored
+	Merged      bool   // it repeated memory ID, which was kept (with the longer wording) instead
 	Instruction bool   // refused: it was an order dressed as a fact
 	Vague       bool   // refused: it points at facts ("the details bob gave") instead of stating one
 	RoomOnly    bool   // refused: facts about the channel or the bot itself are an operator's to set
@@ -52,7 +53,9 @@ func RememberChecked(chatCtx ChatContextInterface, subject, fact string) Remembe
 		chatCtx.GetLogger().Info("memory_rejected_room", "subject", subject, "author", chatCtx.GetSource(), "fact", fact)
 		return RememberResult{RoomOnly: true, Reason: "only an operator can set facts about the channel or about me"}
 	}
-	if limit := chatCtx.GetConfig().Bot.MemoryPerSubject; limit > 0 {
+	// A repeat of a fact already held merges into it, so it never counts against the cap.
+	_, repeat, _ := store.Similar(chatCtx.GetNetwork(), subject, fact)
+	if limit := chatCtx.GetConfig().Bot.MemoryPerSubject; limit > 0 && !repeat {
 		if n, err := store.CountSubject(chatCtx.GetNetwork(), subject); err == nil && n >= int64(limit) {
 			chatCtx.GetLogger().Info("memory_rejected_full", "subject", subject, "count", n)
 			return RememberResult{Full: true, Reason: fmt.Sprintf("%s already has %d memories; forget one first", subject, n)}
@@ -91,11 +94,15 @@ func RememberChecked(chatCtx ChatContextInterface, subject, fact string) Remembe
 		}
 	}
 
-	id, err := store.Remember(chatCtx.GetNetwork(), subject, fact, chatCtx.GetSource(),
+	id, merged, err := store.RememberMerged(chatCtx.GetNetwork(), subject, fact, chatCtx.GetSource(),
 		chatCtx.GetConfig().Server.Channel)
 	if err != nil {
 		chatCtx.GetLogger().Error("memory_remember_failed", "error", err.Error())
 		return RememberResult{Unavailable: true, Reason: "could not save that"}
+	}
+	if merged {
+		chatCtx.GetLogger().Info("memory_merged", "id", id, "subject", subject, "author", chatCtx.GetSource(), "fact", fact)
+		return RememberResult{ID: id, Saved: true, Merged: true}
 	}
 
 	chatCtx.GetLogger().Info("memory_remembered",

@@ -1,0 +1,144 @@
+// Copyright (C) 2026 MysteryGodzilla
+// Part of Mizira, a fork of metald (github.com/B4reMetal/metald)
+// SPDX-License-Identifier: GPL-3.0-only
+
+package admin
+
+import (
+	"errors"
+	"net/http"
+	"strconv"
+	"strings"
+)
+
+// The Memories page: browse by subject, search, add, edit and forget, with room memory (facts about
+// the channel and the bot) shown apart.
+
+type SubjectView struct {
+	Subject string `json:"subject"`
+	Count   int    `json:"count"`
+	Room    bool   `json:"room"` // about the channel or the bot: sent with every request
+}
+
+type MemoryView struct {
+	ID      int64  `json:"id"`
+	Subject string `json:"subject"`
+	Fact    string `json:"fact"`
+	Author  string `json:"author"`
+	Created int64  `json:"created"`
+	// SameAs is the id of another memory about the subject that says the same thing, if any.
+	SameAs int64 `json:"sameAs,omitempty"`
+}
+
+// ErrNoSuchMemory is a memory id that isn't on the network.
+var ErrNoSuchMemory = errors.New("no such memory")
+
+func (s *Server) mzMemoryRoutes(api *http.ServeMux) {
+	api.HandleFunc("GET /memories/subjects", s.memorySubjects)
+	api.HandleFunc("GET /memories", s.memories)
+	api.HandleFunc("POST /memories", s.addMemory)
+	api.HandleFunc("PUT /memories/{id}", s.editMemory)
+	api.HandleFunc("DELETE /memories/{id}", s.forgetMemory)
+}
+
+func (s *Server) memorySubjects(w http.ResponseWriter, r *http.Request) {
+	n := r.URL.Query().Get("network")
+	if !s.knownNetwork(w, n) {
+		return
+	}
+	subjects, limit, err := s.mz.MemorySubjects(n)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, "memory is unavailable")
+		return
+	}
+	respond(w, http.StatusOK, map[string]any{"subjects": subjects, "perSubject": limit})
+}
+
+func (s *Server) memories(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	n := q.Get("network")
+	if !s.knownNetwork(w, n) {
+		return
+	}
+	list, err := s.mz.Memories(n, strings.TrimSpace(q.Get("subject")), strings.TrimSpace(q.Get("q")))
+	if err != nil {
+		fail(w, http.StatusInternalServerError, "memory is unavailable")
+		return
+	}
+	respond(w, http.StatusOK, map[string]any{"memories": list})
+}
+
+func (s *Server) addMemory(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Network string `json:"network"`
+		Subject string `json:"subject"`
+		Fact    string `json:"fact"`
+	}
+	if !decode(w, r, &in) || !s.knownNetwork(w, in.Network) {
+		return
+	}
+	by := s.who(r)
+	id, merged, err := s.mz.AddMemory(in.Network, in.Subject, in.Fact, by)
+	if err != nil {
+		fail(w, http.StatusConflict, err.Error())
+		return
+	}
+	s.log.Info("console_action", "action", "remember", "id", id, "subject", in.Subject, "merged", merged, "by", by)
+	respond(w, http.StatusOK, map[string]any{"id": id, "merged": merged})
+}
+
+// memoryID reads the {id} in the path and the network in the query.
+func (s *Server) memoryID(w http.ResponseWriter, r *http.Request) (string, int64, bool) {
+	n := r.URL.Query().Get("network")
+	if !s.knownNetwork(w, n) {
+		return "", 0, false
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		fail(w, http.StatusBadRequest, "memory ids are numbers")
+		return "", 0, false
+	}
+	return n, id, true
+}
+
+func (s *Server) editMemory(w http.ResponseWriter, r *http.Request) {
+	n, id, ok := s.memoryID(w, r)
+	if !ok {
+		return
+	}
+	var in struct {
+		Fact string `json:"fact"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	by := s.who(r)
+	if err := s.mz.EditMemory(n, id, in.Fact, by); err != nil {
+		s.memoryFail(w, err)
+		return
+	}
+	s.log.Info("console_action", "action", "memory_edit", "id", id, "by", by)
+	respond(w, http.StatusOK, map[string]any{"id": id})
+}
+
+func (s *Server) forgetMemory(w http.ResponseWriter, r *http.Request) {
+	n, id, ok := s.memoryID(w, r)
+	if !ok {
+		return
+	}
+	by := s.who(r)
+	if err := s.mz.ForgetMemory(n, id, by); err != nil {
+		s.memoryFail(w, err)
+		return
+	}
+	s.log.Info("console_action", "action", "forget", "id", id, "by", by)
+	respond(w, http.StatusOK, map[string]any{"id": id})
+}
+
+func (s *Server) memoryFail(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrNoSuchMemory) {
+		fail(w, http.StatusNotFound, err.Error())
+		return
+	}
+	fail(w, http.StatusBadRequest, err.Error())
+}

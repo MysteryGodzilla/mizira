@@ -34,3 +34,9 @@ export interface Tool {
   spec: string; kind: "native" | "work" | "plugin" | "mcp"; description: string; loaded: boolean; names: string[];
   inConfig: boolean; switched: boolean; adminOnly: boolean;
 }
+
+// Mirrors internal/admin/mz_memories.go.
+
+export interface Subject { subject: string; count: number; room: boolean }
+
+export interface Memory { id: number; subject: string; fact: string; author: string; created: number; sameAs?: number }

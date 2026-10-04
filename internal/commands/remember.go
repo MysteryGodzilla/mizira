@@ -36,6 +36,8 @@ func (c *RememberCommand) Execute(ctx irc.ChatContextInterface) {
 	}
 	res := irc.RememberChecked(ctx, subject, fact)
 	switch {
+	case res.Merged:
+		ctx.Reply(fmt.Sprintf("Already had that as #%d about %s; kept one copy.", res.ID, subject))
 	case res.Saved:
 		ctx.Reply(fmt.Sprintf("Saved #%d about %s: %s", res.ID, subject, fact))
 	case res.Instruction:
