@@ -187,7 +187,7 @@ func (p *PollyLLM) ChatCompletionStream(chatCtx core.ChatContextInterface, req *
 		}
 
 		// An admin's turns are never dropped: a refused memory of theirs is a test, not an attack.
-		source := chatCtx.GetSource()
+		source := chatCtx.SpeakerKey()
 		if score := core.Suspicions().Score(chatCtx.GetNetwork(), source); score >= core.SuspicionQuarantine && !chatCtx.IsAdmin() {
 			if n := core.QuarantineSpeaker(chatCtx.GetSession(), source); n > 0 {
 				chatCtx.GetLogger().Warn("exchange_quarantined",
@@ -374,7 +374,7 @@ func (h *callbackHandler) onContent(content string) {
 	h.leakedBuf += content
 	if !h.leaked && irc.LooksLikeToolCall(h.leakedBuf) {
 		h.leaked = true
-		score := core.Suspicions().Add(h.chatCtx.GetNetwork(), h.chatCtx.GetSource(), core.SignalToolSyntax)
+		score := core.Suspicions().Add(h.chatCtx.GetNetwork(), h.chatCtx.SpeakerKey(), core.SignalToolSyntax)
 		h.chatCtx.GetLogger().Warn("tool_syntax_latched",
 			"preview", truncateForLog(h.leakedBuf), "suspicion", score)
 	}
@@ -404,7 +404,7 @@ func (h *callbackHandler) onContent(content string) {
 	h.contentBytes += len(content)
 	if h.contentBytes > maxTurnContent {
 		h.overBudget = true
-		score := core.Suspicions().Add(h.chatCtx.GetNetwork(), h.chatCtx.GetSource(), core.SignalRunaway)
+		score := core.Suspicions().Add(h.chatCtx.GetNetwork(), h.chatCtx.SpeakerKey(), core.SignalRunaway)
 		h.chatCtx.GetLogger().Warn("turn_content_budget_exceeded",
 			"bytes", h.contentBytes, "limit", maxTurnContent,
 			"preview", truncateForLog(content), "suspicion", score)
@@ -549,7 +549,7 @@ func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result stri
 
 	// A tool refusing what it was handed is the strongest single signal available.
 	if isToolRefusal(result) {
-		score := core.Suspicions().Add(h.chatCtx.GetNetwork(), h.chatCtx.GetSource(), core.SignalToolRefused)
+		score := core.Suspicions().Add(h.chatCtx.GetNetwork(), h.chatCtx.SpeakerKey(), core.SignalToolRefused)
 		h.chatCtx.GetLogger().Warn("tool_refused_request",
 			"tool", tc.Name, "source", h.chatCtx.GetSource(), "suspicion", score)
 	}

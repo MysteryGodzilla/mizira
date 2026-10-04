@@ -93,7 +93,7 @@ func forceIntentTool(ctx irc.ChatContextInterface, req *CompletionRequest, msg s
 	log.Info("tool_completed", "tool", name, "forced", true, "preview", truncateForLog(result))
 
 	if isToolRefusal(result) || refusedResult(result) {
-		score := core.Suspicions().Add(ctx.GetNetwork(), ctx.GetSource(), core.SignalToolRefused)
+		score := core.Suspicions().Add(ctx.GetNetwork(), ctx.SpeakerKey(), core.SignalToolRefused)
 		log.Warn("tool_refused_request", "tool", name, "source", ctx.GetSource(), "suspicion", score)
 		call.Arguments = `{"redacted":"refused by a safety check"}`
 	}

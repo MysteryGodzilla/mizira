@@ -25,6 +25,9 @@ type ChatContextInterface interface {
 	IsPrivate() bool
 	// IsBotLine reports whether the message comes from another bot (botnicks or botprefixes).
 	IsBotLine() bool
+	// SpeakerKey names who suspicion is scored against: the nick, or for a bot that shares its
+	// owner's nick, the nick and the bot's tag ("bob [botty]"), so the bot's refusals stay its own.
+	SpeakerKey() string
 	GetCommand() string
 	GetSource() string
 	GetSourceMask() string // the sender's full nick!user@host

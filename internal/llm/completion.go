@@ -199,7 +199,7 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 	if allowed, reason := ScreenIncoming(ctx, msg); !allowed {
 		var score float64
 		if reason != screenUnavailable {
-			score = core.Suspicions().Add(ctx.GetNetwork(), ctx.GetSource(), core.SignalScreenDenied)
+			score = core.Suspicions().Add(ctx.GetNetwork(), ctx.SpeakerKey(), core.SignalScreenDenied)
 		}
 		ctx.GetLogger().Info("message_screened_out",
 			"source", ctx.GetSource(), "reason", reason, "suspicion", score)
@@ -344,7 +344,7 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 		// Neither a failed check nor a custom persona's doing is the speaker's fault.
 		var score float64
 		if reason != core.ClassifyUnavailable && !core.Prompts().Active(ctx.GetLockKey()) {
-			score = core.Suspicions().Add(ctx.GetNetwork(), ctx.GetSource(), core.SignalReplyDenied)
+			score = core.Suspicions().Add(ctx.GetNetwork(), ctx.SpeakerKey(), core.SignalReplyDenied)
 		}
 		ctx.GetLogger().Warn("reply_screened_out",
 			"source", ctx.GetSource(), "reason", reason,
@@ -352,7 +352,7 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 
 		// The reply is already in the session by now - polly adds the agent's messages before this
 		// channel closes.
-		if n := core.QuarantineSpeaker(ctx.GetSession(), ctx.GetSource()); n > 0 {
+		if n := core.QuarantineSpeaker(ctx.GetSession(), ctx.SpeakerKey()); n > 0 {
 			ctx.GetLogger().Warn("exchange_quarantined",
 				"source", ctx.GetSource(), "messages", n, "cause", "reply_screened")
 		}

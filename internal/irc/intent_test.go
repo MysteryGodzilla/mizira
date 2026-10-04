@@ -120,3 +120,12 @@ func TestToolIntentForgetByIDAndMe(t *testing.T) {
 		t.Errorf("a question is not a request: %+v", got)
 	}
 }
+
+// A bot sharing its owner's nick tags its lines; the tag doesn't hide the request.
+func TestToolIntentSkipsBotTag(t *testing.T) {
+	cfg := &config.Configuration{Bot: &config.BotConfig{Trigger: "Mizira", BotPrefixes: []string{"[botty]"}}}
+	got, ok := ToolIntent(cfg, "Mizira", "(nick:bob) [botty] mizira remember carol knows every band", nil)
+	if !ok || got.Tool != "memory__remember" {
+		t.Errorf("got %+v, %v", got, ok)
+	}
+}

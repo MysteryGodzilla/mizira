@@ -25,7 +25,7 @@ func (c *CompletionCommand) Execute(ctx irc.ChatContextInterface) {
 
 	cleaned, frames := irc.StripInjectionFrames(msg)
 	if frames > 0 {
-		score := core.Suspicions().Add(ctx.GetNetwork(), ctx.GetSource(), core.SignalInjectionFrames)
+		score := core.Suspicions().Add(ctx.GetNetwork(), ctx.SpeakerKey(), core.SignalInjectionFrames)
 		ctx.GetLogger().Warn("injection_frames_stripped",
 			"count", frames, "source", ctx.GetSource(), "suspicion", score)
 	}

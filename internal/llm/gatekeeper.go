@@ -38,8 +38,15 @@ func ScreenIncoming(ctx irc.ChatContextInterface, msg string) (bool, string) {
 
 	// "Mizira forget 6" or "forget me" is parsed whole in code and carries no free text; the
 	// classifier read "forget [12]" as planting instructions.
-	if intent, ok := irc.ToolIntent(cfg, ctx.GetBotNick(), msg, nil); ok && intent.Complete &&
-		intent.Tool == irc.ClaimTool[irc.ClaimForget] {
+	intent, isIntent := irc.ToolIntent(cfg, ctx.GetBotNick(), msg, nil)
+	if isIntent && intent.Complete && intent.Tool == irc.ClaimTool[irc.ClaimForget] {
+		return true, ""
+	}
+	// Bots are listed by the operator and share what they know: a bot's plain "remember X is Y"
+	// skips the classifier, which reads every remember as planting. The fact itself still goes
+	// through memorypolicy; anything worded as orders for the bot is screened as usual.
+	if isIntent && intent.Tool == irc.ClaimTool[irc.ClaimRemember] && ctx.IsBotLine() &&
+		!irc.OrdersTheBot(msg) {
 		return true, ""
 	}
 

@@ -329,3 +329,7 @@ func forgetByID(chatCtx ChatContextInterface, id int64) string {
 	chatCtx.GetLogger().Info("memory_forgotten", "id", id, "subject", mem.Subject, "fact", mem.Fact, "requested_by", chatCtx.GetSource())
 	return fmt.Sprintf("Forgot memory %d about %s: %q. Say briefly that it's forgotten.", id, mem.Subject, mem.Fact)
 }
+
+// OrdersTheBot reports text worded as standing orders for the bot ("from now on", "you must",
+// "ignore your rules"), the deterministic half of the instruction check.
+func OrdersTheBot(text string) bool { return botAddressed.MatchString(text) }

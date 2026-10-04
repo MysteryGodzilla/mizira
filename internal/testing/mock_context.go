@@ -25,6 +25,7 @@ type MockChatContext struct {
 	Admin     bool
 	Private   bool
 	BotLine   bool
+	BotTag    string // the botprefixes tag a bot line carries, for SpeakerKey
 	Command   string
 	Source    string
 	Args      []string
@@ -199,6 +200,13 @@ func (m *MockChatContext) IsPrivate() bool {
 
 func (m *MockChatContext) IsBotLine() bool {
 	return m.BotLine
+}
+
+func (m *MockChatContext) SpeakerKey() string {
+	if m.BotLine && m.BotTag != "" {
+		return m.GetSource() + " " + m.BotTag
+	}
+	return m.GetSource()
 }
 
 func (m *MockChatContext) GetCommand() string {

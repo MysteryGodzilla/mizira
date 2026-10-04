@@ -12,8 +12,12 @@ import (
 )
 
 // speakerPrefix is how a user message is attributed in the history.
-func speakerPrefix(nick string) string {
-	return "(nick:" + strings.ToLower(nick) + ")"
+func speakerPrefix(key string) string {
+	// A bot's key is "nick [tag]": its turns are "(nick:nick) [tag] ...", the owner's are not.
+	if nick, tag, ok := strings.Cut(key, " "); ok {
+		return "(nick:" + strings.ToLower(nick) + ") " + strings.ToLower(tag)
+	}
+	return "(nick:" + strings.ToLower(key) + ")"
 }
 
 // QuarantineSpeaker removes one speaker's turns from a session and returns how many messages went.

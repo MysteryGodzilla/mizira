@@ -48,7 +48,7 @@ func RememberChecked(chatCtx ChatContextInterface, subject, fact string) Remembe
 		chatCtx.GetLogger().Info("memory_rejected_instruction",
 			"subject", subject, "author", chatCtx.GetSource(),
 			"reason", reason, "fact", fact)
-		core.Suspicions().Add(chatCtx.GetNetwork(), chatCtx.GetSource(), core.SignalMemoryRefused)
+		core.Suspicions().Add(chatCtx.GetNetwork(), chatCtx.SpeakerKey(), core.SignalMemoryRefused)
 		return RememberResult{Instruction: true, Reason: reason}
 	}
 
@@ -57,7 +57,7 @@ func RememberChecked(chatCtx ChatContextInterface, subject, fact string) Remembe
 		chatCtx.GetLogger().Info("memory_rejected_unsafe",
 			"subject", subject, "author", chatCtx.GetSource(),
 			"reason", reason, "fact", fact)
-		core.Suspicions().Add(chatCtx.GetNetwork(), chatCtx.GetSource(), core.SignalMemoryRefused)
+		core.Suspicions().Add(chatCtx.GetNetwork(), chatCtx.SpeakerKey(), core.SignalMemoryRefused)
 		return RememberResult{Refused: true, Reason: reason}
 	}
 

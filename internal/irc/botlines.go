@@ -62,6 +62,18 @@ func ClassifyLine(cfg *config.Configuration, nick, text string) LineKind {
 	return HumanLine
 }
 
+// BotTag returns the botprefixes entry a line starts with, as configured, or "".
+func BotTag(cfg *config.Configuration, text string) string {
+	line := normaliseLine(text)
+	for _, p := range cfg.Bot.BotPrefixes {
+		if prefix := normaliseLine(p); utf8.RuneCountInString(prefix) >= minBotPrefixLen &&
+			strings.HasPrefix(line, prefix) {
+			return strings.TrimSpace(p)
+		}
+	}
+	return ""
+}
+
 // TrackLine runs on every event after the channel gate. It returns true when the event must
 // be dropped: a line in this bot's own prefix, so it never answers itself (A10). A human line
 // in the channel resets the bot reply chain, since a person has joined the conversation again.

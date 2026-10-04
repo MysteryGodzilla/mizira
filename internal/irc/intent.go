@@ -42,6 +42,10 @@ type Intent struct {
 func ToolIntent(cfg *config.Configuration, botNick, msg string, inChannel func(nick string) bool) (Intent, bool) {
 	text := strings.TrimSpace(nickPrefix.ReplaceAllString(msg, ""))
 	words := strings.Fields(text)
+	// A bot that shares its owner's nick tags its lines: "[botty] Mizira remember ...".
+	if len(words) > 0 && BotTag(cfg, words[0]) != "" {
+		words = words[1:]
+	}
 	if len(words) < 3 || !isBotName(words[0], cfg.Bot.Trigger, botNick) {
 		return Intent{}, false
 	}

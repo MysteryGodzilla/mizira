@@ -489,6 +489,15 @@ func (c ChatContext) IsBotLine() bool {
 	return ClassifyLine(c.Config, c.event.Source.Name, c.event.Last()) == BotLine
 }
 
+func (c ChatContext) SpeakerKey() string {
+	if c.IsBotLine() {
+		if tag := BotTag(c.Config, c.event.Last()); tag != "" {
+			return c.GetSource() + " " + tag
+		}
+	}
+	return c.GetSource()
+}
+
 // GetCommand returns the command this message runs, or "" for ordinary chat. A "+word" that
 // isn't a command for this bot (e.g. no name when commandsneedname is on) is chat, so a line
 // that merely mentions the bot can't sneak a command past the name rule.
