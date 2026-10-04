@@ -21,3 +21,16 @@ export interface Score { network: string; key: string; score: number }
 export interface People {
   ignores: Ignore[]; screened: { in: string[]; out: string[] }; suspicion: Score[]; quarantineAt: number;
 }
+
+// Mirrors internal/admin/mz_settings.go.
+
+export interface Bots { nicks: string[]; prefixes: string[]; replyLimit: string; cooldown: string }
+
+export interface Setting { key: string; value: string; default: string; overridden: boolean; editable: boolean }
+
+export interface SettingChange { key: string; value: string; warning?: string }
+
+export interface Tool {
+  spec: string; kind: "native" | "work" | "plugin" | "mcp"; description: string; loaded: boolean; names: string[];
+  inConfig: boolean; switched: boolean; adminOnly: boolean;
+}

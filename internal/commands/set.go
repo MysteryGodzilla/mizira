@@ -5,6 +5,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -37,23 +38,13 @@ func (c *SetCommand) Execute(ctx irc.ChatContextInterface) {
 		return
 	}
 
-	configMu.Lock()
-	defer configMu.Unlock()
-	if err := field.setter(cfg, value); err != nil {
+	// Shared with the operator console's Settings page.
+	if err := applySetting(cfg, ctx.GetSystem(), param, value, ctx.GetLogger()); errors.Is(err, ErrLLMNotUpdated) {
+		ctx.Reply("Configuration saved, but failed to update LLM client")
+	} else if err != nil {
 		ctx.Reply(err.Error())
 		return
 	}
-
-	// If an API key or URL was set, update the LLM client
-	if strings.Contains(param, "key") || strings.Contains(param, "url") || strings.Contains(param, "model") {
-		if err := ctx.GetSystem().UpdateLLM(*cfg.API); err != nil {
-			ctx.GetLogger().Error("llm_update_failed", "error", err)
-			ctx.Reply("Configuration saved, but failed to update LLM client")
-		}
-	}
-
-	// Persist the raw value so the change survives a restart.
-	PersistSet(param, value)
 
 	ctx.Reply(fmt.Sprintf("%s set to: %s", param, field.getter(cfg)))
 	ctx.GetSession().Clear()

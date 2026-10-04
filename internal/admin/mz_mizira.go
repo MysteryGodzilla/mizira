@@ -39,6 +39,16 @@ type Mizira interface {
 	Unscreen(nick, by string) bool
 	Suspicion() (scores []ScoreView, quarantineAt float64)
 	ClearSuspicion(network, key, by string) bool
+
+	// ~bots, ~set (credentials excluded) and the tool list.
+	Bots() BotsView
+	ChangeBots(add bool, kind, value, by string) (stored string, err error)
+	Settings() []SettingView
+	SetSetting(key, value, by string) (SettingChange, error)
+	ResetSetting(key, by string) (SettingChange, error)
+	ToolCatalog() []ToolView
+	SwitchTool(spec string, on bool, by string) error
+	ResetToolSwitches(by string) error
 }
 
 // WithMizira adds the console's own pages. Without it the server is upstream's page as it was.
@@ -56,6 +66,7 @@ func (s *Server) mzRoutes(api *http.ServeMux) {
 	api.HandleFunc("GET /mizira/state", s.mizState)
 	api.HandleFunc("PUT /mizira/state", s.setMizState)
 	s.mzPeopleRoutes(api)
+	s.mzSettingsRoutes(api)
 }
 
 type feature struct {

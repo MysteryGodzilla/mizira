@@ -24,6 +24,8 @@ type fakeMizira struct {
 	ignores  []IgnoreView
 	screened []string
 	scores   []ScoreView
+	botNicks []string
+	setting  string
 }
 
 func (f *fakeMizira) RunState() string { return f.state }
@@ -139,7 +141,10 @@ func TestMiziraEndpointsNeedTheToken(t *testing.T) {
 	for _, c := range [][2]string{{"GET", "/api/v1/features"}, {"GET", "/api/v1/mizira/state"}, {"PUT", "/api/v1/mizira/state"},
 		{"GET", "/api/v1/conversation"}, {"POST", "/api/v1/conversation/reset"}, {"DELETE", "/api/v1/recap?network=net"},
 		{"GET", "/api/v1/people"}, {"POST", "/api/v1/ignores"}, {"DELETE", "/api/v1/ignores?network=net&nick=bob"},
-		{"POST", "/api/v1/screens"}, {"DELETE", "/api/v1/screens?nick=bob"}, {"DELETE", "/api/v1/suspicion?network=net&key=bob"}} {
+		{"POST", "/api/v1/screens"}, {"DELETE", "/api/v1/screens?nick=bob"}, {"DELETE", "/api/v1/suspicion?network=net&key=bob"},
+		{"GET", "/api/v1/bots"}, {"POST", "/api/v1/bots"}, {"DELETE", "/api/v1/bots?kind=nick&value=bob"},
+		{"GET", "/api/v1/settings"}, {"PUT", "/api/v1/settings/maxreplylines"}, {"DELETE", "/api/v1/settings/maxreplylines"},
+		{"GET", "/api/v1/tools"}, {"PUT", "/api/v1/tools"}, {"DELETE", "/api/v1/tools/switches"}} {
 		if code, _ := r.call(t, c[0], c[1], "wrong", `{"state":"stopped"}`); code != http.StatusUnauthorized {
 			t.Errorf("%s %s = %d, want 401", c[0], c[1], code)
 		}
@@ -312,5 +317,113 @@ func TestScreensAndSuspicionFromTheConsole(t *testing.T) {
 	}
 	if code, _ := r.call(t, "DELETE", "/api/v1/suspicion?network=net&key=eve", "s3cret", ""); code != http.StatusNotFound {
 		t.Errorf("clear a missing score = %d, want 404", code)
+	}
+}
+
+func (f *fakeMizira) Bots() BotsView {
+	return BotsView{Nicks: f.botNicks, Prefixes: []string{}, ReplyLimit: "3", Cooldown: "10m0s"}
+}
+func (f *fakeMizira) ChangeBots(add bool, kind, value, by string) (string, error) {
+	if add {
+		if slices.Contains(f.botNicks, value) {
+			return value, errors.New(value + " is already a bot nick")
+		}
+		f.botNicks = append(f.botNicks, value)
+		return value, nil
+	}
+	n := len(f.botNicks)
+	f.botNicks = slices.DeleteFunc(f.botNicks, func(s string) bool { return s == value })
+	if len(f.botNicks) == n {
+		return value, errors.New(value + " wasn't a bot nick")
+	}
+	return value, nil
+}
+func (f *fakeMizira) Settings() []SettingView {
+	return []SettingView{{Key: "maxreplylines", Value: f.setting, Default: "4", Overridden: f.setting != "4", Editable: true}}
+}
+func (f *fakeMizira) SetSetting(key, value, by string) (SettingChange, error) {
+	if key != "maxreplylines" {
+		return SettingChange{}, errors.New("no such setting")
+	}
+	if value == "99" {
+		return SettingChange{}, errors.New("invalid value for maxreplylines")
+	}
+	f.setting = value
+	return SettingChange{Key: key, Value: value}, nil
+}
+func (f *fakeMizira) ResetSetting(key, by string) (SettingChange, error) {
+	f.setting = "4"
+	return SettingChange{Key: key, Value: "4"}, nil
+}
+func (f *fakeMizira) ToolCatalog() []ToolView {
+	return []ToolView{{Spec: "irc__slap", Kind: "native", Loaded: slices.Contains(f.tools, "irc__slap"), Names: []string{}}}
+}
+func (f *fakeMizira) SwitchTool(spec string, on bool, by string) error {
+	if spec != "irc__slap" {
+		return errors.New("not a tool this console offers")
+	}
+	f.tools = slices.DeleteFunc(f.tools, func(s string) bool { return s == spec })
+	if on {
+		f.tools = append(f.tools, spec)
+	}
+	return nil
+}
+func (f *fakeMizira) ResetToolSwitches(by string) error { return nil }
+
+func TestBotsFromTheConsole(t *testing.T) {
+	r, m := newMzRig(t)
+	if code, _ := r.call(t, "POST", "/api/v1/bots", "s3cret", `{"kind":"nick","value":"carol"}`); code != http.StatusOK || !slices.Contains(m.botNicks, "carol") {
+		t.Fatalf("add bot = %d", code)
+	}
+	if code, _ := r.call(t, "POST", "/api/v1/bots", "s3cret", `{"kind":"nick","value":"carol"}`); code != http.StatusConflict {
+		t.Errorf("add twice = %d, want 409", code)
+	}
+	for _, bad := range []string{`{"kind":"host","value":"carol"}`, `{"kind":"nick","value":" "}`} {
+		if code, _ := r.call(t, "POST", "/api/v1/bots", "s3cret", bad); code != http.StatusBadRequest {
+			t.Errorf("%s = %d, want 400", bad, code)
+		}
+	}
+	if code, _ := r.call(t, "DELETE", "/api/v1/bots?kind=nick&value=carol", "s3cret", ""); code != http.StatusOK || len(m.botNicks) != 0 {
+		t.Errorf("remove bot = %d", code)
+	}
+}
+
+func TestSettingsFromTheConsole(t *testing.T) {
+	r, m := newMzRig(t)
+	m.setting = "4"
+	if code, out := r.call(t, "PUT", "/api/v1/settings/maxreplylines", "s3cret", `{"value":"6"}`); code != http.StatusOK || out["value"] != "6" {
+		t.Fatalf("set = %d %v", code, out)
+	}
+	_, out := r.call(t, "GET", "/api/v1/settings", "s3cret", "")
+	if s := out["settings"].([]any)[0].(map[string]any); s["overridden"] != true || s["default"] != "4" {
+		t.Errorf("settings = %v", s)
+	}
+	if code, _ := r.call(t, "PUT", "/api/v1/settings/maxreplylines", "s3cret", `{"value":"99"}`); code != http.StatusBadRequest || m.setting != "6" {
+		t.Errorf("invalid value = %d, setting %s", code, m.setting)
+	}
+	if code, _ := r.call(t, "PUT", "/api/v1/settings/openaikey", "s3cret", `{"value":"x"}`); code != http.StatusBadRequest {
+		t.Errorf("a credential = %d, want 400", code)
+	}
+	if code, _ := r.call(t, "PUT", "/api/v1/settings/maxreplylines", "s3cret", `{}`); code != http.StatusBadRequest {
+		t.Errorf("no value = %d, want 400", code)
+	}
+	if code, out := r.call(t, "DELETE", "/api/v1/settings/maxreplylines", "s3cret", ""); code != http.StatusOK || out["value"] != "4" {
+		t.Errorf("reset = %d %v", code, out)
+	}
+}
+
+func TestToolSwitchesFromTheConsole(t *testing.T) {
+	r, m := newMzRig(t)
+	if code, _ := r.call(t, "PUT", "/api/v1/tools", "s3cret", `{"spec":"irc__slap","on":false}`); code != http.StatusOK || slices.Contains(m.tools, "irc__slap") {
+		t.Fatalf("switch off = %d %v", code, m.tools)
+	}
+	if code, _ := r.call(t, "PUT", "/api/v1/tools", "s3cret", `{"spec":"/usr/bin/anything","on":true}`); code != http.StatusConflict {
+		t.Errorf("a spec the console doesn't offer = %d, want 409", code)
+	}
+	if code, _ := r.call(t, "PUT", "/api/v1/tools", "s3cret", `{"spec":"irc__slap"}`); code != http.StatusBadRequest {
+		t.Errorf("no on/off = %d, want 400", code)
+	}
+	if code, _ := r.call(t, "DELETE", "/api/v1/tools/switches", "s3cret", ""); code != http.StatusOK {
+		t.Errorf("reset switches = %d", code)
 	}
 }

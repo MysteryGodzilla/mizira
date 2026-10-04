@@ -7,6 +7,7 @@ package bot
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -212,4 +213,54 @@ func clip(s string, n int) string {
 		return s
 	}
 	return string([]rune(s)[:n]) + "…"
+}
+
+func (c console) Bots() admin.BotsView {
+	b := c.cfg.Bot
+	return admin.BotsView{Nicks: append([]string{}, b.BotNicks...), Prefixes: append([]string{}, b.BotPrefixes...),
+		ReplyLimit: strconv.Itoa(b.BotReplyLimit), Cooldown: b.BotCooldown.String()}
+}
+
+func (c console) ChangeBots(add bool, kind, value, by string) (string, error) {
+	botNick := ""
+	if len(c.nets) > 0 {
+		botNick = c.nets[0].Nick
+	}
+	stored, err := commands.ChangeBots(c.cfg, botNick, add, commands.BotKind(kind), value, by, core.GetLogger())
+	switch {
+	case errors.Is(err, commands.ErrAlreadyListed):
+		return stored, fmt.Errorf("%s is already a bot %s", stored, kind)
+	case errors.Is(err, commands.ErrNotListed):
+		return stored, fmt.Errorf("%s wasn't a bot %s", stored, kind)
+	}
+	return stored, err
+}
+
+func (c console) Settings() []admin.SettingView {
+	out := []admin.SettingView{}
+	for _, s := range commands.Settings(c.cfg) {
+		out = append(out, admin.SettingView{Key: s.Key, Value: s.Value, Default: s.Default, Overridden: s.Overridden, Editable: s.Editable})
+	}
+	return out
+}
+
+func (c console) SetSetting(key, value, by string) (admin.SettingChange, error) {
+	return settingChange(key)(commands.SetSetting(c.cfg, c.sys, key, value, by, core.GetLogger()))
+}
+
+func (c console) ResetSetting(key, by string) (admin.SettingChange, error) {
+	return settingChange(key)(commands.ResetSetting(c.cfg, c.sys, key, by, core.GetLogger()))
+}
+
+// settingChange sorts a saved-with-a-warning result from a refusal.
+func settingChange(key string) func(string, error) (admin.SettingChange, error) {
+	return func(value string, err error) (admin.SettingChange, error) {
+		switch {
+		case errors.Is(err, commands.ErrLLMNotUpdated):
+			return admin.SettingChange{Key: key, Value: value, Warning: err.Error()}, nil
+		case err != nil:
+			return admin.SettingChange{}, err
+		}
+		return admin.SettingChange{Key: key, Value: value}, nil
+	}
 }

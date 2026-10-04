@@ -5,6 +5,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -34,43 +35,23 @@ func (c *BotsCommand) Execute(ctx irc.ChatContextInterface) {
 		return
 	}
 	adding := args[1] == "add"
-	configMu.Lock()
-	defer configMu.Unlock()
-
-	var list *[]string
-	var value string
-	if args[2] == "nick" {
-		list, value = &bot.BotNicks, args[3]
-		if adding {
-			if err := irc.ValidateBotNick(ctx.GetConfig(), value, ctx.GetBotNick()); err != nil {
-				ctx.Reply("Not added: " + err.Error())
-				return
-			}
-		}
-	} else {
+	value := args[3]
+	if args[2] == "prefix" {
 		// A prefix may contain spaces (e.g. an emoji before the tag).
-		raw := strings.Join(args[3:], " ")
-		list, value = &bot.BotPrefixes, irc.NormaliseBotPrefix(raw)
-		if adding {
-			if err := irc.ValidateBotPrefix(ctx.GetConfig(), raw); err != nil {
-				ctx.Reply("Not added: " + err.Error())
-				return
-			}
-		}
+		value = strings.Join(args[3:], " ")
 	}
-
-	if adding {
-		if !addNick(list, value) {
-			ctx.Reply(fmt.Sprintf("%s is already a bot %s", value, args[2]))
-			return
-		}
-	} else if !removeNick(list, value) {
+	value, err := ChangeBots(ctx.GetConfig(), ctx.GetBotNick(), adding, BotKind(args[2]), value, ctx.GetSource(), ctx.GetLogger())
+	switch {
+	case errors.Is(err, ErrAlreadyListed):
+		ctx.Reply(fmt.Sprintf("%s is already a bot %s", value, args[2]))
+		return
+	case errors.Is(err, ErrNotListed):
 		ctx.Reply(fmt.Sprintf("%s wasn't a bot %s", value, args[2]))
 		return
+	case err != nil:
+		ctx.Reply("Not added: " + err.Error())
+		return
 	}
-
-	PersistBots(bot.BotPrefixes, bot.BotNicks)
-	ctx.GetLogger().Info("bots_changed", "action", args[1], "kind", args[2], "value", value)
 	if adding {
 		ctx.Reply(fmt.Sprintf("Now treating bot %s %s as a bot", args[2], value))
 	} else {

@@ -1,5 +1,5 @@
 import { Api } from "../lib/api";
-import type { Conversation, Feature, People, Reset, RunState } from "./types";
+import type { Bots, Conversation, Feature, People, Reset, RunState, Setting, SettingChange, Tool } from "./types";
 
 const q = (params: Record<string, string>) => new URLSearchParams(params).toString();
 
@@ -22,4 +22,17 @@ export class MzApi extends Api {
   unscreen = (nick: string) => this.call<{ nick: string }>("DELETE", `screens?${q({ nick })}`);
   clearSuspicion = (network: string, key: string) =>
     this.call<{ key: string }>("DELETE", `suspicion?${q({ network, key })}`);
+
+  bots = () => this.call<Bots>("GET", "bots");
+  addBot = (kind: "nick" | "prefix", value: string) => this.call<{ value: string }>("POST", "bots", { kind, value });
+  removeBot = (kind: "nick" | "prefix", value: string) =>
+    this.call<{ value: string }>("DELETE", `bots?${q({ kind, value })}`);
+
+  settings = () => this.call<{ settings: Setting[] }>("GET", "settings").then((r) => r.settings);
+  set = (key: string, value: string) => this.call<SettingChange>("PUT", `settings/${encodeURIComponent(key)}`, { value });
+  resetSetting = (key: string) => this.call<SettingChange>("DELETE", `settings/${encodeURIComponent(key)}`);
+
+  tools = () => this.call<{ tools: Tool[] }>("GET", "tools").then((r) => r.tools);
+  switchTool = (spec: string, on: boolean) => this.call<{ spec: string; on: boolean }>("PUT", "tools", { spec, on });
+  resetTools = () => this.call<{ reset: boolean }>("DELETE", "tools/switches");
 }

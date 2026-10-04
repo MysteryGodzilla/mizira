@@ -32,6 +32,9 @@ type runtimeOverrides struct {
 	BotNicks    *[]string `json:"botnicks,omitempty"`
 	// RunState is "paused" or "stopped" while the bot is halted; absent when running.
 	RunState string `json:"runstate,omitempty"`
+	// Tool list entries switched on or off from the operator console, relative to config.yml's list.
+	ToolsOn  []string `json:"toolson,omitempty"`
+	ToolsOff []string `json:"toolsoff,omitempty"`
 }
 
 var overridesMu sync.Mutex
@@ -180,6 +183,7 @@ func ApplyOverrides(cfg *config.Configuration) []string {
 	defaultModelMu.Lock()
 	defaultModel = cfg.Model.Model
 	defaultModelMu.Unlock()
+	captureDefaults(cfg)
 
 	overridesMu.Lock()
 	o := loadOverrides()
@@ -225,6 +229,7 @@ func ApplyOverrides(cfg *config.Configuration) []string {
 			core.GetLogger().Warn("override_rejected", "key", "runstate", "value", o.RunState)
 		}
 	}
+	applyToolOverrides(cfg, o)
 	if o.BotNicks != nil {
 		cfg.Bot.BotNicks = *o.BotNicks
 		core.GetLogger().Info("override_applied", "key", "botnicks", "count", len(*o.BotNicks))

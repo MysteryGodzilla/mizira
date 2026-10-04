@@ -128,35 +128,37 @@ func (a *AdminOnlyTool) Execute(ctx context.Context, args map[string]any) (strin
 
 // RegisterIRCTools registers IRC tools as native tools with polly's registry
 func RegisterIRCTools(registry *tools.ToolRegistry) {
-	factories := map[string]func() tools.Tool{
-		"irc__op":          newIrcOpTool,
-		"irc__kick":        newIrcKickTool,
-		"irc__ban":         newIrcBanTool,
-		"irc__topic":       newIrcTopicTool,
-		"irc__action":      newIrcActionTool,
-		"irc__mode_set":    newIrcModeSetTool,
-		"irc__mode_query":  newIrcModeQueryTool,
-		"irc__invite":      newIrcInviteTool,
-		"irc__names":       newIrcNamesTool,
-		"irc__whois":       newIrcWhoisTool,
-		"irc__ignore":      newIrcIgnoreTool,
-		"irc__slap":        newIrcSlapTool,
-		"memory__remember": newMemoryRememberTool,
-		"memory__recall":   newMemoryRecallTool,
-		"memory__forget":   newMemoryForgetTool,
-		"history__search":  newHistorySearchTool,
-		"task__start":      newTaskStartTool,
-		"task__schedule":   newTaskScheduleTool,
-		"goal__propose":    newGoalProposeTool,
-		"todo__set":        newTodoSetTool,
-		"todo__update":     newTodoUpdateTool,
-		"task__note":       newTaskNoteTool,
-		"irc__remind":      newIrcRemindTool,
-		"irc__reminders":   newIrcRemindersTool,
-	}
-	for name, f := range factories {
+	for name, f := range nativeFactories {
 		registry.RegisterNative(name, f)
 	}
+}
+
+// nativeFactories are the bot's own tools, loaded by name from the tool list.
+var nativeFactories = map[string]func() tools.Tool{
+	"irc__op":          newIrcOpTool,
+	"irc__kick":        newIrcKickTool,
+	"irc__ban":         newIrcBanTool,
+	"irc__topic":       newIrcTopicTool,
+	"irc__action":      newIrcActionTool,
+	"irc__mode_set":    newIrcModeSetTool,
+	"irc__mode_query":  newIrcModeQueryTool,
+	"irc__invite":      newIrcInviteTool,
+	"irc__names":       newIrcNamesTool,
+	"irc__whois":       newIrcWhoisTool,
+	"irc__ignore":      newIrcIgnoreTool,
+	"irc__slap":        newIrcSlapTool,
+	"memory__remember": newMemoryRememberTool,
+	"memory__recall":   newMemoryRecallTool,
+	"memory__forget":   newMemoryForgetTool,
+	"history__search":  newHistorySearchTool,
+	"task__start":      newTaskStartTool,
+	"task__schedule":   newTaskScheduleTool,
+	"goal__propose":    newGoalProposeTool,
+	"todo__set":        newTodoSetTool,
+	"todo__update":     newTodoUpdateTool,
+	"task__note":       newTaskNoteTool,
+	"irc__remind":      newIrcRemindTool,
+	"irc__reminders":   newIrcRemindersTool,
 }
 
 func newIrcOpTool() tools.Tool {

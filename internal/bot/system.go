@@ -5,6 +5,7 @@
 package bot
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"slices"
@@ -74,59 +75,9 @@ func NewSystem(c *config.Configuration) core.System {
 	// Tools are optional, but an enabled tool must be loadable and have every
 	// credential it declares, or the bot does not start.
 	unusable := 0
-	if len(c.Bot.Tools) > 0 {
-		for _, toolSpec := range withTaskToolset(c.Bot.Tools) {
-			result, err := s.Tools.LoadToolAuto(toolSpec)
-			if err != nil {
-				slog.Error("tool_load_failed", "tool", toolSpec, "error", err)
-				unusable++
-				continue
-			}
-			if result.Type == "shell" {
-				meta, err := core.ReadShellToolMeta(toolSpec)
-				req := meta.Requires
-				if err != nil {
-					slog.Error("tool_requirements_unreadable", "tool", toolSpec, "error", err)
-					unusable++
-					continue
-				}
-				if missing := core.MissingEnv(req, nil); len(missing) > 0 {
-					slog.Error("tool_requirements_missing", "tool", toolSpec,
-						"keys", strings.Join(missing, ", "), "hint", "set them under env: in config.yml, or remove the tool")
-					unusable++
-					continue
-				}
-			}
-
-			if result.Type == "shell" {
-				if meta, err := core.ReadShellToolMeta(toolSpec); err == nil {
-					for _, server := range result.Servers {
-						for _, name := range server.ToolNames {
-							if meta.Announce != nil && !*meta.Announce {
-								core.SetQuietTool(name)
-							}
-							if tool, ok := s.Tools.Get(name); ok && meta.Requester {
-								s.Tools.Register(irc.NewRequesterTool(tool))
-							}
-						}
-					}
-				}
-			}
-
-			// Re-wrap any tool this config restricted to admins.
-			for _, server := range result.Servers {
-				for _, toolName := range server.ToolNames {
-					if !adminTools[toolName] {
-						continue
-					}
-					tool, ok := s.Tools.Get(toolName)
-					if !ok {
-						continue
-					}
-					s.Tools.Register(irc.NewAdminOnlyTool(tool))
-					slog.Debug("tool_restricted_to_admins", "tool_name", toolName)
-				}
-			}
+	for _, toolSpec := range withTaskToolset(c.Bot.Tools) {
+		if loadToolSpec(s.Tools, toolSpec, adminTools) != nil {
+			unusable++
 		}
 	}
 
@@ -155,6 +106,61 @@ func NewSystem(c *config.Configuration) core.System {
 	slog.Info("system_initialized", fields...)
 
 	return s
+}
+
+// loadToolSpec loads one entry of the tool list: a native tool name, a shell plugin path or an MCP
+// config. A shell plugin must have every setting it requires. Tools the config restricts to admins
+// are wrapped. Errors are logged here.
+func loadToolSpec(reg *tools.ToolRegistry, toolSpec string, adminTools map[string]bool) error {
+	result, err := reg.LoadToolAuto(toolSpec)
+	if err != nil {
+		slog.Error("tool_load_failed", "tool", toolSpec, "error", err)
+		return err
+	}
+	if result.Type == "shell" {
+		meta, err := core.ReadShellToolMeta(toolSpec)
+		req := meta.Requires
+		if err != nil {
+			slog.Error("tool_requirements_unreadable", "tool", toolSpec, "error", err)
+			return err
+		}
+		if missing := core.MissingEnv(req, nil); len(missing) > 0 {
+			slog.Error("tool_requirements_missing", "tool", toolSpec,
+				"keys", strings.Join(missing, ", "), "hint", "set them under env: in config.yml, or remove the tool")
+			return fmt.Errorf("missing settings: %s", strings.Join(missing, ", "))
+		}
+	}
+
+	if result.Type == "shell" {
+		if meta, err := core.ReadShellToolMeta(toolSpec); err == nil {
+			for _, server := range result.Servers {
+				for _, name := range server.ToolNames {
+					if meta.Announce != nil && !*meta.Announce {
+						core.SetQuietTool(name)
+					}
+					if tool, ok := reg.Get(name); ok && meta.Requester {
+						reg.Register(irc.NewRequesterTool(tool))
+					}
+				}
+			}
+		}
+	}
+
+	// Re-wrap any tool this config restricted to admins.
+	for _, server := range result.Servers {
+		for _, toolName := range server.ToolNames {
+			if !adminTools[toolName] {
+				continue
+			}
+			tool, ok := reg.Get(toolName)
+			if !ok {
+				continue
+			}
+			reg.Register(irc.NewAdminOnlyTool(tool))
+			slog.Debug("tool_restricted_to_admins", "tool_name", toolName)
+		}
+	}
+	return nil
 }
 
 // withTaskToolset adds the rest of the background-work tools when task__start is enabled: they only

@@ -1,6 +1,6 @@
 import type { Dashboard } from "../lib/dashboard.svelte";
 import { MzApi } from "./api";
-import type { Feature, RunState } from "./types";
+import type { Feature, RunState, Setting, Tool } from "./types";
 
 const EVERY_MS = 5000;
 const SHOW_INACTIVE = "mzShowInactive";
@@ -13,6 +13,9 @@ function storedFlag(key: string): boolean {
 export class MzConsole {
   features = $state<Feature[] | null>(null);
   runState = $state<RunState | null>(null);
+  // For the "differs from config.yml" banner, and the Settings and Tools pages.
+  settings = $state<Setting[]>([]);
+  tools = $state<Tool[]>([]);
   showInactive = $state(storedFlag(SHOW_INACTIVE));
   readonly api: MzApi;
   private timer: ReturnType<typeof setInterval> | undefined;
@@ -32,6 +35,14 @@ export class MzConsole {
     return this.showInactive || (this.feature(id)?.active ?? true);
   }
 
+  /** What differs from config.yml right now: +set values and tool switches. */
+  get differences(): string[] {
+    return [
+      ...this.settings.filter((s) => s.overridden).map((s) => `${s.key} ${s.value} (config.yml: ${s.default || "empty"})`),
+      ...this.tools.filter((t) => t.switched).map((t) => `${t.spec} ${t.loaded ? "on" : "off"}`),
+    ];
+  }
+
   setShowInactive(on: boolean) {
     this.showInactive = on;
     try { localStorage.setItem(SHOW_INACTIVE, on ? "1" : "0"); } catch { /* lasts for this tab */ }
@@ -39,8 +50,10 @@ export class MzConsole {
 
   async refresh() {
     try {
-      const [features, runState] = await Promise.all([this.api.features(), this.api.runState()]);
-      Object.assign(this, { features, runState });
+      const [features, runState, settings, tools] = await Promise.all([
+        this.api.features(), this.api.runState(), this.api.settings(), this.api.tools(),
+      ]);
+      Object.assign(this, { features, runState, settings, tools });
     } catch { /* upstream's refresh reports errors; don't say it twice */ }
   }
 
@@ -49,9 +62,12 @@ export class MzConsole {
     return this.act(async () => { this.runState = (await this.api.setRunState(state)).state; }, done);
   }
 
-  async act(change: () => Promise<unknown>, done: string) {
-    await this.board.act(change, done);
+  /** Run a change through the dashboard's message line; true if it went through. */
+  async act(change: () => Promise<unknown>, done: string): Promise<boolean> {
+    let ok = false;
+    await this.board.act(async () => { await change(); ok = true; }, done);
     await this.refresh();
+    return ok;
   }
 
   start(): () => void {
