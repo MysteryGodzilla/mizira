@@ -23,3 +23,29 @@ func TestNameTheSubject(t *testing.T) {
 		}
 	}
 }
+
+// Live test 4: "remember the party details bob told you" saved the reference itself.
+func TestPlaceholderFact(t *testing.T) {
+	for _, fact := range []string{
+		"The party details provided by bob",
+		"everything alice said earlier",
+		"the details",
+		"the details about the party.",
+		"info shared by carol",
+	} {
+		if !placeholderFact.MatchString(fact) {
+			t.Errorf("%q should be refused as a placeholder", fact)
+		}
+	}
+	for _, fact := range []string{
+		"bob plays the bass",
+		"carol said she moved to Osaka",
+		"dave pays attention to details",
+		"alice is good at fixing things",
+		"pip is the rat who steals snacks",
+	} {
+		if placeholderFact.MatchString(fact) {
+			t.Errorf("%q is a real fact", fact)
+		}
+	}
+}

@@ -145,3 +145,39 @@ func TestSelfIgnoreRecordsWhoAndWhy(t *testing.T) {
 		t.Errorf("entry = %+v, want bot / alice / one-line reason", e)
 	}
 }
+
+func TestTaskObjectiveToleratesAMisspelledName(t *testing.T) {
+	cases := []struct {
+		args tools.Args
+		want string
+	}{
+		{tools.Args{"objective": "write a haiku"}, "write a haiku"},
+		{tools.Args{"objecive": "write a haiku"}, "write a haiku"},
+		{tools.Args{"objective": "", "task": "write a haiku"}, "write a haiku"},
+		{tools.Args{"a": "one", "b": "two"}, ""},
+		{tools.Args{}, ""},
+	}
+	for _, c := range cases {
+		if got := taskObjective(c.args); got != c.want {
+			t.Errorf("taskObjective(%v) = %q, want %q", c.args, got, c.want)
+		}
+	}
+}
+
+func TestTaskIDFromSession(t *testing.T) {
+	for name, want := range map[string]int64{"task/examplenet/42": 42, "examplenet/#chat": 0, "task/x": 0, "": 0} {
+		if got := TaskIDFromSession(name); got != want {
+			t.Errorf("TaskIDFromSession(%q) = %d, want %d", name, got, want)
+		}
+	}
+}
+
+func TestFormatTodo(t *testing.T) {
+	got := FormatTodo([]core.TodoItem{{Text: "write"}, {Text: "test", Done: true}})
+	if got != "1. [ ] write\n2. [x] test" {
+		t.Errorf("FormatTodo = %q", got)
+	}
+	if FormatTodo(nil) != "(no checklist)" {
+		t.Error("empty checklist")
+	}
+}

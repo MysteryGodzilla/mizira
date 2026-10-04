@@ -57,7 +57,7 @@ func ToolIntent(cfg *config.Configuration, botNick, msg string, inChannel func(n
 		if recallWords[bareWord(next)] || strings.HasSuffix(text, "?") {
 			return Intent{}, false
 		}
-		// "remember what metalai told you" names no fact: the facts are earlier in the chat, and
+		// "remember what bob told you" names no fact: the facts are earlier in the chat, and
 		// often more than one, so the model saves them itself from the conversation.
 		if backReference.MatchString(strings.Join(words[i+1:], " ")) {
 			return Intent{}, false

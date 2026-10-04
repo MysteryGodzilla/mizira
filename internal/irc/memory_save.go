@@ -17,6 +17,7 @@ type RememberResult struct {
 	ID          int64  // set when saved
 	Saved       bool   // the fact was stored
 	Instruction bool   // refused: it was an order dressed as a fact
+	Vague       bool   // refused: it points at facts ("the details bob gave") instead of stating one
 	Refused     bool   // refused by the memory policy classifier
 	Unavailable bool   // memory couldn't be reached or written
 	Reason      string // why it wasn't saved
@@ -35,6 +36,12 @@ func RememberChecked(chatCtx ChatContextInterface, subject, fact string) Remembe
 		// Detail names a local path; the channel gets nothing useful.
 		chatCtx.GetLogger().Error("memory_store_unavailable", "error", err.Error())
 		return RememberResult{Unavailable: true, Reason: "memory is unavailable right now"}
+	}
+
+	// A placeholder is a mistake, not an attack: no suspicion.
+	if placeholderFact.MatchString(fact) {
+		chatCtx.GetLogger().Info("memory_rejected_vague", "subject", subject, "fact", fact)
+		return RememberResult{Vague: true, Reason: "that points at facts instead of stating one"}
 	}
 
 	if reason, bad := looksLikeInstruction(subject, fact); bad {
@@ -65,6 +72,11 @@ func RememberChecked(chatCtx ChatContextInterface, subject, fact string) Remembe
 		"id", id, "subject", subject, "author", chatCtx.GetSource(), "fact", fact)
 	return RememberResult{ID: id, Saved: true}
 }
+
+// placeholderFact is a "fact" that only refers to others: "The party details provided by bob",
+// "everything alice said". Saved, it reads back as nothing.
+var placeholderFact = regexp.MustCompile(`(?i)\b(details|info|information|stuff|things|everything|facts)\b.{0,40}\b(provided|told|said|given|mentioned|shared|posted|explained)\b|` +
+	`^(the |those |these |all (of )?(the )?)?(details|info|information|stuff|things|facts)( about [^.]{1,40})?\.?$`)
 
 // genericSubject is how a model sometimes words the person a fact is about: "User likes purple".
 var genericSubject = regexp.MustCompile(`(?i)^(the )?(user|speaker|person)\b`)

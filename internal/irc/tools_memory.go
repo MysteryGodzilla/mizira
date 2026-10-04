@@ -54,6 +54,11 @@ func newMemoryRememberTool() tools.Tool {
 						"If it is worth remembering, record what they DID or ASKED FOR, "+
 						"naming them - e.g. \"%s asked to be insulted harder\" - not a "+
 						"rule for you to follow.", subject, res.Reason, subject), nil
+			case res.Vague:
+				return "Not saved: that only points at what was said and names no fact. Now call " +
+					"memory__remember again once for each fact you were told, with the person or thing " +
+					"it is about as the subject - e.g. subject \"bob\", fact \"bob plays the bass\". " +
+					"Don't reply until they are saved.", nil
 			case res.Refused:
 				return fmt.Sprintf(
 					"Refused: not storing that (%s). Say so briefly in your own "+
@@ -104,6 +109,11 @@ func newMemoryRecallTool() tools.Tool {
 
 			chatCtx.GetLogger().Info("memory_recalled", "subject", subject, "hits", len(mems))
 			if len(mems) == 0 {
+				if hasTool(chatCtx, "history__search") {
+					return fmt.Sprintf("Nothing remembered about %s. If they mean something said in the "+
+						"channel, look with history__search; otherwise say so plainly - do not invent a "+
+						"memory.", subject), nil
+				}
 				return fmt.Sprintf("Nothing remembered about %s. Say so plainly - do not invent a memory.", subject), nil
 			}
 
@@ -261,4 +271,14 @@ func quoteFacts(mems []core.Memory) string {
 		parts = append(parts, strconv.Quote(m.Fact))
 	}
 	return strings.Join(parts, ", ")
+}
+
+// hasTool reports whether this request can call the named tool.
+func hasTool(chatCtx ChatContextInterface, name string) bool {
+	sys := chatCtx.GetSystem()
+	if sys == nil || sys.GetToolRegistry() == nil {
+		return false
+	}
+	_, ok := sys.GetToolRegistry().Get(name)
+	return ok
 }

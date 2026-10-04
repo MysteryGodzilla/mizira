@@ -36,16 +36,16 @@ func TestToolIntent(t *testing.T) {
 		{"(nick:alice) Mizira remember", ""},
 		{"(nick:alice) Mizira I remember that", ""},
 		// Pointing back at earlier talk: the model saves the facts from the conversation.
-		{"(nick:alice) Mizira please remember the details about the party that metalai told you", ""},
+		{"(nick:alice) Mizira please remember the details about the party that bob told you", ""},
 		{"(nick:alice) Mizira remember what bob said earlier", ""},
 		{"(nick:alice) Mizira remember that!", ""},
 		{"(nick:alice) Mizira remember all of that", ""},
-		{"(nick:alice) Mizira remember everything metalai just said", ""},
+		{"(nick:alice) Mizira remember everything bob just said", ""},
 		{"(nick:alice) Mizira remember those names", ""},
 		{"(nick:alice) Mizira remember that bob told me he likes cats", ""},
 		{"(nick:alice) Mizira remember that I am a girl", "memory__remember"},
 		{"(nick:alice) Mizira remember dave is cool", "memory__remember"},
-		{"(nick:alice) Mizira remember to be careful around mallory", "memory__remember"},
+		{"(nick:alice) Mizira remember to be careful around carol", "memory__remember"},
 	}
 	for _, c := range cases {
 		got, ok := ToolIntent(cfg, "Mizira", c.msg, present)

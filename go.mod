@@ -12,8 +12,6 @@ require (
 	modernc.org/sqlite v1.59.0
 )
 
-//replace github.com/alexschlessinger/pollytool => ../polly
-
 require (
 	cloud.google.com/go v0.123.0 // indirect
 	cloud.google.com/go/auth v0.20.0 // indirect
@@ -81,5 +79,6 @@ require (
 	modernc.org/memory v1.12.1 // indirect
 )
 
-// Fork adding top_p, presence_penalty and extra body fields (branch mizira-sampling).
-replace github.com/alexschlessinger/pollytool => github.com/MysteryGodzilla/polly v0.0.0-20261003103743-6245f5c62e30
+// Fork (branch mizira-sampling): top_p, presence_penalty and extra body fields, plus upstream's
+// reasoning_content patch, so third_party/pollytool is not used.
+replace github.com/alexschlessinger/pollytool => github.com/MysteryGodzilla/polly v0.0.0-20261004030302-4d6ae630bd79

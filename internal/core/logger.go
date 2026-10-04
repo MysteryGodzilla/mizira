@@ -51,7 +51,7 @@ func InitLogger(level, format string, file io.Writer) {
 		}))
 	}
 
-	logger = slog.New(handler)
+	logger = slog.New(teeHandler{inner: handler})
 	slog.SetDefault(logger)
 }
 

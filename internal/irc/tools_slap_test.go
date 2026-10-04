@@ -44,13 +44,13 @@ func TestSlapCooldown(t *testing.T) {
 
 // Live test 4: asked to choose, the model sent the request back as the object.
 func TestEchoedSlapObject(t *testing.T) {
-	for _, obj := range []string{"slap thugbob69 with something", "something", "whatever you want", "thugbob69"} {
-		if !echoedSlapObject(obj, "thugbob69") {
+	for _, obj := range []string{"slap mallory with something", "something", "whatever you want", "mallory"} {
+		if !echoedSlapObject(obj, "mallory") {
 			t.Errorf("%q should be replaced", obj)
 		}
 	}
 	for _, obj := range []string{"a wet noodle", "his GPU", "a large trout"} {
-		if echoedSlapObject(obj, "thugbob69") {
+		if echoedSlapObject(obj, "mallory") {
 			t.Errorf("%q should be kept", obj)
 		}
 	}
