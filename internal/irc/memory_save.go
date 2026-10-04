@@ -128,5 +128,8 @@ func IsRoomSubject(cfg *config.Configuration, botNick, subject string) bool {
 	if self == "" {
 		self = botNick
 	}
-	return strings.EqualFold(subject, cfg.Server.Channel) || strings.EqualFold(subject, self)
+	// The first word decides: "Mizira is a night owl" as a subject is still about the bot.
+	first := strings.Trim(strings.Fields(subject)[0], ",.:;!?'\"")
+	return strings.EqualFold(first, cfg.Server.Channel) || strings.EqualFold(first, self) ||
+		strings.EqualFold(strings.TrimSuffix(first, "'s"), self)
 }

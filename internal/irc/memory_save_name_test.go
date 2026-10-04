@@ -65,6 +65,9 @@ func TestRememberRoomAndCap(t *testing.T) {
 	if !IsRoomSubject(cfg, mock.GetBotNick(), "Botty") || !IsRoomSubject(cfg, mock.GetBotNick(), cfg.Server.Channel) {
 		t.Fatal("trigger and channel are room subjects")
 	}
+	if !IsRoomSubject(cfg, mock.GetBotNick(), "botty is a night owl") || !IsRoomSubject(cfg, mock.GetBotNick(), "botty's style") {
+		t.Error("a subject starting with the bot's name is room memory")
+	}
 	if IsRoomSubject(cfg, mock.GetBotNick(), mock.GetBotNick()) {
 		t.Error("with a trigger set, the nick is the owner's, not room memory")
 	}

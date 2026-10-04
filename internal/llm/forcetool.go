@@ -61,7 +61,7 @@ func forceIntentTool(ctx irc.ChatContextInterface, req *CompletionRequest, msg s
 	if intent.Complete {
 		args, _ := json.Marshal(intent.Args)
 		call = messages.ChatMessageToolCall{ID: "forced-" + ctx.GetRequestID(), Name: name, Arguments: string(args)}
-	} else if call, err = requestToolCall(ctx, tool, req.Messages); err != nil {
+	} else if call, err = requestToolCall(ctx, tool, msg); err != nil {
 		log.Warn("forced_tool_unavailable", "tool", name, "error", err.Error())
 		return nil
 	}
@@ -106,19 +106,21 @@ func forceIntentTool(ctx irc.ChatContextInterface, req *CompletionRequest, msg s
 // requestToolCall asks the model for the tool's arguments, seeing the system prompt and the new
 // message. It uses a JSON-schema response format rather than tool_choice: llama.cpp enforces the
 // schema as a grammar, while Gemma 4 there answered tool_choice "required" with plain text.
-func requestToolCall(ctx irc.ChatContextInterface, tool tools.Tool, history []messages.ChatMessage) (messages.ChatMessageToolCall, error) {
+func requestToolCall(ctx irc.ChatContextInterface, tool tools.Tool, msg string) (messages.ChatMessageToolCall, error) {
 	cfg := ctx.GetConfig()
 	var call messages.ChatMessageToolCall
 	base := strings.TrimSuffix(cfg.API.OpenAIURL, "/")
-	if base == "" || len(history) == 0 {
+	if base == "" || strings.TrimSpace(msg) == "" {
 		return call, errors.New("no openai endpoint")
 	}
 
-	var msgs []map[string]string
-	if first := history[0]; first.Role == messages.MessageRoleSystem {
-		msgs = append(msgs, map[string]string{"role": "system", "content": first.Content})
+	// Only the person's own message and the tool: the arguments must come from what they said. With
+	// the system prompt (room memory, recap) and the turn's injected memories in view, the model
+	// once filled a remember with a room fact instead of the speaker's words.
+	msgs := []map[string]string{
+		{"role": "system", "content": tool.GetName() + ": " + tool.GetSchema().Description()},
+		{"role": "user", "content": msg},
 	}
-	msgs = append(msgs, map[string]string{"role": "user", "content": history[len(history)-1].Content})
 
 	s := tool.GetSchema()
 	params := map[string]any{"type": "object", "properties": s.Properties()}
