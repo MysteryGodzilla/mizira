@@ -46,11 +46,12 @@ func (c *RememberCommand) Execute(ctx irc.ChatContextInterface) {
 }
 
 // parseRemember splits "+remember" arguments into who the fact is about and the fact. A first
-// word ending in ':' that is a valid nick names the subject; otherwise the fact is about the
+// word ending in ':' that is a valid nick or channel names the subject; otherwise the fact is about the
 // speaker.
 func parseRemember(speaker string, args []string) (subject, fact string) {
 	if len(args) > 1 {
-		if nick, ok := strings.CutSuffix(args[0], ":"); ok && girc.IsValidNick(nick) {
+		// A channel names room memory: "+remember #chat: <fact>".
+		if nick, ok := strings.CutSuffix(args[0], ":"); ok && (girc.IsValidNick(nick) || girc.IsValidChannel(nick)) {
 			return nick, strings.TrimSpace(strings.Join(args[1:], " "))
 		}
 	}

@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	"B4reMetal/metald/internal/config"
 	"B4reMetal/metald/internal/core"
 )
 
@@ -18,6 +19,8 @@ type RememberResult struct {
 	Saved       bool   // the fact was stored
 	Instruction bool   // refused: it was an order dressed as a fact
 	Vague       bool   // refused: it points at facts ("the details bob gave") instead of stating one
+	RoomOnly    bool   // refused: facts about the channel or the bot itself are an operator's to set
+	Full        bool   // refused: the subject already holds memorypersubject memories
 	Refused     bool   // refused by the memory policy classifier
 	Unavailable bool   // memory couldn't be reached or written
 	Reason      string // why it wasn't saved
@@ -36,6 +39,19 @@ func RememberChecked(chatCtx ChatContextInterface, subject, fact string) Remembe
 		// Detail names a local path; the channel gets nothing useful.
 		chatCtx.GetLogger().Error("memory_store_unavailable", "error", err.Error())
 		return RememberResult{Unavailable: true, Reason: "memory is unavailable right now"}
+	}
+
+	// Room memory - what the channel is and who the bot is - goes out with every request, so only an
+	// operator writes it. Not a suspicion signal: people try "remember you are ..." in good faith.
+	if IsRoomSubject(chatCtx.GetConfig(), chatCtx.GetBotNick(), subject) && !chatCtx.IsAdmin() {
+		chatCtx.GetLogger().Info("memory_rejected_room", "subject", subject, "author", chatCtx.GetSource(), "fact", fact)
+		return RememberResult{RoomOnly: true, Reason: "only an operator can set facts about the channel or about me"}
+	}
+	if limit := chatCtx.GetConfig().Bot.MemoryPerSubject; limit > 0 {
+		if n, err := store.CountSubject(chatCtx.GetNetwork(), subject); err == nil && n >= int64(limit) {
+			chatCtx.GetLogger().Info("memory_rejected_full", "subject", subject, "count", n)
+			return RememberResult{Full: true, Reason: fmt.Sprintf("%s already has %d memories; forget one first", subject, n)}
+		}
 	}
 
 	// A placeholder is a mistake, not an attack: no suspicion.
@@ -98,4 +114,19 @@ func nameTheSubject(subject, fact string) string {
 		return subject + " " + fact
 	}
 	return genericSubject.ReplaceAllString(fact, subject)
+}
+
+// IsRoomSubject reports whether a memory subject is room memory: the configured channel, or the
+// bot itself (its trigger, or its nick when there is no trigger; with a trigger the nick may be its
+// owner's).
+func IsRoomSubject(cfg *config.Configuration, botNick, subject string) bool {
+	subject = strings.TrimSpace(subject)
+	if subject == "" {
+		return false
+	}
+	self := cfg.Bot.Trigger
+	if self == "" {
+		self = botNick
+	}
+	return strings.EqualFold(subject, cfg.Server.Channel) || strings.EqualFold(subject, self)
 }

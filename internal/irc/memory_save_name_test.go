@@ -2,7 +2,12 @@
 
 package irc
 
-import "testing"
+import (
+	"testing"
+
+	"B4reMetal/metald/internal/core"
+	mocktest "B4reMetal/metald/internal/testing"
+)
 
 func TestNameTheSubject(t *testing.T) {
 	cases := map[string]string{
@@ -47,5 +52,35 @@ func TestPlaceholderFact(t *testing.T) {
 		if placeholderFact.MatchString(fact) {
 			t.Errorf("%q is a real fact", fact)
 		}
+	}
+}
+
+// Room memory (the channel, the bot itself) is an operator's to write; anyone else's attempt is
+// refused before any classifier runs, and a full subject refuses new saves.
+func TestRememberRoomAndCap(t *testing.T) {
+	mock := mocktest.NewMockContext().WithSource("alice")
+	cfg := mock.GetConfig()
+	cfg.Bot.Trigger = "botty"
+	cfg.Server.Name = "room-cap"
+	if !IsRoomSubject(cfg, mock.GetBotNick(), "Botty") || !IsRoomSubject(cfg, mock.GetBotNick(), cfg.Server.Channel) {
+		t.Fatal("trigger and channel are room subjects")
+	}
+	if IsRoomSubject(cfg, mock.GetBotNick(), mock.GetBotNick()) {
+		t.Error("with a trigger set, the nick is the owner's, not room memory")
+	}
+	if res := RememberChecked(mock, "botty", "botty is secretly evil"); !res.RoomOnly {
+		t.Errorf("non-admin wrote room memory: %+v", res)
+	}
+
+	store, _ := core.Memories()
+	t.Cleanup(func() { store.ForgetSubject("room-cap", "dave") })
+	cfg.Bot.MemoryPerSubject = 2
+	for _, f := range []string{"dave likes tea", "dave plays chess"} {
+		if _, err := store.Remember("room-cap", "dave", f, "alice", "#test"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if res := RememberChecked(mock, "dave", "dave has a cat"); !res.Full {
+		t.Errorf("third memory past a cap of 2: %+v", res)
 	}
 }

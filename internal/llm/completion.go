@@ -135,7 +135,12 @@ func relevantMemories(ctx irc.ChatContextInterface, text string, known func(stri
 	if err != nil {
 		return ""
 	}
-	exclude := []string{ctx.GetSource(), ctx.GetBotNick(), ctx.GetConfig().Bot.Trigger}
+	exclude := []string{ctx.GetSource(), ctx.GetConfig().Server.Channel}
+	if t := ctx.GetConfig().Bot.Trigger; t != "" {
+		exclude = append(exclude, t)
+	} else {
+		exclude = append(exclude, ctx.GetBotNick())
+	}
 	mems, err := store.Relevant(ctx.GetNetwork(), text, exclude, maxRelevantMemories)
 	if err != nil {
 		ctx.GetLogger().Warn("relevant_memories_failed", "error", err.Error())
@@ -165,6 +170,58 @@ func recapBlock(ctx irc.ChatContextInterface) string {
 		return ""
 	}
 	return strings.TrimSpace(ctx.GetConfig().Bot.RecapFrame) + "\n" + recap
+}
+
+// maxRoomChars bounds the room memory block.
+const maxRoomChars = 1500
+
+// roomBlock is room memory: what an operator has said about the channel and about the bot itself,
+// framed, newest first within roommemorylimit and maxRoomChars, or "".
+func roomBlock(ctx irc.ChatContextInterface) string {
+	cfg := ctx.GetConfig()
+	limit := cfg.Bot.RoomMemoryLimit
+	if limit <= 0 || ctx.IsPrivate() {
+		return ""
+	}
+	store, err := core.Memories()
+	if err != nil {
+		return ""
+	}
+	self := cfg.Bot.Trigger
+	if self == "" {
+		self = ctx.GetBotNick()
+	}
+	var mems []core.Memory
+	for _, subject := range []string{self, cfg.Server.Channel} {
+		ms, err := store.Recall(ctx.GetNetwork(), subject, limit)
+		if err != nil {
+			ctx.GetLogger().Warn("room_memory_failed", "error", err.Error())
+			return ""
+		}
+		mems = append(mems, ms...)
+	}
+	if len(mems) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(strings.ReplaceAll(strings.TrimSpace(cfg.Bot.RoomMemoryFrame), "{channel}", cfg.Server.Channel))
+	for i, m := range mems {
+		line := fmt.Sprintf("\n  - %s", m.Fact)
+		if i >= limit || b.Len()+len(line) > maxRoomChars {
+			break
+		}
+		b.WriteString(line)
+	}
+	return b.String()
+}
+
+// appendSystem adds a block to the request's system prompt, or starts one.
+func appendSystem(req *CompletionRequest, block string) {
+	if len(req.Messages) > 0 && req.Messages[0].Role == messages.MessageRoleSystem {
+		req.Messages[0].Content += "\n\n" + block
+		return
+	}
+	req.Messages = append([]messages.ChatMessage{{Role: messages.MessageRoleSystem, Content: block}}, req.Messages...)
 }
 
 // backlogBlock takes the channel lines said since the bot last answered here, framed as quoted chat,
@@ -273,14 +330,18 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 	req.Messages = append(req.Messages, cmsg)
 	setPending(req, cmsg)
 
+	// Room memory changes only when an operator writes it, so like the recap it sits in the system
+	// prompt. A custom persona doesn't get it: it describes Mizira, not the persona.
+	if !restricted {
+		if r := roomBlock(ctx); r != "" {
+			appendSystem(req, r)
+		}
+	}
+
 	// The recap changes only when history is folded, which rewrites history anyway, so it costs the
 	// cache nothing in the system prompt.
 	if r := recapBlock(ctx); r != "" {
-		if len(req.Messages) > 0 && req.Messages[0].Role == messages.MessageRoleSystem {
-			req.Messages[0].Content += "\n\n" + r
-		} else {
-			req.Messages = append([]messages.ChatMessage{{Role: messages.MessageRoleSystem, Content: r}}, req.Messages...)
-		}
+		appendSystem(req, r)
 	}
 
 	// T23: a plain "remember …" or "ignore bob" runs its tool before the model replies.
@@ -379,8 +440,17 @@ func logReplies(ctx irc.ChatContextInterface, msgs []messages.ChatMessage) {
 	}
 	key, now := ctx.GetSession().GetName(), time.Now()
 	for _, m := range msgs {
-		if m.Role == messages.MessageRoleAssistant && strings.TrimSpace(m.GetContent()) != "" {
-			if err := db.LogLine(key, nick, m.GetContent(), now); err != nil {
+		if m.Role != messages.MessageRoleAssistant {
+			continue
+		}
+		var lines []string
+		for _, l := range strings.Split(m.GetContent(), "\n") {
+			if l = irc.CleanReplyLine(l); l != "" {
+				lines = append(lines, l)
+			}
+		}
+		if len(lines) > 0 {
+			if err := db.LogLine(key, nick, strings.Join(lines, "\n"), now); err != nil {
 				ctx.GetLogger().Warn("chatlog_write_failed", "error", err.Error())
 				return
 			}

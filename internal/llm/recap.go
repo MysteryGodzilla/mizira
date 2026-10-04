@@ -255,6 +255,12 @@ func clipRecap(recap string, max int) string {
 // with the messages that were summarised.
 func fold(cfg *config.Configuration, session sessions.Session, reason string, cut func([]messages.ChatMessage) int) {
 	key := session.GetName()
+	// A custom persona is a supervised test; folding its turns would carry it into the recap, which
+	// outlives +reset. hardTrim still bounds the history meanwhile.
+	if core.Prompts().Active(key) {
+		hardTrim(cfg, session)
+		return
+	}
 	if _, busy := folding.LoadOrStore(key, true); busy {
 		return
 	}

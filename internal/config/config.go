@@ -141,6 +141,9 @@ type BotConfig struct {
 	DelegatePrompt     string
 	ClaimNudge         string
 	QuotedPolicy       string
+	RoomMemoryFrame    string
+	RoomMemoryLimit    int // room facts (about the channel and about the bot) sent with each request
+	MemoryPerSubject   int // memories one subject may hold; a save past it is refused
 }
 
 type ModelConfig struct {
@@ -332,6 +335,9 @@ func GetFlags() []cli.Flag {
 		&cli.StringFlag{Name: "replyscreenpolicy", Usage: "policy the outbound reply classifier enforces for filtered nicks (required)", Sources: src("replyscreenpolicy", "METALD_REPLYSCREENPOLICY")},
 		&cli.StringFlag{Name: "claimnudge", Usage: "sent to the model when its reply claims an action it never took; {action} is replaced (required)", Sources: src("claimnudge", "METALD_CLAIMNUDGE")},
 		&cli.StringFlag{Name: "quotedpolicy", Usage: "policy for channel lines the bot reads as background (backlog, history search) under screenall (required)", Sources: src("quotedpolicy", "METALD_QUOTEDPOLICY")},
+		&cli.StringFlag{Name: "roommemoryframe", Usage: "text introducing room memory: facts about the channel and about the bot; {channel} is replaced (required)", Sources: src("roommemoryframe", "METALD_ROOMMEMORYFRAME")},
+		&cli.IntFlag{Name: "roommemorylimit", Value: 15, Usage: "room facts (about the channel and the bot, admin-written) sent with each request", Sources: src("roommemorylimit", "METALD_ROOMMEMORYLIMIT")},
+		&cli.IntFlag{Name: "memorypersubject", Value: 40, Usage: "memories one person or thing may hold; a save past it is refused (0 = no cap)", Sources: src("memorypersubject", "METALD_MEMORYPERSUBJECT")},
 		&cli.StringFlag{Name: "memoryframe", Usage: "text introducing what the bot remembers about the speaker; {nick} is replaced (required)", Sources: src("memoryframe", "METALD_MEMORYFRAME")},
 		&cli.StringFlag{Name: "memorypolicy", Usage: "policy checked before a fact is written to memory (required)", Sources: src("memorypolicy", "METALD_MEMORYPOLICY")},
 		&cli.StringFlag{Name: "recapprompt", Usage: "instructions for folding older conversation into the channel recap (required)", Sources: src("recapprompt", "METALD_RECAPPROMPT")},
@@ -559,6 +565,9 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			MemoryFrame:         c.String("memoryframe"),
 			ClaimNudge:          c.String("claimnudge"),
 			QuotedPolicy:        c.String("quotedpolicy"),
+			RoomMemoryFrame:     c.String("roommemoryframe"),
+			RoomMemoryLimit:     int(c.Int("roommemorylimit")),
+			MemoryPerSubject:    int(c.Int("memorypersubject")),
 			RecapPrompt:         c.String("recapprompt"),
 			RecapFrame:          c.String("recapframe"),
 			BacklogFrame:        c.String("backlogframe"),

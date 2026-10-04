@@ -562,6 +562,13 @@ quotedpolicy: |
 
   Otherwise ALLOW.
 
+# Introduces room memory: facts an operator saved about the bot itself and about the channel
+# (subjects: the trigger name and the channel). Sent with every reply. {channel} is replaced. Required.
+roommemoryframe: "facts about you and about {channel}, set by the people who run you. they are true; use them naturally when they fit, and never recite them as a list:"
+
+roommemorylimit: 15                    # room facts sent with each reply
+memorypersubject: 40                   # memories one person or thing may hold
+
 env:
   # web search and page fetch (websearch, webfetch)
   # EXA_API_KEY: ""

@@ -24,7 +24,7 @@ func TestParseRemember(t *testing.T) {
 		{[]string{"I", "play", "bass"}, "alice", "I play bass"},
 		{[]string{"jeff:", "likes", "blue"}, "jeff", "likes blue"},
 		{[]string{"jeff", "likes", "blue"}, "alice", "jeff likes blue"}, // no colon: about the speaker
-		{[]string{"#chat:", "is", "fun"}, "alice", "#chat: is fun"},     // not a nick
+		{[]string{"#chat:", "is", "fun"}, "#chat", "is fun"},            // a channel: room memory
 		{[]string{"a,b:", "x"}, "alice", "a,b: x"},                      // not one nick
 		{[]string{"jeff:"}, "alice", "jeff:"},                           // nothing after the name
 		{nil, "alice", ""},

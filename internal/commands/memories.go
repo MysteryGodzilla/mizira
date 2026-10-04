@@ -44,6 +44,9 @@ func (c *MemoriesCommand) Execute(ctx irc.ChatContextInterface) {
 		}
 		c.about(ctx, store, args[2])
 
+	case "room":
+		c.room(ctx, store)
+
 	case "forget":
 		c.forget(ctx, store, args)
 
@@ -51,7 +54,7 @@ func (c *MemoriesCommand) Execute(ctx irc.ChatContextInterface) {
 		c.clear(ctx, store, args)
 
 	default:
-		ctx.Reply("usage: +memories [list] | about <nick> | forget <id> | clear [nick]")
+		ctx.Reply("usage: +memories [list] | about <nick> | room | forget <id> | clear [nick]")
 	}
 }
 
@@ -179,4 +182,32 @@ func (c *MemoriesCommand) clear(ctx irc.ChatContextInterface, store *core.Memory
 	}
 	ctx.GetLogger().Warn("memories_cleared_all", "count", n, "by", ctx.GetSource())
 	ctx.Reply(fmt.Sprintf("wiped %d memory(ies)", n))
+}
+
+// room lists room memory: the facts about the bot itself and about the channel that go out with
+// every request. Only an operator writes them.
+func (c *MemoriesCommand) room(ctx irc.ChatContextInterface, store *core.MemoryStore) {
+	cfg := ctx.GetConfig()
+	self := cfg.Bot.Trigger
+	if self == "" {
+		self = ctx.GetBotNick()
+	}
+	var b strings.Builder
+	n := 0
+	for _, subject := range []string{self, cfg.Server.Channel} {
+		mems, err := store.Recall(ctx.GetNetwork(), subject, maxMemoryLines)
+		if err != nil {
+			ctx.Reply("could not read memory")
+			return
+		}
+		for _, m := range mems {
+			fmt.Fprintf(&b, "\n  [%d] %s: %s", m.ID, m.Subject, m.Fact)
+			n++
+		}
+	}
+	if n == 0 {
+		ctx.Reply(fmt.Sprintf("no room memory - an operator can add some with +remember %s: <fact> or +remember %s: <fact>", self, cfg.Server.Channel))
+		return
+	}
+	ctx.Reply(fmt.Sprintf("room memory (%d, sent with every reply):", n) + b.String())
 }
