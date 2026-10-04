@@ -3,6 +3,7 @@
 package llm
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 
@@ -104,4 +105,32 @@ func retryUnbackedClaim(chatCtx core.ChatContextInterface, agent *llm.Agent, req
 		return append(kept, withReplyText(resp.AllMessages, cb.loopKept)...)
 	}
 	return append(kept, resp.AllMessages...)
+}
+
+// alreadyWord marks a reply about something done before this message: "I already saved those".
+var alreadyWord = regexp.MustCompile(`(?i)\balready\b`)
+
+// recentTurns is how far back an earlier tool call can back an "already" claim.
+const recentTurns = 12
+
+// alreadyDone reports a claim that points at a tool call made earlier in the conversation, so the
+// claim needs no new call: the reply says "already", and every claimed tool was called in the last
+// few messages.
+func alreadyDone(held string, history []messages.ChatMessage, kinds []irc.ClaimKind) bool {
+	if !alreadyWord.MatchString(held) {
+		return false
+	}
+	recent := history[max(0, len(history)-recentTurns):]
+	ran := map[string]bool{}
+	for _, m := range recent {
+		for _, tc := range m.ToolCalls {
+			ran[tc.Name] = true
+		}
+	}
+	for _, k := range kinds {
+		if !ran[irc.ClaimTool[k]] {
+			return false
+		}
+	}
+	return true
 }

@@ -85,3 +85,27 @@ func TestClaimNudgeNamesEveryAction(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// Live test 4: "I already saved those details" after the save ran a message earlier is true, so it
+// goes out instead of the "didn't actually save that" fallback.
+func TestAlreadyDone(t *testing.T) {
+	saved := []messages.ChatMessage{
+		{Role: messages.MessageRoleUser, Content: "(nick:carol) Mizira, here's the party: ..."},
+		{Role: messages.MessageRoleAssistant, ToolCalls: []messages.ChatMessageToolCall{{Name: "memory__remember"}}},
+		{Role: messages.MessageRoleTool, Content: "Remembered about pip: ..."},
+		{Role: messages.MessageRoleAssistant, Content: "Okay, I've noted down who everyone is!"},
+	}
+	remember := []irc.ClaimKind{irc.ClaimRemember}
+	if !alreadyDone("I already saved those details for you!", saved, remember) {
+		t.Error("an earlier save should back 'already saved'")
+	}
+	if alreadyDone("Okay, I'll remember that.", saved, remember) {
+		t.Error("a new promise to remember needs a new save")
+	}
+	if alreadyDone("I already saved it!", saved[:1], remember) {
+		t.Error("'already' with no earlier save is still unbacked")
+	}
+	if alreadyDone("I already ignored him.", saved, []irc.ClaimKind{irc.ClaimIgnore}) {
+		t.Error("an earlier save doesn't back an ignore")
+	}
+}

@@ -6,6 +6,7 @@ package irc
 
 import (
 	"strings"
+	"unicode"
 
 	"github.com/lrstanley/girc"
 
@@ -20,7 +21,7 @@ import (
 // "+memories" is left alone: other bots in the channel (often built on the same code, with the
 // same "+" prefix) would answer it too, and one line should not trigger every bot.
 func CommandWords(cfg *config.Configuration, botNick, text string) (words []string, isCommand bool) {
-	words = strings.Fields(text)
+	words = strings.Fields(plainText(text))
 	prefix := cfg.Bot.CommandPrefix
 	if len(words) >= 2 && isBotName(words[0], cfg.Bot.Trigger, botNick) && CanonicalCommand(words[1], prefix) != "" {
 		return words[1:], true
@@ -29,6 +30,18 @@ func CommandWords(cfg *config.Configuration, botNick, text string) (words []stri
 		return words, true
 	}
 	return words, false
+}
+
+// plainText drops IRC formatting codes and invisible characters (zero-width spaces, joiners,
+// direction marks) that some clients add when completing a nick, so "Mizira +reset" is read the
+// same however it was typed.
+func plainText(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.Is(unicode.Cf, r) {
+			return -1
+		}
+		return r
+	}, girc.StripRaw(s))
 }
 
 // isBotName reports whether word is the bot's name (its trigger, or its nick when there is no

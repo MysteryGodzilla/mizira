@@ -69,11 +69,21 @@ func RememberChecked(chatCtx ChatContextInterface, subject, fact string) Remembe
 // genericSubject is how a model sometimes words the person a fact is about: "User likes purple".
 var genericSubject = regexp.MustCompile(`(?i)^(the )?(user|speaker|person)\b`)
 
-// nameTheSubject writes the subject's nick where the fact calls them "User", so the memory still
-// says who it is about when read back later.
+// subjectlessVerb starts a fact the model wrote without its subject: "is the rat who steals
+// snacks", "knows more about bands than anyone".
+var subjectlessVerb = regexp.MustCompile(`^(is|isn't|was|wasn't|has|hasn't|had|knows|likes|loves|hates|` +
+	`plays|lives|works|wants|prefers|enjoys|owns|can|can't|will|won't|does|doesn't|used|goes|makes|` +
+	`keeps|thinks|believes|seems|always|never|often|usually)\b`)
+
+// nameTheSubject writes the subject's nick where the fact calls them "User", or puts it in front
+// of a fact that starts at the verb, so the memory still says who it is about when read back later.
 func nameTheSubject(subject, fact string) string {
+	fact = strings.TrimSpace(fact)
 	if subject == "" {
 		return fact
 	}
-	return genericSubject.ReplaceAllString(strings.TrimSpace(fact), subject)
+	if subjectlessVerb.MatchString(fact) {
+		return subject + " " + fact
+	}
+	return genericSubject.ReplaceAllString(fact, subject)
 }

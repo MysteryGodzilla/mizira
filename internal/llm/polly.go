@@ -108,7 +108,10 @@ func (p *PollyLLM) ChatCompletionStream(chatCtx core.ChatContextInterface, req *
 		if cb.looped {
 			reply = withReplyText(reply, cb.loopKept)
 		}
-		if kinds := cb.unbackedClaims(); len(kinds) > 0 {
+		if kinds := cb.unbackedClaims(); len(kinds) > 0 && alreadyDone(chunker.HeldText(), req.Messages, kinds) {
+			chatCtx.GetLogger().Info("claim_backed_earlier", "claims", kinds)
+			chunker.Release()
+		} else if len(kinds) > 0 {
 			reply = retryUnbackedClaim(chatCtx, agent, req, chunker, claimTools, reply, kinds)
 			if errors.Is(chatCtx.Err(), context.Canceled) {
 				takePending(req)

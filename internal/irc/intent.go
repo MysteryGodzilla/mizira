@@ -57,6 +57,11 @@ func ToolIntent(cfg *config.Configuration, botNick, msg string, inChannel func(n
 		if recallWords[bareWord(next)] || strings.HasSuffix(text, "?") {
 			return Intent{}, false
 		}
+		// "remember what metalai told you" names no fact: the facts are earlier in the chat, and
+		// often more than one, so the model saves them itself from the conversation.
+		if backReference.MatchString(strings.Join(words[i+1:], " ")) {
+			return Intent{}, false
+		}
 		return Intent{Tool: ClaimTool[ClaimRemember]}, true
 	case "forget":
 		if recallWords[bareWord(next)] || strings.HasSuffix(text, "?") {
@@ -91,6 +96,13 @@ func ToolIntent(cfg *config.Configuration, botNick, msg string, inChannel func(n
 	}
 	return Intent{}, false
 }
+
+// backReference is a remember request that points at something said earlier instead of saying it.
+var backReference = regexp.MustCompile(`(?i)^(that|this|it|those|these|them|all( of)?( that| this| those| it)?|everything)\s*[.!]*$|` +
+	`^(those|these|all (of )?(those|these|the)|everything)\b|` +
+	`\b(told|said|says|mentioned|wrote|posted|explained|described|shared)\s+(you|us|me|earlier|before|above|just now)\b|` +
+	`\b(above|earlier|from before)\s*[.!]*$|` +
+	`^the (details|stuff|things|info|information|facts|list|names)\b`)
 
 // delegatedObject is a slap object that leaves the choice to the bot.
 var delegatedObject = regexp.MustCompile(`(?i)\b(you (think|choose|pick|want|like|decide)|your choice|whatever|something|anything)\b`)

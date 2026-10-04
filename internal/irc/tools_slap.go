@@ -5,6 +5,7 @@ package irc
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"strings"
 	"sync"
 	"time"
@@ -60,11 +61,18 @@ func newIrcSlapTool() tools.Tool {
 			}
 
 			object := cleanSlapObject(args.String("object"))
+			if echoedSlapObject(object, nick) {
+				object = slapObjects[rand.IntN(len(slapObjects))]
+			}
 			chatCtx.SendAction(chatCtx.GetConfig().Server.Channel,
 				fmt.Sprintf("slaps %s around a bit with %s", nick, object))
 			chatCtx.GetLogger().Info("irc_slap", "nick", nick, "object", object)
-			return fmt.Sprintf("Slapped %s with %s. It's done: at most add one short playful line. "+
-				"Don't apologise for it and don't describe the slap again.", nick, object), nil
+			result := fmt.Sprintf("Slapped %s with %s. It's done: at most add one short playful line. "+
+				"Don't apologise for it and don't describe the slap again.", nick, object)
+			if girc.ToRFC1459(nick) == girc.ToRFC1459(chatCtx.GetSource()) {
+				result += " They asked for it themselves, so no sorry."
+			}
+			return result, nil
 		},
 	}
 }
@@ -102,6 +110,20 @@ func cleanSlapObject(s string) string {
 		return slapDefault
 	}
 	return s
+}
+
+// slapObjects are what she reaches for when asked to choose and the model doesn't.
+var slapObjects = []string{
+	"a large trout", "a wet noodle", "a rubber chicken", "a soggy onigiri", "a sleepy cat",
+	"a pillow", "a stack of manga", "a giant marshmallow", "a paper fan", "a frozen fish",
+}
+
+// echoedSlapObject reports an object that is really the request copied back ("slap bob with
+// something"), or a phrase handing the choice over, instead of a thing to slap someone with.
+func echoedSlapObject(object, nick string) bool {
+	lower := strings.ToLower(object)
+	return strings.Contains(lower, "slap") || strings.Contains(" "+lower+" ", " "+strings.ToLower(nick)+" ") ||
+		delegatedObject.MatchString(object)
 }
 
 func inChannel(chatCtx ChatContextInterface, nick string) bool {

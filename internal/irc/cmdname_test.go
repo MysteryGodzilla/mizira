@@ -36,6 +36,9 @@ func TestCommandWords(t *testing.T) {
 		{"setting off: bare works", false, "Mizira", "+memories", []string{"+memories"}, true},
 		{"setting off: named still works", false, "Mizira", "Mizira +memories", []string{"+memories"}, true},
 		{"empty", true, "Mizira", "", nil, false},
+		// Live test 4: a client's nick completion can add invisible characters or formatting.
+		{"zero-width space after name", true, "Mizira", "Mizira​ +reset", []string{"+reset"}, true},
+		{"bold name", true, "Mizira", "\x02Mizira\x02 +reset", []string{"+reset"}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -46,6 +46,9 @@ func (c *Chunker) Release() {
 	}
 }
 
+// HeldText returns the lines kept back, joined, without releasing them.
+func (c *Chunker) HeldText() string { return strings.Join(c.held, " ") }
+
 // DropHeld throws away the lines kept back and returns them.
 func (c *Chunker) DropHeld() []string {
 	held := c.held
