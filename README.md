@@ -152,7 +152,7 @@ network with **Cancel** (stops a running round, like `+task cancel`) and **Pause
 reminders with **Cancel**; and live **Logs** and the model's **Thinking** as it streams, held in memory only
 (reasoning is never saved to conversation history). It stays off
 unless both settings are set; every API call needs `Authorization: Bearer <admintoken>`, and every change
-is logged (`admin_request`). Keep it on localhost or a private network. Behind an auth proxy (e.g. Traefik forward auth with Authentik), set `admintrustedproxies` and `adminusers` and signed-in users get in without the token. The page is a Svelte app in
+is logged (`admin_request`). Keep it on localhost or a private network: an address on every interface (`0.0.0.0`, `::`, `:port`) is refused, and 10 wrong tokens from one client in 10 minutes lock it out for 5. Mizira's console adds a **Mizira** card (Pause / Stop / Resume, the same as `~pause`, `~stop`, `~resume`, logged as `console_action`) and hides the cards of features that are off (Background work, Reminders, GPU, Radio, Thinking) unless **Show inactive** is ticked. Behind an auth proxy (e.g. Traefik forward auth with Authentik), set `admintrustedproxies` and `adminusers` and signed-in users get in without the token. The page is a Svelte app in
 `web/admin`, built into `internal/admin/dist` and embedded in the binary; its JSON API is under `/api/v1`.
 
 ## Plugins

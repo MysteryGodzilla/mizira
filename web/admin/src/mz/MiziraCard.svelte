@@ -1,0 +1,41 @@
+<script lang="ts">
+  import type { MzConsole } from "./console.svelte";
+  import type { RunState } from "./types";
+  import Badge from "../components/Badge.svelte";
+  import Card from "../components/Card.svelte";
+  let { mz }: { mz: MzConsole } = $props();
+
+  let state = $derived(mz.runState);
+  const tone = { running: "good", paused: "busy", stopped: "bad" } as const;
+  const about: Record<RunState, string> = {
+    running: "Answering as normal.",
+    paused: "Paused: nothing new starts; anything already running finishes. Same as ~pause.",
+    stopped: "Stopped: everything running was cancelled and nothing new starts. Same as ~stop.",
+  };
+
+  function stop() {
+    if (confirm("Stop Mizira?\n\nEverything she's doing is cancelled and she won't answer until resumed.")) {
+      void mz.setRunState("stopped", "stopped Mizira");
+    }
+  }
+</script>
+
+<Card title="Mizira">
+  {#snippet actions()}
+    {#if state === "running"}
+      <button onclick={() => mz.setRunState("paused", "paused Mizira")}>Pause</button>
+    {:else if state}
+      <button onclick={() => mz.setRunState("running", "resumed Mizira")}>Resume</button>
+    {/if}
+    {#if state && state !== "stopped"}<button class="danger" onclick={stop}>Stop</button>{/if}
+  {/snippet}
+  {#if state}
+    <p><Badge text={state} tone={tone[state]} /><span class="sub">{about[state]}</span></p>
+  {:else}
+    <p class="empty">Loading…</p>
+  {/if}
+</Card>
+
+<style>
+  p { margin: 0; }
+</style>

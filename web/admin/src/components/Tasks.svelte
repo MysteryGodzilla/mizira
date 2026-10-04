@@ -16,6 +16,16 @@
 </script>
 
 <Card title="Tasks, goals and schedules">
+  {#snippet actions()}
+    {#each board.status?.networks ?? [] as n (n.name)}
+      <button onclick={() => board.act(() => board.api.setPaused(n.name, !n.paused), `${n.paused ? "resumed" : "paused"} work on ${n.name}`)}>
+        {n.paused ? "Resume" : "Pause"} work on {n.name}
+      </button>
+    {/each}
+  {/snippet}
+  {#each (board.status?.networks ?? []).filter((n) => n.paused) as n (n.name)}
+    <p class="sub">Work on {n.name} is paused: no tasks, goals or schedules start until it's resumed.</p>
+  {/each}
   <div class="tabs" role="tablist">
     {#each Object.entries(views) as [key, v] (key)}
       <button role="tab" aria-selected={view === key} class:on={view === key} onclick={() => (view = key as View)}>
@@ -37,4 +47,5 @@
 <style>
   .tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
   .on { border-color: var(--accent); color: var(--accent); }
+  p.sub { margin: 0 0 10px; }
 </style>

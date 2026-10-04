@@ -273,8 +273,10 @@ maxconcurrent: 3
 # Operator page (status, in-flight requests, tasks/goals/schedules with cancel and
 # pause, reminders, GPU queue, radio). Off unless both are set. Every request needs
 # "Authorization: Bearer <admintoken>". Listen on 127.0.0.1 unless the page must be
-# reachable from another machine, and then only on a private network.
-# adminlisten: 127.0.0.1:8766
+# reachable from another machine, and then only on a private network. An address on every
+# interface (0.0.0.0, ::, or a bare :port) is refused. 10 wrong tokens from one client in 10
+# minutes lock it out for 5.
+# adminlisten: 127.0.0.1:8425
 # admintoken: ""
 # Sign in through an auth proxy (e.g. Traefik forward auth with Authentik) instead of
 # typing the token: requests from admintrustedproxies whose adminuserheader names one

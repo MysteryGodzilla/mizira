@@ -50,6 +50,9 @@ type Server struct {
 	seen      firstSeen
 	client    *http.Client
 	log       *slog.Logger
+	// Mizira's console additions (mz_*.go); nil leaves upstream's page as it was.
+	mz   Mizira
+	auth authAttempts
 }
 
 // New builds a server over the given services; NewFromCore wires the bot's own.
@@ -63,6 +66,9 @@ func New(cfg Config, tasks TaskService, reminders ReminderService, work WorkServ
 func (s *Server) Run(ctx context.Context, addr string) error {
 	if s.cfg.Token == "" {
 		return errors.New("admintoken is empty")
+	}
+	if err := CheckListen(addr); err != nil {
+		return err
 	}
 	srv := &http.Server{Addr: addr, Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
@@ -92,10 +98,11 @@ func (s *Server) Handler() http.Handler {
 	api.HandleFunc("GET /radio", s.radio)
 	api.HandleFunc("GET /logs/stream", stream(s.feeds.Logs))
 	api.HandleFunc("GET /thinking/stream", stream(s.feeds.Thinking))
+	s.mzRoutes(api)
 	api.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) { fail(w, http.StatusNotFound, "no such endpoint") })
 
 	mux := http.NewServeMux()
-	mux.Handle("/api/v1/", http.StripPrefix("/api/v1", s.authenticate(api)))
+	mux.Handle("/api/v1/", http.StripPrefix("/api/v1", s.throttle(s.authenticate(api))))
 	mux.Handle("/", app())
 	return s.logRequests(mux)
 }

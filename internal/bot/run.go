@@ -131,7 +131,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 		nets = []*config.ServerConfig{cfg.Server}
 	}
 
-	startAdmin(ctx, cfg, nets)
+	startAdmin(ctx, cfg, nets, sys)
 
 	// Memories written before this bot knew about networks carry no network of their own.
 	if len(nets) > 0 && nets[0].Name != "" {
@@ -339,12 +339,16 @@ func checkAdminMasks(admins []string) {
 }
 
 // startAdmin serves the operator page when it is configured; without a token it stays off.
-func startAdmin(ctx context.Context, cfg *config.Configuration, nets []*config.ServerConfig) {
+func startAdmin(ctx context.Context, cfg *config.Configuration, nets []*config.ServerConfig, sys core.System) {
 	if cfg.Bot.AdminListen == "" {
 		return
 	}
 	if cfg.Bot.AdminToken == "" {
 		core.GetLogger().Warn("admin_disabled", "reason", "adminlisten is set but admintoken is empty")
+		return
+	}
+	if err := admin.CheckListen(cfg.Bot.AdminListen); err != nil {
+		core.GetLogger().Error("admin_bind_refused", "error", err.Error())
 		return
 	}
 	names := make([]string, 0, len(nets))
@@ -370,6 +374,7 @@ func startAdmin(ctx context.Context, cfg *config.Configuration, nets []*config.S
 		core.GetLogger().Error("admin_failed", "error", err.Error())
 		return
 	}
+	srv.WithMizira(console{cfg: cfg, sys: sys})
 	go func() {
 		core.GetLogger().Info("admin_listening", "addr", cfg.Bot.AdminListen)
 		if err := srv.Run(ctx, cfg.Bot.AdminListen); err != nil {

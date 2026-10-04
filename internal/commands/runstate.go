@@ -6,6 +6,7 @@ package commands
 
 import (
 	"fmt"
+	"log/slog"
 
 	"B4reMetal/metald/internal/core"
 	"B4reMetal/metald/internal/irc"
@@ -19,18 +20,16 @@ func (c *PauseCommand) Name() string    { return "+pause" }
 func (c *PauseCommand) AdminOnly() bool { return true }
 
 func (c *PauseCommand) Execute(ctx irc.ChatContextInterface) {
-	switch core.State() {
-	case core.Paused:
-		ctx.Reply("Already paused. +resume to continue.")
-		return
-	case core.Stopped:
+	change := ChangeRunState(core.Paused, ctx.GetSource(), ctx.GetRequestID(), ctx.GetLogger())
+	switch {
+	case change.Changed:
+		ctx.Reply("Paused. Anything already running will finish. +resume to continue.")
+	case change.Previous == core.Stopped:
 		// Stopped is the stronger state; pausing must not quietly weaken it.
 		ctx.Reply("Already stopped. +resume to continue.")
-		return
+	default:
+		ctx.Reply("Already paused. +resume to continue.")
 	}
-	setRunState(core.Paused)
-	ctx.GetLogger().Warn("bot_paused", "by", ctx.GetSource())
-	ctx.Reply("Paused. Anything already running will finish. +resume to continue.")
 }
 
 // StopCommand handles +stop: the emergency brake. The state changes first, so nothing new can
@@ -42,10 +41,8 @@ func (c *StopCommand) Name() string    { return "+stop" }
 func (c *StopCommand) AdminOnly() bool { return true }
 
 func (c *StopCommand) Execute(ctx irc.ChatContextInterface) {
-	setRunState(core.Stopped)
-	cancelled := core.Requests().CancelAll(ctx.GetRequestID())
-	ctx.GetLogger().Warn("bot_stopped", "by", ctx.GetSource(), "cancelled", cancelled)
-	ctx.Reply(fmt.Sprintf("Stopped. %d running request(s) cancelled. +resume to continue.", cancelled))
+	change := ChangeRunState(core.Stopped, ctx.GetSource(), ctx.GetRequestID(), ctx.GetLogger())
+	ctx.Reply(fmt.Sprintf("Stopped. %d running request(s) cancelled. +resume to continue.", change.Cancelled))
 }
 
 // ResumeCommand handles +resume: back to normal after +pause or +stop.
@@ -55,13 +52,40 @@ func (c *ResumeCommand) Name() string    { return "+resume" }
 func (c *ResumeCommand) AdminOnly() bool { return true }
 
 func (c *ResumeCommand) Execute(ctx irc.ChatContextInterface) {
-	if core.State() == core.Running {
+	if !ChangeRunState(core.Running, ctx.GetSource(), ctx.GetRequestID(), ctx.GetLogger()).Changed {
 		ctx.Reply("Not paused.")
 		return
 	}
-	previous := setRunState(core.Running)
-	ctx.GetLogger().Info("bot_resumed", "by", ctx.GetSource(), "was", previous.String())
 	ctx.Reply("Resumed.")
+}
+
+// RunChange is what ChangeRunState did.
+type RunChange struct {
+	Previous  core.RunState
+	Changed   bool
+	Cancelled int // requests stopped, for a stop
+}
+
+// ChangeRunState is +pause, +stop and +resume without the chat, shared with the operator console so
+// both behave the same. Pausing never weakens a stop, resuming a running bot does nothing, and a
+// stop always cancels whatever is running except keepRequest (the request asking, if any).
+func ChangeRunState(to core.RunState, by, keepRequest string, log *slog.Logger) RunChange {
+	now := core.State()
+	switch {
+	case to == core.Paused && now != core.Running, to == core.Running && now == core.Running:
+		return RunChange{Previous: now}
+	}
+	change := RunChange{Previous: setRunState(to), Changed: true}
+	switch to {
+	case core.Paused:
+		log.Warn("bot_paused", "by", by)
+	case core.Stopped:
+		change.Cancelled = core.Requests().CancelAll(keepRequest)
+		log.Warn("bot_stopped", "by", by, "cancelled", change.Cancelled)
+	case core.Running:
+		log.Info("bot_resumed", "by", by, "was", change.Previous.String())
+	}
+	return change
 }
 
 // setRunState changes the state and saves it, so a bot that was stopped stays stopped after a

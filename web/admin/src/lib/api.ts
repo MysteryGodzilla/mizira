@@ -9,7 +9,7 @@ export class Unauthorized extends Error {
 export class Api {
   constructor(private readonly token: string) {}
 
-  private async call<T>(method: string, path: string, body?: unknown): Promise<T> {
+  protected async call<T>(method: string, path: string, body?: unknown): Promise<T> {
     const res = await fetch(`api/v1/${path}`, {
       method,
       cache: "no-store",
