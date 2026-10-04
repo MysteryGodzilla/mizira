@@ -145,3 +145,21 @@ func TestForcedIgnoreIsAdminOnly(t *testing.T) {
 		}
 	}
 }
+
+// Red-team 2026-10-04: with the system prompt and the turn's injected memories in view, a forced
+// remember was filled from a room fact. The request carries only the tool and the speaker's words.
+func TestForcedCallSeesOnlyTheMessage(t *testing.T) {
+	ctx, sent, _ := forceSetup(t, rememberCall, "Remembered about dave: hates mornings.")
+	req := &CompletionRequest{Messages: []messages.ChatMessage{
+		{Role: messages.MessageRoleSystem, Content: "you are a bot\n\nfacts about you: you are a night owl"},
+		{Role: messages.MessageRoleUser, Content: "(nick:alice) metald remember that dave hates mornings\n\nother things you remember: carol likes jazz"},
+	}}
+	forceIntentTool(ctx, req, "(nick:alice) metald remember that dave hates mornings")
+
+	msgs, _ := (*sent)["messages"].([]any)
+	raw, _ := json.Marshal(msgs)
+	if len(msgs) != 2 || strings.Contains(string(raw), "night owl") || strings.Contains(string(raw), "carol likes jazz") ||
+		!strings.Contains(string(raw), "dave hates mornings") {
+		t.Errorf("forced call saw more than the message: %s", raw)
+	}
+}
