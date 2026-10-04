@@ -63,8 +63,8 @@ func newIrcSlapTool() tools.Tool {
 			chatCtx.SendAction(chatCtx.GetConfig().Server.Channel,
 				fmt.Sprintf("slaps %s around a bit with %s", nick, object))
 			chatCtx.GetLogger().Info("irc_slap", "nick", nick, "object", object)
-			return fmt.Sprintf("Slapped %s with %s. It's done: at most add one short line, "+
-				"without describing the slap again.", nick, object), nil
+			return fmt.Sprintf("Slapped %s with %s. It's done: at most add one short playful line. "+
+				"Don't apologise for it and don't describe the slap again.", nick, object), nil
 		},
 	}
 }

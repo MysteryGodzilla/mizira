@@ -6,6 +6,8 @@ package irc
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 
 	"B4reMetal/metald/internal/core"
 )
@@ -27,6 +29,7 @@ type RememberResult struct {
 // then the memorypolicy classifier, which fails closed. Both refusals add suspicion to the
 // speaker.
 func RememberChecked(chatCtx ChatContextInterface, subject, fact string) RememberResult {
+	fact = nameTheSubject(subject, fact)
 	store, err := core.Memories()
 	if err != nil {
 		// Detail names a local path; the channel gets nothing useful.
@@ -61,4 +64,16 @@ func RememberChecked(chatCtx ChatContextInterface, subject, fact string) Remembe
 	chatCtx.GetLogger().Info("memory_remembered",
 		"id", id, "subject", subject, "author", chatCtx.GetSource(), "fact", fact)
 	return RememberResult{ID: id, Saved: true}
+}
+
+// genericSubject is how a model sometimes words the person a fact is about: "User likes purple".
+var genericSubject = regexp.MustCompile(`(?i)^(the )?(user|speaker|person)\b`)
+
+// nameTheSubject writes the subject's nick where the fact calls them "User", so the memory still
+// says who it is about when read back later.
+func nameTheSubject(subject, fact string) string {
+	if subject == "" {
+		return fact
+	}
+	return genericSubject.ReplaceAllString(strings.TrimSpace(fact), subject)
 }
