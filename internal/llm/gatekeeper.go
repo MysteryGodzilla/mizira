@@ -36,6 +36,13 @@ func ScreenIncoming(ctx irc.ChatContextInterface, msg string) (bool, string) {
 		return true, ""
 	}
 
+	// "Mizira forget 6" or "forget me" is parsed whole in code and carries no free text; the
+	// classifier read "forget [12]" as planting instructions.
+	if intent, ok := irc.ToolIntent(cfg, ctx.GetBotNick(), msg, nil); ok && intent.Complete &&
+		intent.Tool == irc.ClaimTool[irc.ClaimForget] {
+		return true, ""
+	}
+
 	// Deterministic pre-check, before the classifier is consulted at all.
 	if mangling.MatchString(msg) {
 		ctx.GetLogger().Info("screen_denied",

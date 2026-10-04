@@ -198,3 +198,16 @@ func shippedPrompt(t *testing.T, key string) string {
 	}
 	return v
 }
+
+// Live test 5: "I'm not sure how I can help, bob." was refused as revealing infrastructure because
+// of the nick. Nicks are replaced before the screen reads the reply.
+func TestNeutralNicks(t *testing.T) {
+	ctx := mocktest.NewMockContext().WithSource("BareMetal")
+	got := neutralNicks(ctx, "I'm not sure how I can help with that, BareMetal... baremetal servers are cool")
+	if got != "I'm not sure how I can help with that, Sam... Sam servers are cool" {
+		t.Errorf("got %q", got)
+	}
+	if got := neutralNicks(ctx, "no nicks here"); got != "no nicks here" {
+		t.Errorf("got %q", got)
+	}
+}

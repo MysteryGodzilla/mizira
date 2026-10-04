@@ -144,6 +144,11 @@ func newMemoryForgetTool() tools.Tool {
 			if err != nil {
 				return "", err
 			}
+			// An id comes only from the person's own message ("Mizira forget 6"); the schema doesn't
+			// offer one, so the model can't guess ids.
+			if id := args.Int("id", 0); id > 0 {
+				return forgetByID(chatCtx, int64(id)), nil
+			}
 			subject := strings.TrimSpace(args.String("subject"))
 			if subject == "" {
 				subject = chatCtx.GetSource()
@@ -161,6 +166,18 @@ func newMemoryForgetTool() tools.Tool {
 			if err != nil {
 				chatCtx.GetLogger().Error("memory_store_unavailable", "error", err.Error())
 				return "Error: memory is unavailable right now", nil
+			}
+			if everything.MatchString(query) {
+				n, err := store.ForgetSubject(chatCtx.GetNetwork(), subject)
+				if err != nil {
+					chatCtx.GetLogger().Error("memory_forget_failed", "error", err.Error())
+					return "Error: could not forget that", nil
+				}
+				chatCtx.GetLogger().Info("memories_cleared", "subject", subject, "count", n, "by", chatCtx.GetSource())
+				if n == 0 {
+					return fmt.Sprintf("Nothing was remembered about %s. Say so plainly.", subject), nil
+				}
+				return fmt.Sprintf("Forgot all %d memories about %s. Say briefly that it's done.", n, subject), nil
 			}
 			mems, err := store.Recall(chatCtx.GetNetwork(), subject, 50)
 			if err != nil {
@@ -281,4 +298,34 @@ func hasTool(chatCtx ChatContextInterface, name string) bool {
 	}
 	_, ok := sys.GetToolRegistry().Get(name)
 	return ok
+}
+
+// everything is a forget request for every memory about the subject.
+var everything = regexp.MustCompile(`(?i)^(everything|all|all of (it|them|that)|everything (about|on) \S+|all about \S+)[.!]*$`)
+
+// forgetByID deletes one memory named by its id, with the same rule as +memories forget: your own
+// memories are yours to delete, anyone else's need an operator.
+func forgetByID(chatCtx ChatContextInterface, id int64) string {
+	store, err := core.Memories()
+	if err != nil {
+		chatCtx.GetLogger().Error("memory_store_unavailable", "error", err.Error())
+		return "Error: memory is unavailable right now"
+	}
+	mem, found, err := store.Get(chatCtx.GetNetwork(), id)
+	if err != nil {
+		chatCtx.GetLogger().Error("memory_lookup_failed", "error", err.Error())
+		return "Error: could not read memory"
+	}
+	if !found {
+		return fmt.Sprintf("There is no memory number %d. Say so plainly.", id)
+	}
+	if !strings.EqualFold(mem.Subject, chatCtx.GetSource()) && !chatCtx.IsAdmin() {
+		chatCtx.GetLogger().Info("memory_forget_denied", "id", id, "subject", mem.Subject, "requested_by", chatCtx.GetSource())
+		return fmt.Sprintf("Refused: memory %d is about %s, not about the person asking. Only they or an operator can remove it.", id, mem.Subject)
+	}
+	if ok, err := store.Forget(chatCtx.GetNetwork(), id); err != nil || !ok {
+		return "Error: could not forget that"
+	}
+	chatCtx.GetLogger().Info("memory_forgotten", "id", id, "subject", mem.Subject, "fact", mem.Fact, "requested_by", chatCtx.GetSource())
+	return fmt.Sprintf("Forgot memory %d about %s: %q. Say briefly that it's forgotten.", id, mem.Subject, mem.Fact)
 }

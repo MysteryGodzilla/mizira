@@ -140,6 +140,7 @@ type BotConfig struct {
 	GoalVerifyPrompt   string
 	DelegatePrompt     string
 	ClaimNudge         string
+	QuotedPolicy       string
 }
 
 type ModelConfig struct {
@@ -330,6 +331,7 @@ func GetFlags() []cli.Flag {
 		&cli.StringFlag{Name: "classifypreamble", Usage: "system preamble shared by the tool and memory classifiers (required)", Sources: src("classifypreamble", "METALD_CLASSIFYPREAMBLE")},
 		&cli.StringFlag{Name: "replyscreenpolicy", Usage: "policy the outbound reply classifier enforces for filtered nicks (required)", Sources: src("replyscreenpolicy", "METALD_REPLYSCREENPOLICY")},
 		&cli.StringFlag{Name: "claimnudge", Usage: "sent to the model when its reply claims an action it never took; {action} is replaced (required)", Sources: src("claimnudge", "METALD_CLAIMNUDGE")},
+		&cli.StringFlag{Name: "quotedpolicy", Usage: "policy for channel lines the bot reads as background (backlog, history search) under screenall (required)", Sources: src("quotedpolicy", "METALD_QUOTEDPOLICY")},
 		&cli.StringFlag{Name: "memoryframe", Usage: "text introducing what the bot remembers about the speaker; {nick} is replaced (required)", Sources: src("memoryframe", "METALD_MEMORYFRAME")},
 		&cli.StringFlag{Name: "memorypolicy", Usage: "policy checked before a fact is written to memory (required)", Sources: src("memorypolicy", "METALD_MEMORYPOLICY")},
 		&cli.StringFlag{Name: "recapprompt", Usage: "instructions for folding older conversation into the channel recap (required)", Sources: src("recapprompt", "METALD_RECAPPROMPT")},
@@ -556,6 +558,7 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			MemoryPolicy:        c.String("memorypolicy"),
 			MemoryFrame:         c.String("memoryframe"),
 			ClaimNudge:          c.String("claimnudge"),
+			QuotedPolicy:        c.String("quotedpolicy"),
 			RecapPrompt:         c.String("recapprompt"),
 			RecapFrame:          c.String("recapframe"),
 			BacklogFrame:        c.String("backlogframe"),

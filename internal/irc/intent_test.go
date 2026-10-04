@@ -94,3 +94,29 @@ func TestToolIntentSlapDelegatesObject(t *testing.T) {
 		}
 	}
 }
+
+// Live test 5: "Mizira forget 6" and "forget [6]" name a memory by the id +memories shows, and
+// "forget me" means everything about the speaker; all three run without the model choosing.
+func TestToolIntentForgetByIDAndMe(t *testing.T) {
+	cfg := &config.Configuration{Bot: &config.BotConfig{Trigger: "Mizira"}}
+	for msg, id := range map[string]int{
+		"(nick:alice) Mizira forget 6":          6,
+		"(nick:alice) Mizira forget [6]":        6,
+		"(nick:alice) mizira please forget #12": 12,
+		"(nick:alice) Mizira forget memory 3":   3,
+	} {
+		got, ok := ToolIntent(cfg, "Mizira", msg, nil)
+		if !ok || !got.Complete || got.Args["id"] != id {
+			t.Errorf("%q: got %+v, %v", msg, got, ok)
+		}
+	}
+	for _, msg := range []string{"(nick:alice) mizira forget me", "(nick:alice) Mizira forget everything about me"} {
+		got, ok := ToolIntent(cfg, "Mizira", msg, nil)
+		if !ok || !got.Complete || got.Args["fact"] != "everything" || got.Args["subject"] != nil {
+			t.Errorf("%q: got %+v, %v", msg, got, ok)
+		}
+	}
+	if got, ok := ToolIntent(cfg, "Mizira", "(nick:alice) Mizira forget me?", nil); ok {
+		t.Errorf("a question is not a request: %+v", got)
+	}
+}

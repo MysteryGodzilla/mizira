@@ -48,7 +48,12 @@ func (c *PromptCommand) Execute(ctx irc.ChatContextInterface) {
 		return
 	}
 
-	text := strings.TrimSpace(strings.Join(ctx.GetArgs()[1:], " "))
+	words := ctx.GetArgs()[1:]
+	// "+prompt set <text>" is how people often type it; "set" is not part of the persona.
+	if len(words) > 1 && strings.EqualFold(words[0], "set") {
+		words = words[1:]
+	}
+	text := strings.TrimSpace(strings.Join(words, " "))
 	if text == "" {
 		ctx.Reply("give me a persona to run: +prompt <text>")
 		return

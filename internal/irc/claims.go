@@ -43,6 +43,10 @@ var claimPatterns = []struct {
 		`(?:ignore|ignored|ignoring|mute|muted|block|blocked|stop(?:ped)? (?:responding|replying|talking) to)\b`)},
 }
 
+// heldNotDone is "I have <something> saved": what is already stored, not a new save. "I've saved"
+// with nothing between is still a claim.
+var heldNotDone = regexp.MustCompile(`^i(?:'ve| have) (?:got )?(?:a few|a couple|a lot|some|several|lots|many|nothing|anything|things|stuff|it|that|them|this|those|these|your|his|her|their|\d+)\b`)
+
 // claimNegation in the matched span turns a claim into a refusal: "I won't save that".
 var claimNegation = regexp.MustCompile(`\b(?:not|never|can'?t|cannot|won'?t|don'?t|didn'?t)\b|n't\b`)
 
@@ -52,7 +56,8 @@ func DetectClaim(line string) (ClaimKind, bool) {
 	for _, p := range claimPatterns {
 		for _, loc := range p.re.FindAllStringIndex(l, -1) {
 			span := l[loc[0]:loc[1]]
-			if bareRecall(span) || claimNegation.MatchString(span) {
+			if bareRecall(span) || heldNotDone.MatchString(span) || claimNegation.MatchString(span) ||
+				askedNotClaimed(l, loc[0], loc[1]) {
 				continue
 			}
 			return p.kind, true
@@ -68,4 +73,20 @@ func bareRecall(span string) bool {
 		return false
 	}
 	return !strings.Contains(span, " can ") && !strings.Contains(span, " could ")
+}
+
+// askingModal just before the claim's "I" makes it a question: "should i", "want me to".
+var askingModal = regexp.MustCompile(`\b(?:should|shall|can|could|may|would|want me to)\s*$`)
+
+// askedNotClaimed reports a claim phrased as a question: "which one should i forget?" asks, it
+// doesn't claim. A tag ("i'll remember that, okay?") is still a claim.
+func askedNotClaimed(line string, start, end int) bool {
+	if !askingModal.MatchString(line[:start]) {
+		return false
+	}
+	rest := line[end:]
+	if i := strings.IndexAny(rest, ".!?"); i >= 0 {
+		return rest[i] == '?'
+	}
+	return false
 }

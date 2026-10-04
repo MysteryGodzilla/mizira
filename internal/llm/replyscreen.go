@@ -5,6 +5,7 @@
 package llm
 
 import (
+	"regexp"
 	"strings"
 	"unicode"
 
@@ -60,6 +61,33 @@ func ScreenOutgoing(ctx irc.ChatContextInterface, reply string) (bool, string) {
 		return false, "reproduces the system prompt"
 	}
 
-	allowed, reason := core.Classify(ctx, cfg.Bot.ReplyScreenPolicy, "reply", reply, false)
+	allowed, reason := core.Classify(ctx, cfg.Bot.ReplyScreenPolicy, "reply", neutralNicks(ctx, reply), false)
 	return allowed, reason
+}
+
+// neutralName stands in for nicks in a reply under review.
+const neutralName = "Sam"
+
+// neutralNicks swaps the nicks of the speaker and the channel's users for a plain name before the
+// reply screen sees them: a nick such as "BareMetal" or "rootkit" reads like infrastructure or a
+// threat, and saying someone's name is never what the screen is for.
+func neutralNicks(ctx irc.ChatContextInterface, reply string) string {
+	nicks := []string{ctx.GetSource()}
+	for _, u := range ctx.GetChannelUsers(ctx.GetConfig().Server.Channel) {
+		nicks = append(nicks, u.Nick)
+	}
+	var alts []string
+	for _, n := range nicks {
+		if len(n) >= 3 {
+			alts = append(alts, regexp.QuoteMeta(n))
+		}
+	}
+	if len(alts) == 0 {
+		return reply
+	}
+	re, err := regexp.Compile(`(?i)(^|[^\w])(` + strings.Join(alts, "|") + `)([^\w]|$)`)
+	if err != nil {
+		return reply
+	}
+	return re.ReplaceAllString(reply, "${1}"+neutralName+"${3}")
 }

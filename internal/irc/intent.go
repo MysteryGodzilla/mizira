@@ -4,6 +4,7 @@ package irc
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/lrstanley/girc"
@@ -64,6 +65,14 @@ func ToolIntent(cfg *config.Configuration, botNick, msg string, inChannel func(n
 		}
 		return Intent{Tool: ClaimTool[ClaimRemember]}, true
 	case "forget":
+		rest := strings.Join(words[i+1:], " ")
+		if m := memoryID.FindStringSubmatch(rest); m != nil {
+			id, _ := strconv.Atoi(m[1])
+			return Intent{Tool: ClaimTool[ClaimForget], Args: map[string]any{"id": id}, Complete: true}, true
+		}
+		if forgetMe.MatchString(rest) {
+			return Intent{Tool: ClaimTool[ClaimForget], Args: map[string]any{"fact": "everything"}, Complete: true}, true
+		}
 		if recallWords[bareWord(next)] || strings.HasSuffix(text, "?") {
 			return Intent{}, false
 		}
@@ -96,6 +105,12 @@ func ToolIntent(cfg *config.Configuration, botNick, msg string, inChannel func(n
 	}
 	return Intent{}, false
 }
+
+// memoryID is a memory named by the id +memories shows: "6", "[6]", "#6", "memory 6".
+var memoryID = regexp.MustCompile(`(?i)^(?:memory\s+|number\s+)?[\[#(]?(\d{1,9})[\])]?[.!]?$`)
+
+// forgetMe asks to forget everything about the speaker.
+var forgetMe = regexp.MustCompile(`(?i)^(?:(?:everything|all)\s+)?(?:about\s+)?me[.!]*$`)
 
 // backReference is a remember request that points at something said earlier instead of saying it.
 var backReference = regexp.MustCompile(`(?i)^(that|this|it|those|these|them|all( of)?( that| this| those| it)?|everything)\s*[.!]*$|` +

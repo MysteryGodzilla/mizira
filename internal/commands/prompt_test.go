@@ -204,3 +204,13 @@ func shippedPrompt(t *testing.T, key string) string {
 	}
 	return v
 }
+
+// Live test 5: "+prompt set you are ..." kept "set" as the persona's first word.
+func TestPromptDropsLeadingSet(t *testing.T) {
+	ctx := newPromptCtx(t, "set", "you", "are", "a", "pirate")
+	(&PromptCommand{}).Execute(ctx)
+	o, ok := core.Prompts().Get(ctx.GetLockKey())
+	if !ok || o.Prompt != "you are a pirate" {
+		t.Errorf("prompt = %q", o.Prompt)
+	}
+}

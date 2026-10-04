@@ -27,6 +27,7 @@ var PromptKeys = []string{
 	"goalverifyprompt",
 	"delegateprompt",
 	"claimnudge",
+	"quotedpolicy",
 }
 
 // MissingPrompts returns the prompt keys that are empty or whitespace.
@@ -54,6 +55,7 @@ func MissingPrompts(b *BotConfig) []string {
 		"goalverifyprompt":   b.GoalVerifyPrompt,
 		"delegateprompt":     b.DelegatePrompt,
 		"claimnudge":         b.ClaimNudge,
+		"quotedpolicy":       b.QuotedPolicy,
 	}
 	var missing []string
 	for _, k := range PromptKeys {

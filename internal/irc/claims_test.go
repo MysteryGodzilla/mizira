@@ -41,3 +41,22 @@ func TestDetectClaim(t *testing.T) {
 		}
 	}
 }
+
+// Live test 5: asked which memory to forget, she said what she holds; that is no new save.
+func TestDetectClaimHeldIsNotDone(t *testing.T) {
+	for _, line := range []string{
+		"I'm sorry, I have a few things saved about you... which one should I forget?",
+		"I've got some stuff noted about bob",
+		"i have nothing saved about that",
+		"Should I remember that for you?",
+	} {
+		if kind, ok := DetectClaim(line); ok {
+			t.Errorf("DetectClaim(%q) = %v, want no claim", line, kind)
+		}
+	}
+	for _, line := range []string{"I've saved that for you!", "I have saved it", "I'll remember that"} {
+		if _, ok := DetectClaim(line); !ok {
+			t.Errorf("DetectClaim(%q): want a claim", line)
+		}
+	}
+}
