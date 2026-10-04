@@ -30,6 +30,7 @@ var PromptKeys = []string{
 	"quotedpolicy",
 	"roommemoryframe",
 	"selfnoteprompt",
+	"compactprompt",
 }
 
 // MissingPrompts returns the prompt keys that are empty or whitespace.
@@ -60,6 +61,7 @@ func MissingPrompts(b *BotConfig) []string {
 		"quotedpolicy":       b.QuotedPolicy,
 		"roommemoryframe":    b.RoomMemoryFrame,
 		"selfnoteprompt":     b.SelfNotePrompt,
+		"compactprompt":      b.CompactPrompt,
 	}
 	var missing []string
 	for _, k := range PromptKeys {

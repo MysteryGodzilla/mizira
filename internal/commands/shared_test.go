@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -110,5 +111,33 @@ func TestOperatorMemoriesKeepTheCapAndMerge(t *testing.T) {
 	}
 	if err := ForgetMemory("console-net", id, "console:token", quiet); !errors.Is(err, ErrNoSuchMemory) {
 		t.Errorf("forget twice: %v", err)
+	}
+}
+
+func TestApplyCompaction(t *testing.T) {
+	cfg := sharedCfg(t)
+	cfg.Server = &config.ServerConfig{Channel: "#test"}
+	cfg.Bot.MemoryPerSubject = 3
+	store, _ := core.Memories()
+	t.Cleanup(func() { store.ForgetSubject("compact-cmd", "dave") })
+	var ids []int64
+	for _, f := range []string{"dave has a rat", "Pip is dave's rat", "dave plays go"} {
+		id, _ := store.Remember("compact-cmd", "dave", f, "dave", "#test")
+		ids = append(ids, id)
+	}
+	for _, bad := range [][]string{{}, {" "}, {"a", "b", "c", "d"}, {strings.Repeat("x", 401)}} {
+		if _, err := ApplyCompaction(cfg, "compact-cmd", "dave", ids, bad, "console:token", quiet); err == nil {
+			t.Errorf("accepted %q", bad)
+		}
+	}
+	if _, err := ApplyCompaction(cfg, "compact-cmd", "dave", ids[:2], []string{"x"}, "console:token", quiet); !errors.Is(err, core.ErrMemoriesChanged) {
+		t.Errorf("stale preview: %v", err)
+	}
+	n, err := ApplyCompaction(cfg, "compact-cmd", "dave", ids, []string{"dave has a rat called Pip", "dave plays go"}, "console:token", quiet)
+	if err != nil || n != 2 {
+		t.Fatalf("apply: %d %v", n, err)
+	}
+	if held, _ := store.Recall("compact-cmd", "dave", 10); len(held) != 2 || held[0].Author != "compaction:console:token" {
+		t.Errorf("after: %+v", held)
 	}
 }

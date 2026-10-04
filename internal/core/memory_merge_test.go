@@ -5,6 +5,7 @@
 package core
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 )
@@ -86,5 +87,36 @@ func TestUpdateAndSubjectCounts(t *testing.T) {
 	counts, _ := m.SubjectCounts("net")
 	if len(counts) != 2 || counts[0] != (SubjectCount{"bob", 2}) || counts[1] != (SubjectCount{"carol", 1}) {
 		t.Errorf("counts = %+v", counts)
+	}
+}
+
+func TestReplaceSubject(t *testing.T) {
+	m, err := OpenMemoryStore(filepath.Join(t.TempDir(), "memories.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	a, _ := m.Remember("net", "alice", "alice has a rat called Pip", "alice", "#chat")
+	b, _ := m.Remember("net", "alice", "Pip is alice's rat", "bob", "#chat")
+	c, _ := m.Remember("net", "alice", "alice likes green tea", "alice", "#chat")
+	_, _ = m.Remember("net", "bob", "bob plays chess", "bob", "#chat")
+
+	if _, err := m.ReplaceSubject("net", "alice", []int64{a, b}, []string{"x"}, "compaction", "#chat"); !errors.Is(err, ErrMemoriesChanged) {
+		t.Errorf("a stale preview: %v", err)
+	}
+	n, err := m.ReplaceSubject("net", "Alice", []int64{c, b, a}, []string{"alice has a pet rat called Pip",
+		" alice likes green tea ", "alice likes green tea", ""}, "compaction", "#chat")
+	if err != nil || n != 2 {
+		t.Fatalf("replace: %d %v", n, err)
+	}
+	held, _ := m.Recall("net", "alice", 10)
+	if len(held) != 2 || held[0].Author != "compaction" {
+		t.Errorf("after: %+v", held)
+	}
+	if others, _ := m.Recall("net", "bob", 10); len(others) != 1 {
+		t.Error("another subject was touched")
+	}
+	if found, _ := m.Search("net", "pet rat", 5); len(found) != 1 {
+		t.Error("search doesn't see the compacted facts")
 	}
 }

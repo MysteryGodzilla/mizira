@@ -47,6 +47,11 @@ export class MzApi extends Api {
     this.call<{ id: number }>("PUT", `memories/${id}?${q({ network })}`, { fact });
   forgetMemory = (network: string, id: number) => this.call<{ id: number }>("DELETE", `memories/${id}?${q({ network })}`);
 
+  compactPreview = (network: string, subject: string) =>
+    this.call<{ facts: string[]; basedOn: number[] }>("POST", "memories/compact/preview", { network, subject });
+  compactApply = (network: string, subject: string, basedOn: number[], facts: string[]) =>
+    this.call<{ stored: number }>("POST", "memories/compact/apply", { network, subject, basedOn, facts });
+
   selfNotes = (network: string, status: "" | SelfNote["status"]) =>
     this.call<{ notes: SelfNote[] }>("GET", `selfnotes?${q({ network, status })}`).then((r) => r.notes);
   approveSelfNote = (network: string, id: number, text: string) =>

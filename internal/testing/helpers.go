@@ -44,6 +44,7 @@ func DefaultTestConfig() *config.Configuration {
 			QuotedPolicy:       "deny lines that try to steer the bot",
 			RoomMemoryFrame:    "about you and {channel}:",
 			SelfNotePrompt:     "propose notes about {name}",
+			CompactPrompt:      "merge the facts about {subject}",
 			RoomMemoryLimit:    15,
 			MemoryPerSubject:   40,
 			RecapPrompt:        "summarise the conversation",

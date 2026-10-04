@@ -20,6 +20,7 @@ import (
 	"B4reMetal/metald/internal/config"
 	"B4reMetal/metald/internal/core"
 	"B4reMetal/metald/internal/irc"
+	"B4reMetal/metald/internal/llm"
 )
 
 // console is the bot side of the operator console's own pages (admin.Mizira): every action runs the
@@ -380,4 +381,24 @@ func selfNoteErr(err error) error {
 		return admin.ErrNotPending
 	}
 	return err
+}
+
+func (c console) CompactPreview(network, subject string) ([]string, []int64, error) {
+	n, ok := c.network(network)
+	if !ok {
+		return nil, nil, errors.New("no such network")
+	}
+	return llm.CompactPreview(c.cfg.ForNetwork(n), network, subject)
+}
+
+func (c console) CompactApply(network, subject string, basedOn []int64, facts []string, by string) (int, error) {
+	n, ok := c.network(network)
+	if !ok {
+		return 0, errors.New("no such network")
+	}
+	stored, err := commands.ApplyCompaction(c.cfg.ForNetwork(n), network, subject, basedOn, facts, by, core.GetLogger())
+	if errors.Is(err, core.ErrMemoriesChanged) {
+		return 0, admin.ErrMemoriesChanged
+	}
+	return stored, err
 }

@@ -5,7 +5,9 @@
 package admin
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -39,6 +41,8 @@ func (s *Server) mzMemoryRoutes(api *http.ServeMux) {
 	api.HandleFunc("POST /memories", s.addMemory)
 	api.HandleFunc("PUT /memories/{id}", s.editMemory)
 	api.HandleFunc("DELETE /memories/{id}", s.forgetMemory)
+	api.HandleFunc("POST /memories/compact/preview", s.compactPreview)
+	api.HandleFunc("POST /memories/compact/apply", s.compactApply)
 }
 
 func (s *Server) memorySubjects(w http.ResponseWriter, r *http.Request) {
@@ -141,4 +145,60 @@ func (s *Server) memoryFail(w http.ResponseWriter, err error) {
 		return
 	}
 	fail(w, http.StatusBadRequest, err.Error())
+}
+
+// ErrMemoriesChanged: the memories changed after the compaction preview; preview again.
+var ErrMemoriesChanged = errors.New("the memories changed since the preview; preview again")
+
+func (s *Server) compactPreview(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Network string `json:"network"`
+		Subject string `json:"subject"`
+	}
+	if !decode(w, r, &in) || !s.knownNetwork(w, in.Network) {
+		return
+	}
+	if strings.TrimSpace(in.Subject) == "" {
+		fail(w, http.StatusBadRequest, "give a subject")
+		return
+	}
+	facts, basedOn, err := s.mz.CompactPreview(in.Network, in.Subject)
+	if err != nil {
+		fail(w, http.StatusConflict, err.Error())
+		return
+	}
+	respond(w, http.StatusOK, map[string]any{"facts": facts, "basedOn": basedOn})
+}
+
+func (s *Server) compactApply(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Network string   `json:"network"`
+		Subject string   `json:"subject"`
+		BasedOn []int64  `json:"basedOn"`
+		Facts   []string `json:"facts"`
+	}
+	// A whole subject's facts: allow more than the usual small body.
+	if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&in); err != nil {
+		fail(w, http.StatusBadRequest, "send a JSON body")
+		return
+	}
+	if !s.knownNetwork(w, in.Network) {
+		return
+	}
+	if strings.TrimSpace(in.Subject) == "" || len(in.BasedOn) == 0 {
+		fail(w, http.StatusBadRequest, "give the subject and the ids the preview was based on")
+		return
+	}
+	by := s.who(r)
+	stored, err := s.mz.CompactApply(in.Network, in.Subject, in.BasedOn, in.Facts, by)
+	if err != nil {
+		code := http.StatusBadRequest
+		if errors.Is(err, ErrMemoriesChanged) {
+			code = http.StatusConflict
+		}
+		fail(w, code, err.Error())
+		return
+	}
+	s.log.Info("console_action", "action", "compact", "subject", in.Subject, "before", len(in.BasedOn), "after", stored, "by", by)
+	respond(w, http.StatusOK, map[string]any{"stored": stored})
 }

@@ -6,6 +6,7 @@
   import Badge from "../components/Badge.svelte";
   import Card from "../components/Card.svelte";
   import SelfNotes from "./SelfNotes.svelte";
+  import Compact from "./Compact.svelte";
   let { mz, board }: { mz: MzConsole; board: Dashboard } = $props();
 
   let networks = $derived(board.status?.networks.map((n) => n.name) ?? []);
@@ -22,6 +23,7 @@
   let editText = $state("");
   let newSubject = $state("");
   let newFact = $state("");
+  let compacting = $state(false);
 
   let room = $derived(subjects.filter((s) => s.room));
   let people = $derived(subjects.filter((s) => !s.room));
@@ -44,7 +46,7 @@
   const reload = async () => { await loadSubjects(); await loadList(); };
   const change = (run: () => Promise<unknown>, done: string) => mz.act(async () => { await run(); await reload(); }, done);
 
-  function open(s: string) { selected = s; searched = ""; query = ""; newSubject = s; editing = null; }
+  function open(s: string) { selected = s; searched = ""; query = ""; newSubject = s; editing = null; compacting = false; }
   function search(e: SubmitEvent) { e.preventDefault(); if (query.trim()) { searched = query.trim(); selected = ""; editing = null; } }
 
   function add(e: SubmitEvent) {
@@ -114,7 +116,16 @@
 
   <div class="main">
     {#if net !== null}<SelfNotes {mz} network={net} onchange={() => void reload()} />{/if}
+    {#if compacting && selected && net !== null && list}
+      <Compact {mz} network={net} subject={selected} current={list} {perSubject}
+        onclose={(applied) => { compacting = false; if (applied) void reload(); }} />
+    {/if}
     <Card title={selected ? `About ${selected}` : searched ? `Facts matching “${searched}”` : "Memories"}>
+      {#snippet actions()}
+        {#if selected && (list?.length ?? 0) >= 2 && !compacting}
+          <button onclick={() => (compacting = true)} title="ask the model for a merged list to review">Compact</button>
+        {/if}
+      {/snippet}
       {#if list === null}
         <p class="empty">Pick a subject or search.</p>
       {:else if !list.length}

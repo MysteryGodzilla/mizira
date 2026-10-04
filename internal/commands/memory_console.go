@@ -95,3 +95,35 @@ func ForgetMemory(network string, id int64, by string, log *slog.Logger) error {
 	log.Info("memory_forgotten", "id", id, "subject", old.Subject, "fact", old.Fact, "by", by)
 	return nil
 }
+
+// ApplyCompaction replaces every memory about subject with the operator's reviewed list, if the
+// subject still holds exactly the memories the preview was based on. The list is the operator's own
+// words now, held to the same per-subject cap and fact length as any save.
+func ApplyCompaction(cfg *config.Configuration, network, subject string, basedOn []int64, facts []string, by string, log *slog.Logger) (int, error) {
+	var kept []string
+	for _, f := range facts {
+		if f = strings.TrimSpace(f); f == "" {
+			continue
+		}
+		if len(f) > maxFact {
+			return 0, fmt.Errorf("a fact is too long (%d characters, limit %d)", len(f), maxFact)
+		}
+		kept = append(kept, f)
+	}
+	if len(kept) == 0 {
+		return 0, errors.New("the list is empty; forget the memories instead if that's what you want")
+	}
+	if limit := cfg.Bot.MemoryPerSubject; limit > 0 && len(kept) > limit {
+		return 0, fmt.Errorf("%d facts is over the limit of %d", len(kept), limit)
+	}
+	store, err := core.Memories()
+	if err != nil {
+		return 0, err
+	}
+	stored, err := store.ReplaceSubject(network, subject, basedOn, kept, "compaction:"+by, cfg.Server.Channel)
+	if err != nil {
+		return 0, err
+	}
+	log.Info("memory_compacted", "subject", subject, "before", len(basedOn), "after", stored, "by", by)
+	return stored, nil
+}

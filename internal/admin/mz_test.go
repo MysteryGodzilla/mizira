@@ -19,15 +19,16 @@ type fakeMizira struct {
 	think bool
 	by    []string
 
-	persona  string
-	recap    bool
-	ignores  []IgnoreView
-	screened []string
-	scores   []ScoreView
-	botNicks []string
-	setting  string
-	mems     []MemoryView
-	notes    []SelfNoteView
+	persona   string
+	recap     bool
+	ignores   []IgnoreView
+	screened  []string
+	scores    []ScoreView
+	botNicks  []string
+	setting   string
+	mems      []MemoryView
+	notes     []SelfNoteView
+	compacted []string
 }
 
 func (f *fakeMizira) RunState() string { return f.state }
@@ -149,7 +150,8 @@ func TestMiziraEndpointsNeedTheToken(t *testing.T) {
 		{"GET", "/api/v1/tools"}, {"PUT", "/api/v1/tools"}, {"DELETE", "/api/v1/tools/switches"},
 		{"GET", "/api/v1/memories/subjects?network=net"}, {"GET", "/api/v1/memories?network=net"}, {"POST", "/api/v1/memories"},
 		{"PUT", "/api/v1/memories/1?network=net"}, {"DELETE", "/api/v1/memories/1?network=net"},
-		{"GET", "/api/v1/selfnotes?network=net"}, {"POST", "/api/v1/selfnotes/1/approve?network=net"}, {"POST", "/api/v1/selfnotes/1/deny?network=net"}} {
+		{"GET", "/api/v1/selfnotes?network=net"}, {"POST", "/api/v1/selfnotes/1/approve?network=net"}, {"POST", "/api/v1/selfnotes/1/deny?network=net"},
+		{"POST", "/api/v1/memories/compact/preview"}, {"POST", "/api/v1/memories/compact/apply"}} {
 		if code, _ := r.call(t, c[0], c[1], "wrong", `{"state":"stopped"}`); code != http.StatusUnauthorized {
 			t.Errorf("%s %s = %d, want 401", c[0], c[1], code)
 		}
@@ -565,5 +567,39 @@ func TestSelfNotesFromTheConsole(t *testing.T) {
 	}
 	if code, _ := r.call(t, "POST", "/api/v1/selfnotes/2/deny?network=net", "s3cret", ""); code != http.StatusOK || m.notes[1].Status != "denied" {
 		t.Errorf("deny = %d", code)
+	}
+}
+
+func (f *fakeMizira) CompactPreview(network, subject string) ([]string, []int64, error) {
+	if subject != "bob" {
+		return nil, nil, errors.New("fewer than two memories: nothing to compact")
+	}
+	return []string{"bob plays chess on Sundays"}, []int64{1, 2}, nil
+}
+func (f *fakeMizira) CompactApply(network, subject string, basedOn []int64, facts []string, by string) (int, error) {
+	if len(basedOn) != 2 {
+		return 0, ErrMemoriesChanged
+	}
+	f.compacted = facts
+	return len(facts), nil
+}
+
+func TestCompactionFromTheConsole(t *testing.T) {
+	r, m := newMzRig(t)
+	code, out := r.call(t, "POST", "/api/v1/memories/compact/preview", "s3cret", `{"network":"net","subject":"bob"}`)
+	if code != http.StatusOK || len(out["facts"].([]any)) != 1 || len(out["basedOn"].([]any)) != 2 {
+		t.Fatalf("preview = %d %v", code, out)
+	}
+	if code, _ := r.call(t, "POST", "/api/v1/memories/compact/preview", "s3cret", `{"network":"net","subject":"carol"}`); code != http.StatusConflict {
+		t.Errorf("nothing to compact = %d, want 409", code)
+	}
+	if code, _ := r.call(t, "POST", "/api/v1/memories/compact/apply", "s3cret", `{"network":"net","subject":"bob","basedOn":[1],"facts":["x"]}`); code != http.StatusConflict {
+		t.Errorf("stale apply = %d, want 409", code)
+	}
+	if code, _ := r.call(t, "POST", "/api/v1/memories/compact/apply", "s3cret", `{"network":"net","subject":"bob","facts":["x"]}`); code != http.StatusBadRequest {
+		t.Errorf("apply without ids = %d, want 400", code)
+	}
+	if code, out := r.call(t, "POST", "/api/v1/memories/compact/apply", "s3cret", `{"network":"net","subject":"bob","basedOn":[1,2],"facts":["bob plays chess on Sundays","bob lives in Osaka"]}`); code != http.StatusOK || out["stored"] != float64(2) || len(m.compacted) != 2 {
+		t.Errorf("apply = %d %v", code, out)
 	}
 }

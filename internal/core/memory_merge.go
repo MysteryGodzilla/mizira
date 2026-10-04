@@ -6,6 +6,8 @@ package core
 
 import (
 	"database/sql"
+	"errors"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -146,4 +148,63 @@ func (m *MemoryStore) SubjectCounts(network string) ([]SubjectCount, error) {
 		out = append(out, s)
 	}
 	return out, rows.Err()
+}
+
+// ErrMemoriesChanged: a subject's memories changed after a compaction was previewed.
+var ErrMemoriesChanged = errors.New("the memories changed since the preview")
+
+// ReplaceSubject swaps every memory about subject for facts, in one transaction, but only if the
+// subject still holds exactly the memories expected (by id), so a fact saved while the operator was
+// reviewing isn't lost. Facts that repeat each other are stored once. It returns how many it stored.
+func (m *MemoryStore) ReplaceSubject(network, subject string, expected []int64, facts []string, author, channel string) (int, error) {
+	subject = normalizeSubject(subject)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	tx, err := m.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.Query(`SELECT id FROM memories WHERE network = ? AND subject = ?`, network, subject)
+	if err != nil {
+		return 0, err
+	}
+	var held []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		held = append(held, id)
+	}
+	rows.Close()
+	slices.Sort(held)
+	want := slices.Clone(expected)
+	slices.Sort(want)
+	if !slices.Equal(held, want) {
+		return 0, ErrMemoriesChanged
+	}
+
+	if _, err := tx.Exec(`DELETE FROM memories WHERE network = ? AND subject = ?`, network, subject); err != nil {
+		return 0, err
+	}
+	now := time.Now().Unix()
+	stored := 0
+	for _, f := range facts {
+		if f = strings.TrimSpace(f); f == "" {
+			continue
+		}
+		res, err := tx.Exec(`INSERT INTO memories (network, subject, fact, author, channel, created)
+			VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(network, subject, fact) DO NOTHING`,
+			network, subject, f, author, channel, now)
+		if err != nil {
+			return 0, err
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			stored++
+		}
+	}
+	return stored, tx.Commit()
 }
