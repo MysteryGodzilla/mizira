@@ -5,15 +5,24 @@
 package core
 
 import (
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
+// fakeTool writes a plugin that prints schema for --schema: a shell script, or on Windows, which
+// can't run one, a batch file (the schemas used here have no characters cmd treats specially).
 func fakeTool(t *testing.T, schema string) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "tool.sh")
 	body := "#!/bin/sh\n[ \"$1\" = --schema ] && printf '%s' '" + schema + "'\n"
+	if runtime.GOOS == "windows" {
+		p = filepath.Join(t.TempDir(), "tool.cmd")
+		body = "@echo off\r\nif \"%1\"==\"--schema\" echo " + schema + "\r\n"
+	}
 	if err := os.WriteFile(p, []byte(body), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -41,8 +50,11 @@ func TestShellToolRequirementsAbsentMeansNone(t *testing.T) {
 
 func TestShellToolRequirementsBadOutputIsAnError(t *testing.T) {
 	p := fakeTool(t, `not json`)
-	if _, err := readRequires(p); err == nil {
-		t.Error("expected an error")
+	// The error must come from the output, not from failing to run the tool.
+	_, err := readRequires(p)
+	var syntax *json.SyntaxError
+	if !errors.As(err, &syntax) {
+		t.Errorf("want a JSON error from the output, got %v", err)
 	}
 }
 
