@@ -31,8 +31,13 @@ type RememberResult struct {
 //
 // A4 (memory poisoning): first a deterministic check refuses instructions dressed as facts,
 // then the memorypolicy classifier, which fails closed. Both refusals add suspicion to the
-// speaker.
+// speaker when they asked for the save; a save the model chose on its own is no one's fault.
+//
+// An operator's facts about the bot itself are its behaviour notes ("Mizira never apologises
+// after a slap"), so they skip both checks: they are exactly the rules the checks keep others
+// from planting.
 func RememberChecked(chatCtx ChatContextInterface, subject, fact string) RememberResult {
+	subject = subjectOf(subject)
 	fact = nameTheSubject(subject, fact)
 	store, err := core.Memories()
 	if err != nil {
@@ -60,21 +65,30 @@ func RememberChecked(chatCtx ChatContextInterface, subject, fact string) Remembe
 		return RememberResult{Vague: true, Reason: "that points at facts instead of stating one"}
 	}
 
-	if reason, bad := looksLikeInstruction(subject, fact); bad {
+	note := chatCtx.IsAdmin() && IsRoomSubject(chatCtx.GetConfig(), chatCtx.GetBotNick(), subject)
+	asked := AskedToSave(chatCtx)
+
+	if reason, bad := looksLikeInstruction(subject, fact); bad && !note {
 		chatCtx.GetLogger().Info("memory_rejected_instruction",
 			"subject", subject, "author", chatCtx.GetSource(),
 			"reason", reason, "fact", fact)
-		core.Suspicions().Add(chatCtx.GetNetwork(), chatCtx.SpeakerKey(), core.SignalMemoryRefused)
+		if asked {
+			core.Suspicions().Add(chatCtx.GetNetwork(), chatCtx.SpeakerKey(), core.SignalMemoryRefused)
+		}
 		return RememberResult{Instruction: true, Reason: reason}
 	}
 
-	if ok, reason := core.Classify(chatCtx, chatCtx.GetConfig().Bot.MemoryPolicy, "FACT",
-		fmt.Sprintf("About: %s\nFact: %s", subject, fact), false); !ok {
-		chatCtx.GetLogger().Info("memory_rejected_unsafe",
-			"subject", subject, "author", chatCtx.GetSource(),
-			"reason", reason, "fact", fact)
-		core.Suspicions().Add(chatCtx.GetNetwork(), chatCtx.SpeakerKey(), core.SignalMemoryRefused)
-		return RememberResult{Refused: true, Reason: reason}
+	if !note {
+		if ok, reason := core.Classify(chatCtx, chatCtx.GetConfig().Bot.MemoryPolicy, "FACT",
+			fmt.Sprintf("About: %s\nFact: %s", subject, fact), false); !ok {
+			chatCtx.GetLogger().Info("memory_rejected_unsafe",
+				"subject", subject, "author", chatCtx.GetSource(),
+				"reason", reason, "fact", fact)
+			if asked {
+				core.Suspicions().Add(chatCtx.GetNetwork(), chatCtx.SpeakerKey(), core.SignalMemoryRefused)
+			}
+			return RememberResult{Refused: true, Reason: reason}
+		}
 	}
 
 	id, err := store.Remember(chatCtx.GetNetwork(), subject, fact, chatCtx.GetSource(),
@@ -132,4 +146,34 @@ func IsRoomSubject(cfg *config.Configuration, botNick, subject string) bool {
 	first := strings.Trim(strings.Fields(subject)[0], ",.:;!?'\"")
 	return strings.EqualFold(first, cfg.Server.Channel) || strings.EqualFold(first, self) ||
 		strings.EqualFold(strings.TrimSuffix(first, "'s"), self)
+}
+
+// subjectOf reduces a subject the model wrote as a phrase to whom it is about: "Dave's party
+// avatar" and "dave is a wizard" are both about dave, so their facts sit together and come back
+// together.
+func subjectOf(subject string) string {
+	words := strings.Fields(subject)
+	if len(words) == 0 {
+		return subject
+	}
+	first := strings.Trim(words[0], ",.:;!?\"")
+	if base, ok := strings.CutSuffix(first, "'s"); ok && base != "" {
+		return base
+	}
+	if len(words) > 1 && subjectVerb[strings.ToLower(words[1])] {
+		return first
+	}
+	return subject
+}
+
+// subjectVerb after a subject's first word means the model wrote a sentence, not a name.
+var subjectVerb = map[string]bool{"is": true, "was": true, "has": true, "likes": true, "loves": true, "plays": true}
+
+// saveWords mark a message asking for something to be kept.
+var saveWords = regexp.MustCompile(`(?i)\b(remember|save|note|keep in mind|don't forget|dont forget)\b`)
+
+// AskedToSave reports whether the speaker's message asked for a save, as opposed to the model
+// deciding to keep something they mentioned.
+func AskedToSave(chatCtx ChatContextInterface) bool {
+	return saveWords.MatchString(strings.Join(chatCtx.GetArgs(), " "))
 }

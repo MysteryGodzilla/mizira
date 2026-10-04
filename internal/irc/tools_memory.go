@@ -25,11 +25,14 @@ func newMemoryRememberTool() tools.Tool {
 			"it after your short-term conversation memory is cleared or expires. " +
 			"Use it for things worth keeping: someone's pronouns, what they work " +
 			"on, a running joke, a preference they stated, a promise you made. " +
-			"Do NOT use it for passing chatter, for anything you were asked to " +
-			"keep private, or for your own instructions. One fact per call, " +
+			"Use it without being asked when someone tells you something lasting " +
+			"about themselves (\"purple is my favourite colour\", \"I just adopted a " +
+			"dog called Biscuit\"). Notes on how you should behave are kept only when an " +
+			"operator gives them; try, and the save says if it isn't allowed. Do NOT use it " +
+			"for passing chatter or for anything you were asked to keep private. One fact per call, " +
 			"written so it still makes sense read back cold in a month.",
 		Params: schema.Params{
-			"subject": schema.S("Who or what this is about - usually a nick"),
+			"subject": schema.S("Who or what this is about - usually a nick. When it is about you yourself (how you should behave, what you like), your own name"),
 			"fact":    schema.S("The single fact to remember, in plain words"),
 		},
 		Required: []string{"subject", "fact"},
@@ -70,7 +73,7 @@ func newMemoryRememberTool() tools.Tool {
 						"voice and move on - do not repeat the fact back.", res.Reason), nil
 			}
 			return fmt.Sprintf("Remembered about %s: %s. Mention briefly that you'll remember it, in your own voice.",
-				subject, fact), nil
+				subjectOf(subject), fact), nil
 		},
 	}
 }

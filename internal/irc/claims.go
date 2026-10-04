@@ -90,3 +90,20 @@ func askedNotClaimed(line string, start, end int) bool {
 	}
 	return false
 }
+
+// sentenceEnd splits a reply into sentences, keeping each one's closing punctuation.
+var sentenceEnd = regexp.MustCompile(`[^.!?]+[.!?]*`)
+
+// WithoutClaims drops the sentences of text that claim an action, keeping the rest as written.
+func WithoutClaims(text string) string {
+	var kept []string
+	for _, s := range sentenceEnd.FindAllString(text, -1) {
+		if s = strings.TrimSpace(s); s == "" {
+			continue
+		}
+		if _, claims := DetectClaim(s); !claims {
+			kept = append(kept, s)
+		}
+	}
+	return strings.Join(kept, " ")
+}

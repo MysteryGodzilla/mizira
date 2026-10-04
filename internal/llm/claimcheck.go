@@ -95,6 +95,13 @@ func retryUnbackedClaim(chatCtx core.ChatContextInterface, agent *llm.Agent, req
 		}
 		log.Warn("claim_retry_failed", fields...)
 		fallback := claimFallback[kinds[0]]
+		// Nobody asked for a save: the reply was fine apart from its promise to remember, so send
+		// it without that sentence rather than apologise for something no one wanted.
+		if len(kinds) == 1 && kinds[0] == irc.ClaimRemember && !irc.AskedToSave(chatCtx) {
+			if rest := irc.WithoutClaims(strings.Join(held, " ")); rest != "" {
+				fallback = rest
+			}
+		}
 		chunker.SetHold(nil)
 		chunker.Write(fallback + "\n")
 		chunker.Flush()

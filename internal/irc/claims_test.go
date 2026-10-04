@@ -60,3 +60,17 @@ func TestDetectClaimHeldIsNotDone(t *testing.T) {
 		}
 	}
 }
+
+// The reply minus its unbacked promise: "Spicy ramen sounds delicious! I'll keep that in mind."
+func TestWithoutClaims(t *testing.T) {
+	for in, want := range map[string]string{
+		"Spicy ramen sounds delicious! I'll keep that in mind, friend.": "Spicy ramen sounds delicious!",
+		"I'll remember that.":                        "",
+		"Nice... I'll save that. You must be tired.": "Nice... You must be tired.",
+		"No promises here.":                          "No promises here.",
+	} {
+		if got := WithoutClaims(in); got != want {
+			t.Errorf("WithoutClaims(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

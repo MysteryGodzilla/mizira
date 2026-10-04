@@ -65,7 +65,7 @@ func NewCompletionRequest(config *config.Configuration, session sessions.Session
 const maxInjectedMemories = 12
 
 // maxRelevantMemories bounds the facts about other people and topics the message brings up.
-const maxRelevantMemories = 5
+const maxRelevantMemories = 8
 
 // maxBacklogLine bounds one channel line handed to the model.
 const maxBacklogLine = 300

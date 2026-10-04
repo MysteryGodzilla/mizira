@@ -384,3 +384,15 @@ func TestRelevantIgnoresTriggerAndWeakMatches(t *testing.T) {
 		t.Errorf("distinctive word match missed: %+v", got)
 	}
 }
+
+// Naming someone brings back up to three of their facts, so a party avatar comes back whole.
+func TestRelevantBringsSeveralFactsPerPerson(t *testing.T) {
+	s := testStore(t)
+	for _, f := range []string{"party avatar: a knight with a broken sword", "party avatar: carries a lantern", "plays a wizard"} {
+		_, _ = s.Remember("net", "carol", f, "bob", "#chat")
+	}
+	got, _ := s.Relevant("net", "describe carol's party avatar", nil, 8)
+	if len(got) != 3 {
+		t.Errorf("got %d facts about carol, want 3: %+v", len(got), got)
+	}
+}

@@ -168,7 +168,7 @@ func (m *MemoryStore) Relevant(network, text string, exclude []string, limit int
 	}
 
 	// Named subjects first: a nick in the message is the strongest signal.
-	perSubject := max(1, limit/3)
+	perSubject := min(3, limit)
 	for _, s := range subjects {
 		if skip[s] || len(s) < 3 || !words[s] {
 			continue
