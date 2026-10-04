@@ -47,7 +47,7 @@ func TestSplitCriteria(t *testing.T) {
 
 func goalCtx(t *testing.T, nick string, admin bool, args ...string) *mocktest.MockChatContext {
 	t.Helper()
-	sys := mocktest.NewMockSystem()
+	sys := mocktest.NewMockSystem().EnableWork()
 	session, _ := sys.SessionStore.Get("net/#test")
 	return mocktest.NewMockContext().WithSystem(sys).WithSession(session).WithSource(nick).WithAdmin(admin).WithArgs(args...)
 }
@@ -111,5 +111,38 @@ func TestTaskSubcommandsDoNotQueue(t *testing.T) {
 	}
 	if after, _ := store.List(cfg.Server.Name, 50); len(after) != len(before) {
 		t.Errorf("tasks went from %d to %d", len(before), len(after))
+	}
+}
+
+// Background work is off until task__start is in the tool list: +task is refused and +help leaves
+// the work commands out. Radio commands are left out while no radio is set up.
+func TestWorkOffWithoutTaskTool(t *testing.T) {
+	sys := mocktest.NewMockSystem()
+	session, _ := sys.SessionStore.Get("net/#test")
+	ctx := mocktest.NewMockContext().WithSystem(sys).WithSession(session).WithSource("carol").
+		WithArgs("+task", "write", "a", "haiku", "about", "rain")
+	(&TaskCommand{}).Execute(ctx)
+	if len(ctx.Replies) == 0 || ctx.Replies[0] != "background work is off here" {
+		t.Fatalf("replies = %q", ctx.Replies)
+	}
+
+	reg := NewRegistry()
+	for _, c := range []Command{&TaskCommand{}, &GoalCommand{}, &ScheduleCommand{}, &TasksCommand{},
+		&NowPlayingCommand{}, &SkipCommand{}, &StatsCommand{}} {
+		reg.Register(c)
+	}
+	help := NewHelpCommand(reg)
+	reg.Register(help)
+	ctx.WithArgs("+help")
+	ctx.Replies = nil
+	t.Setenv("RADIO_API_URL", "")
+	help.Execute(ctx)
+	for _, hidden := range []string{"task", "goal", "schedule", "np", "skip"} {
+		if strings.Contains(ctx.Replies[0], "+"+hidden) {
+			t.Errorf("+%s listed while off: %q", hidden, ctx.Replies[0])
+		}
+	}
+	if !strings.Contains(ctx.Replies[0], "+stats") {
+		t.Errorf("help = %q", ctx.Replies[0])
 	}
 }

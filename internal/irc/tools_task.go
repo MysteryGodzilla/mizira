@@ -49,11 +49,18 @@ var NotInTasks = map[string]bool{"irc__op": true, "irc__kick": true, "irc__ban":
 // TaskToolset is what enabling task__start in config brings with it.
 var TaskToolset = []string{"task__start", "task__schedule", "goal__propose", "todo__set", "todo__update", "task__note", "task__delegate"}
 
+// WorkEnabled reports whether background work is switched on: task__start is in the tool list.
+// The +task, +goal and +schedule commands follow the same switch as the tools.
+func WorkEnabled(ctx ChatContextInterface) bool { return hasTool(ctx, "task__start") }
+
 // StartWork records background work for whoever sent ctx's message, in the channel it came from.
 // Screened nicks, private messages and background work itself cannot start any; non-admins are held
 // to the configured limits.
 func StartWork(ctx ChatContextInterface, spec core.TaskSpec) (core.Task, error) {
 	cfg := ctx.GetConfig()
+	if !WorkEnabled(ctx) {
+		return core.Task{}, fmt.Errorf("%w: background work is off here", core.ErrTaskQuota)
+	}
 	if TaskIDFromSession(ctx.GetSession().GetName()) != 0 {
 		return core.Task{}, fmt.Errorf("%w: background work can't start more of itself - do it here", core.ErrTaskQuota)
 	}

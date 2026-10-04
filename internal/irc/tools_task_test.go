@@ -32,7 +32,7 @@ func TestTaskOnlyTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sys := mocktest.NewMockSystem()
+	sys := mocktest.NewMockSystem().EnableWork()
 	mock := mocktest.NewMockContext().WithSystem(sys)
 	task, err := store.Start(mock.GetNetwork(), "#test", "bob", "bob!u@h",
 		core.TaskSpec{Kind: core.KindGoal, Objective: "gcd", MaxRuns: 3}, true, core.TaskLimits{})
@@ -64,7 +64,7 @@ func TestTaskOnlyTools(t *testing.T) {
 }
 
 func TestStartToolsQueueWork(t *testing.T) {
-	sys := mocktest.NewMockSystem()
+	sys := mocktest.NewMockSystem().EnableWork()
 	session, _ := sys.SessionStore.Get("net/#test")
 	ctx := InjectContext(context.Background(), mocktest.NewMockContext().WithSystem(sys).WithSession(session).WithSource("erin"))
 
@@ -91,7 +91,7 @@ func TestTextArgStripsLeakedMarkup(t *testing.T) {
 }
 
 func TestStartWorkRefusesBareWords(t *testing.T) {
-	sys := mocktest.NewMockSystem()
+	sys := mocktest.NewMockSystem().EnableWork()
 	session, _ := sys.SessionStore.Get("net/#test")
 	ctx := InjectContext(context.Background(), mocktest.NewMockContext().WithSystem(sys).WithSession(session).WithSource("eve"))
 	for _, objective := range []string{"3", "list", "<parameter=objective></parameter>"} {

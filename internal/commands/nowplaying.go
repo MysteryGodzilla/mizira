@@ -74,3 +74,7 @@ func formatNowPlaying(np nowPlaying, page string) string {
 	}
 	return strings.Join(parts, " · ")
 }
+
+func (c *NowPlayingCommand) Available(irc.ChatContextInterface) bool {
+	return os.Getenv("RADIO_API_URL") != ""
+}

@@ -36,7 +36,7 @@ func TestTaskConfigCarriesTheTaskBudget(t *testing.T) {
 }
 
 func TestPrepareTaskSessionAddsTaskPromptAndDetectsResume(t *testing.T) {
-	sys := mocktest.NewMockSystem()
+	sys := mocktest.NewMockSystem().EnableWork()
 	session, _ := sys.SessionStore.Get("task/net/1")
 	ctx := mocktest.NewMockContext().WithSystem(sys).WithSession(session)
 	cfg := ctx.GetConfig()
@@ -58,7 +58,7 @@ func TestPrepareTaskSessionAddsTaskPromptAndDetectsResume(t *testing.T) {
 }
 
 func TestStartTaskGuards(t *testing.T) {
-	sys := mocktest.NewMockSystem()
+	sys := mocktest.NewMockSystem().EnableWork()
 	chanSession, _ := sys.SessionStore.Get("net/#test")
 
 	screened := mocktest.NewMockContext().WithSystem(sys).WithSession(chanSession).WithSource("mallory")

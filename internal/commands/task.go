@@ -374,3 +374,8 @@ func taskAge(t core.Task) string {
 	}
 	return ""
 }
+
+func (c *TaskCommand) Available(ctx irc.ChatContextInterface) bool     { return irc.WorkEnabled(ctx) }
+func (c *GoalCommand) Available(ctx irc.ChatContextInterface) bool     { return irc.WorkEnabled(ctx) }
+func (c *ScheduleCommand) Available(ctx irc.ChatContextInterface) bool { return irc.WorkEnabled(ctx) }
+func (c *TasksCommand) Available(ctx irc.ChatContextInterface) bool    { return irc.WorkEnabled(ctx) }

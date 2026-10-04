@@ -77,3 +77,7 @@ func (c *SkipCommand) Execute(ctx irc.ChatContextInterface) {
 	ctx.GetLogger().Info("radio_skipped", "source", ctx.GetSource(), "title", np.Title)
 	ctx.Reply("skipped " + strings.TrimPrefix(formatNowPlaying(nowPlaying{Title: np.Title}, ""), "now playing: "))
 }
+
+func (c *SkipCommand) Available(irc.ChatContextInterface) bool {
+	return os.Getenv("RADIO_API_URL") != ""
+}

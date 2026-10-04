@@ -19,6 +19,12 @@ type Command interface {
 	AdminOnly() bool
 }
 
+// Optional is implemented by a command for a feature that can be switched off; +help leaves it out
+// while it is.
+type Optional interface {
+	Available(ctx irc.ChatContextInterface) bool
+}
+
 // LockRequired is an optional interface for a +command that must queue behind
 // the request lock, e.g. one that calls the model.
 type LockRequired interface {

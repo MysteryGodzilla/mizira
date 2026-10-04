@@ -5,6 +5,7 @@
 package commands
 
 import (
+	"sort"
 	"strings"
 
 	"B4reMetal/metald/internal/irc"
@@ -32,10 +33,14 @@ func (c *HelpCommand) Execute(ctx irc.ChatContextInterface) {
 		if cmd.AdminOnly() && !isAdmin {
 			continue
 		}
+		if o, ok := cmd.(Optional); ok && !o.Available(ctx) {
+			continue
+		}
 		if name := cmd.Name(); name != "" {
 			names = append(names, ctx.GetConfig().Bot.CommandPrefix+strings.TrimPrefix(name, "+"))
 		}
 	}
 
+	sort.Strings(names)
 	ctx.Reply("Supported commands: " + strings.Join(names, ", "))
 }

@@ -5,6 +5,7 @@
 package testing
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -110,3 +111,10 @@ func (m *MockSystem) UpdateLLM(cfg config.APIConfig) error {
 
 // Verify MockSystem implements core.System
 var _ core.System = (*MockSystem)(nil)
+
+// EnableWork registers a stand-in task__start, which is what switches background work on.
+func (m *MockSystem) EnableWork() *MockSystem {
+	m.ToolRegistry.Register(&tools.Func{Name: "task__start", Desc: "test stand-in",
+		Run: func(context.Context, tools.Args) (string, error) { return "", nil }})
+	return m
+}
