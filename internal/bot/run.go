@@ -132,6 +132,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 		nets = []*config.ServerConfig{cfg.Server}
 	}
 
+	adoptUnscoped(nets)
 	startAdmin(ctx, cfg, nets, sys)
 
 	// Memories written before this bot knew about networks carry no network of their own.
