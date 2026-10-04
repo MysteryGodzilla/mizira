@@ -15,6 +15,10 @@ import (
 
 const classifyTimeout = 20 * time.Second
 
+// ClassifyUnavailable is the reason given when the classifier could not be reached. Whatever the
+// caller does with the content, it is no fault of the person who wrote it.
+const ClassifyUnavailable = "safety check unavailable"
+
 func Classify(ctx ChatContextInterface, policy, label, content string, failOpen bool) (bool, string) {
 	cfg := ctx.GetConfig()
 	base := strings.TrimSuffix(cfg.API.OpenAIURL, "/")
@@ -56,11 +60,11 @@ func Classify(ctx ChatContextInterface, policy, label, content string, failOpen 
 		req.Header.Set("Authorization", "Bearer "+cfg.API.OpenAIKey)
 	}
 
-	resp, err := (&http.Client{Timeout: classifyTimeout}).Do(req)
+	resp, err := ModelPost(req, classifyTimeout)
 	if err != nil {
 		// Detail names an internal host; the channel never sees it.
 		ctx.GetLogger().Warn("classify_unavailable", "label", label, "error", err.Error())
-		return failOpen, "safety check unavailable"
+		return failOpen, ClassifyUnavailable
 	}
 	defer resp.Body.Close()
 

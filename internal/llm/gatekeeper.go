@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"B4reMetal/metald/internal/core"
 	"B4reMetal/metald/internal/irc"
 )
 
@@ -76,7 +77,7 @@ func ScreenIncoming(ctx irc.ChatContextInterface, msg string) (bool, string) {
 		req.Header.Set("Authorization", "Bearer "+cfg.API.OpenAIKey)
 	}
 
-	resp, err := (&http.Client{Timeout: gatekeeperTimeout}).Do(req)
+	resp, err := core.ModelPost(req, gatekeeperTimeout)
 	if err != nil {
 		// Detail names an internal host; the channel gets nothing.
 		ctx.GetLogger().Warn("screen_unavailable", "error", err.Error())

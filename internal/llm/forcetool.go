@@ -150,7 +150,7 @@ func requestToolCall(ctx irc.ChatContextInterface, tool tools.Tool, history []me
 	if cfg.API.OpenAIKey != "" {
 		hreq.Header.Set("Authorization", "Bearer "+cfg.API.OpenAIKey)
 	}
-	resp, err := (&http.Client{Timeout: forceToolTimeout}).Do(hreq)
+	resp, err := core.ModelPost(hreq, forceToolTimeout)
 	if err != nil {
 		return call, err
 	}
