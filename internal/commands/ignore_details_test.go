@@ -1,4 +1,4 @@
-// Copyright (C) 2026 MysteryGodzilla
+// Copyright (C) 2026 alice
 // Part of Mizira, a fork of metald (github.com/B4reMetal/metald)
 // SPDX-License-Identifier: GPL-3.0-only
 

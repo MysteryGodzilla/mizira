@@ -92,7 +92,7 @@ func TestRememberRoomAndCap(t *testing.T) {
 func TestSubjectOf(t *testing.T) {
 	for in, want := range map[string]string{
 		"Dave's party avatar":   "Dave",
-		"dave is a wizard":         "dave",
+		"dave is a wizard":      "dave",
 		"bob":                   "bob",
 		"the party":             "the party",
 		"Mizira is a night owl": "Mizira",
