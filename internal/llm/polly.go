@@ -124,8 +124,9 @@ func (p *PollyLLM) ChatCompletionStream(chatCtx core.ChatContextInterface, req *
 		commitExchange(chatCtx.GetSession(),
 			append(takePending(req), redactRefusedArguments(reply)...))
 
+		// An admin's turns are never dropped: a refused memory of theirs is a test, not an attack.
 		source := chatCtx.GetSource()
-		if score := core.Suspicions().Score(chatCtx.GetNetwork(), source); score >= core.SuspicionQuarantine {
+		if score := core.Suspicions().Score(chatCtx.GetNetwork(), source); score >= core.SuspicionQuarantine && !chatCtx.IsAdmin() {
 			if n := core.QuarantineSpeaker(chatCtx.GetSession(), source); n > 0 {
 				chatCtx.GetLogger().Warn("exchange_quarantined",
 					"source", source, "messages", n,

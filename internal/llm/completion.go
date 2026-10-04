@@ -197,7 +197,10 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 			return
 		}
 
-		score := core.Suspicions().Add(ctx.GetNetwork(), ctx.GetSource(), core.SignalReplyDenied)
+		var score float64
+		if reason != core.ClassifyUnavailable {
+			score = core.Suspicions().Add(ctx.GetNetwork(), ctx.GetSource(), core.SignalReplyDenied)
+		}
 		ctx.GetLogger().Warn("reply_screened_out",
 			"source", ctx.GetSource(), "reason", reason,
 			"suspicion", score, "reply", truncate(reply, maxLoggedMessage))
