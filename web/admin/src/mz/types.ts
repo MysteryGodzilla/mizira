@@ -40,3 +40,10 @@ export interface Tool {
 export interface Subject { subject: string; count: number; room: boolean }
 
 export interface Memory { id: number; subject: string; fact: string; author: string; created: number; sameAs?: number }
+
+// Mirrors internal/admin/mz_selfnotes.go.
+
+export interface SelfNote {
+  id: number; text: string; why: string; status: "pending" | "approved" | "denied"; created: number;
+  decidedBy: string; decidedAt: number; memoryId: number;
+}

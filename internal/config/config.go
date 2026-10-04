@@ -142,8 +142,10 @@ type BotConfig struct {
 	ClaimNudge         string
 	QuotedPolicy       string
 	RoomMemoryFrame    string
-	RoomMemoryLimit    int // room facts (about the channel and about the bot) sent with each request
-	MemoryPerSubject   int // memories one subject may hold; a save past it is refused
+	SelfNotePrompt     string // proposes notes about the bot from a folded stretch of chat; {name} is replaced
+	SelfNotes          bool   // propose self-notes when channel chat is folded into the recap
+	RoomMemoryLimit    int    // room facts (about the channel and about the bot) sent with each request
+	MemoryPerSubject   int    // memories one subject may hold; a save past it is refused
 }
 
 type ModelConfig struct {
@@ -335,6 +337,8 @@ func GetFlags() []cli.Flag {
 		&cli.StringFlag{Name: "replyscreenpolicy", Usage: "policy the outbound reply classifier enforces for filtered nicks (required)", Sources: src("replyscreenpolicy", "METALD_REPLYSCREENPOLICY")},
 		&cli.StringFlag{Name: "claimnudge", Usage: "sent to the model when its reply claims an action it never took; {action} is replaced (required)", Sources: src("claimnudge", "METALD_CLAIMNUDGE")},
 		&cli.StringFlag{Name: "quotedpolicy", Usage: "policy for channel lines the bot reads as background (backlog, history search) under screenall (required)", Sources: src("quotedpolicy", "METALD_QUOTEDPOLICY")},
+		&cli.BoolFlag{Name: "selfnotes", Value: true, Usage: "when channel chat is folded into the recap, ask the model for notes about the bot itself, for an admin to approve", Sources: src("selfnotes", "METALD_SELFNOTES")},
+		&cli.StringFlag{Name: "selfnoteprompt", Usage: "asks the model for notes about the bot itself from chat being folded into the recap, for an admin to approve; {name} is replaced (required)", Sources: src("selfnoteprompt", "METALD_SELFNOTEPROMPT")},
 		&cli.StringFlag{Name: "roommemoryframe", Usage: "text introducing room memory: facts about the channel and about the bot; {channel} is replaced (required)", Sources: src("roommemoryframe", "METALD_ROOMMEMORYFRAME")},
 		&cli.IntFlag{Name: "roommemorylimit", Value: 15, Usage: "room facts (about the channel and the bot, admin-written) sent with each request", Sources: src("roommemorylimit", "METALD_ROOMMEMORYLIMIT")},
 		&cli.IntFlag{Name: "memorypersubject", Value: 40, Usage: "memories one person or thing may hold; a save past it is refused (0 = no cap)", Sources: src("memorypersubject", "METALD_MEMORYPERSUBJECT")},
@@ -566,6 +570,8 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			ClaimNudge:          c.String("claimnudge"),
 			QuotedPolicy:        c.String("quotedpolicy"),
 			RoomMemoryFrame:     c.String("roommemoryframe"),
+			SelfNotePrompt:      c.String("selfnoteprompt"),
+			SelfNotes:           c.Bool("selfnotes"),
 			RoomMemoryLimit:     int(c.Int("roommemorylimit")),
 			MemoryPerSubject:    int(c.Int("memorypersubject")),
 			RecapPrompt:         c.String("recapprompt"),

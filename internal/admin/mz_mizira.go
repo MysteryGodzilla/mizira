@@ -56,6 +56,11 @@ type Mizira interface {
 	AddMemory(network, subject, fact, by string) (id int64, merged bool, err error)
 	EditMemory(network string, id int64, fact, by string) error
 	ForgetMemory(network string, id int64, by string) error
+
+	// Self-notes, as ~selfnotes does. A note already decided returns ErrNotPending.
+	SelfNotes(network, status string) ([]SelfNoteView, error)
+	ApproveSelfNote(network string, id int64, text, by string) (memoryID int64, merged bool, err error)
+	DenySelfNote(network string, id int64, by string) error
 }
 
 // WithMizira adds the console's own pages. Without it the server is upstream's page as it was.
@@ -75,6 +80,7 @@ func (s *Server) mzRoutes(api *http.ServeMux) {
 	s.mzPeopleRoutes(api)
 	s.mzSettingsRoutes(api)
 	s.mzMemoryRoutes(api)
+	s.mzSelfNoteRoutes(api)
 }
 
 type feature struct {

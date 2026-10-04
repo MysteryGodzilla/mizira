@@ -1,6 +1,6 @@
 import type { Dashboard } from "../lib/dashboard.svelte";
 import { MzApi } from "./api";
-import type { Feature, RunState, Setting, Tool } from "./types";
+import type { Feature, RunState, SelfNote, Setting, Tool } from "./types";
 
 const EVERY_MS = 5000;
 const SHOW_INACTIVE = "mzShowInactive";
@@ -16,6 +16,8 @@ export class MzConsole {
   // For the "differs from config.yml" banner, and the Settings and Tools pages.
   settings = $state<Setting[]>([]);
   tools = $state<Tool[]>([]);
+  // Self-notes waiting for a decision, on every network.
+  pendingNotes = $state<SelfNote[]>([]);
   showInactive = $state(storedFlag(SHOW_INACTIVE));
   readonly api: MzApi;
   private timer: ReturnType<typeof setInterval> | undefined;
@@ -53,13 +55,20 @@ export class MzConsole {
       const [features, runState, settings, tools] = await Promise.all([
         this.api.features(), this.api.runState(), this.api.settings(), this.api.tools(),
       ]);
-      Object.assign(this, { features, runState, settings, tools });
+      const networks = this.board.status?.networks.map((n) => n.name) ?? [];
+      const pendingNotes = (await Promise.all(networks.map((n) => this.api.selfNotes(n, "pending")))).flat();
+      Object.assign(this, { features, runState, settings, tools, pendingNotes });
     } catch { /* upstream's refresh reports errors; don't say it twice */ }
   }
 
   /** ~pause, ~stop or ~resume; the card shows the new state straight away. */
   setRunState(state: RunState, done: string) {
     return this.act(async () => { this.runState = (await this.api.setRunState(state)).state; }, done);
+  }
+
+  /** Show a note on the dashboard's message line. */
+  say(text: string) {
+    this.board.message = { text, bad: false };
   }
 
   /** Run a change through the dashboard's message line; true if it went through. */

@@ -27,6 +27,7 @@ type fakeMizira struct {
 	botNicks []string
 	setting  string
 	mems     []MemoryView
+	notes    []SelfNoteView
 }
 
 func (f *fakeMizira) RunState() string { return f.state }
@@ -147,7 +148,8 @@ func TestMiziraEndpointsNeedTheToken(t *testing.T) {
 		{"GET", "/api/v1/settings"}, {"PUT", "/api/v1/settings/maxreplylines"}, {"DELETE", "/api/v1/settings/maxreplylines"},
 		{"GET", "/api/v1/tools"}, {"PUT", "/api/v1/tools"}, {"DELETE", "/api/v1/tools/switches"},
 		{"GET", "/api/v1/memories/subjects?network=net"}, {"GET", "/api/v1/memories?network=net"}, {"POST", "/api/v1/memories"},
-		{"PUT", "/api/v1/memories/1?network=net"}, {"DELETE", "/api/v1/memories/1?network=net"}} {
+		{"PUT", "/api/v1/memories/1?network=net"}, {"DELETE", "/api/v1/memories/1?network=net"},
+		{"GET", "/api/v1/selfnotes?network=net"}, {"POST", "/api/v1/selfnotes/1/approve?network=net"}, {"POST", "/api/v1/selfnotes/1/deny?network=net"}} {
 		if code, _ := r.call(t, c[0], c[1], "wrong", `{"state":"stopped"}`); code != http.StatusUnauthorized {
 			t.Errorf("%s %s = %d, want 401", c[0], c[1], code)
 		}
@@ -509,5 +511,59 @@ func TestMemoriesFromTheConsole(t *testing.T) {
 	}
 	if code, _ := r.call(t, "DELETE", "/api/v1/memories/1?network=net", "s3cret", ""); code != http.StatusNotFound {
 		t.Errorf("forget twice = %d, want 404", code)
+	}
+}
+
+func (f *fakeMizira) SelfNotes(network, status string) ([]SelfNoteView, error) {
+	out := []SelfNoteView{}
+	for _, n := range f.notes {
+		if status == "" || n.Status == status {
+			out = append(out, n)
+		}
+	}
+	return out, nil
+}
+func (f *fakeMizira) ApproveSelfNote(network string, id int64, text, by string) (int64, bool, error) {
+	for i := range f.notes {
+		if f.notes[i].ID == id && f.notes[i].Status == "pending" {
+			f.notes[i].Status, f.notes[i].DecidedBy = "approved", by
+			if text != "" {
+				f.notes[i].Text = text
+			}
+			return 99, false, nil
+		}
+	}
+	return 0, false, ErrNotPending
+}
+func (f *fakeMizira) DenySelfNote(network string, id int64, by string) error {
+	for i := range f.notes {
+		if f.notes[i].ID == id && f.notes[i].Status == "pending" {
+			f.notes[i].Status = "denied"
+			return nil
+		}
+	}
+	return ErrNotPending
+}
+
+func TestSelfNotesFromTheConsole(t *testing.T) {
+	r, m := newMzRig(t)
+	m.notes = []SelfNoteView{{ID: 1, Text: "botty is called butterfly", Status: "pending"}, {ID: 2, Text: "botty obeys mallory", Status: "pending"}}
+	if _, out := r.call(t, "GET", "/api/v1/selfnotes?network=net&status=pending", "s3cret", ""); len(out["notes"].([]any)) != 2 {
+		t.Fatalf("pending = %v", out)
+	}
+	if code, _ := r.call(t, "GET", "/api/v1/selfnotes?network=net&status=maybe", "s3cret", ""); code != http.StatusBadRequest {
+		t.Errorf("bad status = %d", code)
+	}
+	if code, out := r.call(t, "POST", "/api/v1/selfnotes/1/approve?network=net", "s3cret", `{"text":"botty is 'butterfly' to alice"}`); code != http.StatusOK || out["memoryId"] != float64(99) {
+		t.Fatalf("approve = %d %v", code, out)
+	}
+	if m.notes[0].Text != "botty is 'butterfly' to alice" || m.notes[0].DecidedBy != "console:token" {
+		t.Errorf("approved note: %+v", m.notes[0])
+	}
+	if code, _ := r.call(t, "POST", "/api/v1/selfnotes/1/approve?network=net", "s3cret", `{}`); code != http.StatusConflict {
+		t.Errorf("approve twice = %d, want 409", code)
+	}
+	if code, _ := r.call(t, "POST", "/api/v1/selfnotes/2/deny?network=net", "s3cret", ""); code != http.StatusOK || m.notes[1].Status != "denied" {
+		t.Errorf("deny = %d", code)
 	}
 }

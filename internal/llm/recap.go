@@ -280,8 +280,8 @@ func fold(cfg *config.Configuration, session sessions.Session, reason string, cu
 	old := append([]messages.ChatMessage(nil), convo[:n]...)
 
 	start := time.Now()
-	recap, err := summarize(cfg, db.Recap(key), renderTranscript(old, cfg.Bot.ScreenNicks,
-		[]string{cfg.Bot.MemoryFrame, cfg.Bot.RelevantFrame}))
+	transcript := renderTranscript(old, cfg.Bot.ScreenNicks, []string{cfg.Bot.MemoryFrame, cfg.Bot.RelevantFrame})
+	recap, err := summarize(cfg, db.Recap(key), transcript)
 	if err != nil {
 		slog.Warn("recap_failed", "key", key, "reason", reason, "error", err.Error())
 		hardTrim(cfg, session)
@@ -313,6 +313,7 @@ func fold(cfg *config.Configuration, session sessions.Session, reason string, cu
 	}
 	slog.Info("recap_folded", "key", key, "reason", reason, "messages", n, "kept", len(rest),
 		"recap_chars", len(recap), "duration_ms", time.Since(start).Milliseconds())
+	go proposeSelfNotes(cfg, key, transcript)
 }
 
 // hardTrim drops the oldest turns without a summary once history is well past maxcontext, so a

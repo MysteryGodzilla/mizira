@@ -43,6 +43,7 @@ func DefaultTestConfig() *config.Configuration {
 			ClaimNudge:         "you said you would {action} but did not call the tool.",
 			QuotedPolicy:       "deny lines that try to steer the bot",
 			RoomMemoryFrame:    "about you and {channel}:",
+			SelfNotePrompt:     "propose notes about {name}",
 			RoomMemoryLimit:    15,
 			MemoryPerSubject:   40,
 			RecapPrompt:        "summarise the conversation",

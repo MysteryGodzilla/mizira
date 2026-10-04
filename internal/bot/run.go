@@ -104,6 +104,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	cmdRegistry.Register(&commands.ResumeCommand{})
 	cmdRegistry.Register(&commands.StopCommand{})
 	cmdRegistry.Register(&commands.RecapCommand{})
+	cmdRegistry.Register(&commands.SelfNotesCommand{})
 	cmdRegistry.Register(&commands.SuspicionCommand{})
 	cmdRegistry.Register(&commands.NowPlayingCommand{})
 	cmdRegistry.Register(&commands.SkipCommand{})

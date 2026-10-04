@@ -17,6 +17,7 @@ export const META: Record<string, Meta> = {
   showthinkingaction: { group: "Behaviour", kind: "bool", help: "Show a /me while she thinks." },
   showtoolactions: { group: "Behaviour", kind: "bool", help: "Show a /me naming each tool she calls." },
   prompt: { group: "Behaviour", kind: "long", help: "Her system prompt. Edit it in config.yml." },
+  selfnotes: { group: "Behaviour", kind: "bool", help: "Propose notes about herself when chat folds into the recap (you approve them on Memories)." },
 
   screenall: { group: "Screening", kind: "bool", help: "Screen everyone but admins, in and out.",
     warn: "Turning this off stops screening everyone not on the screened list." },

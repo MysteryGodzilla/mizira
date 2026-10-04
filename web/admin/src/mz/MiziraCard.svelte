@@ -31,6 +31,9 @@
   {/snippet}
   {#if state}
     <p><Badge text={state} tone={tone[state]} /><span class="sub">{about[state]}</span></p>
+    {#if mz.pendingNotes.length}
+      <p class="notes"><a href="#memories">{mz.pendingNotes.length} self-note{mz.pendingNotes.length === 1 ? "" : "s"} waiting for you</a></p>
+    {/if}
   {:else}
     <p class="empty">Loading…</p>
   {/if}
@@ -38,4 +41,6 @@
 
 <style>
   p { margin: 0; }
+  .notes { margin-top: 8px; font-size: 14px; }
+  .notes a { color: var(--accent); }
 </style>

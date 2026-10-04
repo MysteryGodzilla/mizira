@@ -5,6 +5,7 @@
   import { when } from "../lib/format";
   import Badge from "../components/Badge.svelte";
   import Card from "../components/Card.svelte";
+  import SelfNotes from "./SelfNotes.svelte";
   let { mz, board }: { mz: MzConsole; board: Dashboard } = $props();
 
   let networks = $derived(board.status?.networks.map((n) => n.name) ?? []);
@@ -59,7 +60,7 @@
     }, `saved about ${subject}`).then((ok) => {
       if (!ok) return;
       newFact = "";
-      if (merged) board.message = { text: `Already had that as #${merged}; kept one copy with the longer wording.`, bad: false };
+      if (merged) mz.say(`Already had that as #${merged}; kept one copy with the longer wording.`);
     });
   }
 
@@ -112,6 +113,7 @@
   </div>
 
   <div class="main">
+    {#if net !== null}<SelfNotes {mz} network={net} onchange={() => void reload()} />{/if}
     <Card title={selected ? `About ${selected}` : searched ? `Facts matching “${searched}”` : "Memories"}>
       {#if list === null}
         <p class="empty">Pick a subject or search.</p>

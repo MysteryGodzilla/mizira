@@ -290,6 +290,17 @@ var configFields = map[string]configField{
 		},
 		getter: func(c *config.Configuration) string { return fmt.Sprintf("%t", c.Bot.URLWatcherSilent) },
 	},
+	"selfnotes": {
+		setter: func(c *config.Configuration, v string) error {
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return fmt.Errorf("invalid value for selfnotes. Please provide 'true' or 'false'")
+			}
+			c.Bot.SelfNotes = b
+			return nil
+		},
+		getter: func(c *config.Configuration) string { return fmt.Sprintf("%t", c.Bot.SelfNotes) },
+	},
 	"opwatcher": {
 		setter: func(c *config.Configuration, v string) error {
 			b, err := strconv.ParseBool(v)

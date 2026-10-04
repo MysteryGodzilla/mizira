@@ -117,6 +117,10 @@ func OpenMemoryStore(path string) (*MemoryStore, error) {
 			return nil, fmt.Errorf("build memory search index: %w", err)
 		}
 	}
+	if err := createSelfNotes(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("create self-notes table: %w", err)
+	}
 
 	return &MemoryStore{db: db}, nil
 }

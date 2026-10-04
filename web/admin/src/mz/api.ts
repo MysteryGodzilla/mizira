@@ -1,5 +1,5 @@
 import { Api } from "../lib/api";
-import type { Bots, Conversation, Feature, Memory, People, Reset, RunState, Setting, SettingChange, Subject, Tool } from "./types";
+import type { Bots, Conversation, Feature, Memory, People, Reset, RunState, SelfNote, Setting, SettingChange, Subject, Tool } from "./types";
 
 const q = (params: Record<string, string>) => new URLSearchParams(params).toString();
 
@@ -46,4 +46,10 @@ export class MzApi extends Api {
   editMemory = (network: string, id: number, fact: string) =>
     this.call<{ id: number }>("PUT", `memories/${id}?${q({ network })}`, { fact });
   forgetMemory = (network: string, id: number) => this.call<{ id: number }>("DELETE", `memories/${id}?${q({ network })}`);
+
+  selfNotes = (network: string, status: "" | SelfNote["status"]) =>
+    this.call<{ notes: SelfNote[] }>("GET", `selfnotes?${q({ network, status })}`).then((r) => r.notes);
+  approveSelfNote = (network: string, id: number, text: string) =>
+    this.call<{ id: number; memoryId: number; merged: boolean }>("POST", `selfnotes/${id}/approve?${q({ network })}`, { text });
+  denySelfNote = (network: string, id: number) => this.call<{ id: number }>("POST", `selfnotes/${id}/deny?${q({ network })}`, {});
 }

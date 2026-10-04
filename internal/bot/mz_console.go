@@ -344,3 +344,40 @@ func memoryErr(err error) error {
 	}
 	return err
 }
+
+func (c console) SelfNotes(network, status string) ([]admin.SelfNoteView, error) {
+	store, err := core.Memories()
+	if err != nil {
+		return nil, err
+	}
+	notes, err := store.SelfNotes(network, status, 200)
+	if err != nil {
+		return nil, err
+	}
+	out := []admin.SelfNoteView{}
+	for _, n := range notes {
+		v := admin.SelfNoteView{ID: n.ID, Text: n.Text, Why: n.Why, Status: n.Status, Created: n.Created.Unix(),
+			DecidedBy: n.DecidedBy, MemoryID: n.MemoryID}
+		if !n.DecidedAt.IsZero() {
+			v.DecidedAt = n.DecidedAt.Unix()
+		}
+		out = append(out, v)
+	}
+	return out, nil
+}
+
+func (c console) ApproveSelfNote(network string, id int64, text, by string) (int64, bool, error) {
+	memID, merged, err := commands.ApproveSelfNote(c.cfg, network, id, text, by, core.GetLogger())
+	return memID, merged, selfNoteErr(err)
+}
+
+func (c console) DenySelfNote(network string, id int64, by string) error {
+	return selfNoteErr(commands.DenySelfNote(network, id, by, core.GetLogger()))
+}
+
+func selfNoteErr(err error) error {
+	if errors.Is(err, commands.ErrNotPending) {
+		return admin.ErrNotPending
+	}
+	return err
+}
