@@ -315,3 +315,16 @@ func TestApplySampling(t *testing.T) {
 		t.Fatal("unset settings must not be sent")
 	}
 }
+
+// Under a custom persona every reply is checked on the way out, even an admin's.
+func TestCustomPersonaChecksEveryReply(t *testing.T) {
+	ctx := mocktest.NewMockContext().WithAdmin(true)
+	if outboundScreened(ctx) {
+		t.Fatal("an admin's reply is not checked without a persona")
+	}
+	core.Prompts().Set(ctx.GetLockKey(), "you are a pirate", "alice")
+	defer core.Prompts().Clear(ctx.GetLockKey())
+	if !outboundScreened(ctx) {
+		t.Fatal("a reply under a custom persona must be checked")
+	}
+}

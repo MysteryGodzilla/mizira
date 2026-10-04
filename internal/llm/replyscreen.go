@@ -47,7 +47,7 @@ func leaksSystemPrompt(reply, prompt string) bool {
 // ScreenOutgoing decides whether a completed reply may be posted.
 func ScreenOutgoing(ctx irc.ChatContextInterface, reply string) (bool, string) {
 	cfg := ctx.GetConfig()
-	if !isScreened(ctx, cfg.Bot.FilterNicks) {
+	if !outboundScreened(ctx) {
 		return true, ""
 	}
 	if strings.TrimSpace(reply) == "" {

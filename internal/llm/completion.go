@@ -197,8 +197,9 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 			return
 		}
 
+		// Neither a failed check nor a custom persona's doing is the speaker's fault.
 		var score float64
-		if reason != core.ClassifyUnavailable {
+		if reason != core.ClassifyUnavailable && !core.Prompts().Active(ctx.GetLockKey()) {
 			score = core.Suspicions().Add(ctx.GetNetwork(), ctx.GetSource(), core.SignalReplyDenied)
 		}
 		ctx.GetLogger().Warn("reply_screened_out",
@@ -221,7 +222,9 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 // outboundScreened reports whether this speaker's replies get the extra
 // outbound check.
 func outboundScreened(ctx irc.ChatContextInterface) bool {
-	return isScreened(ctx, ctx.GetConfig().Bot.FilterNicks)
+	// A custom persona is when the rules are most likely to bend (one talked the bot into romance
+	// live), so while one is active every reply is checked, whoever asked.
+	return core.Prompts().Active(ctx.GetLockKey()) || isScreened(ctx, ctx.GetConfig().Bot.FilterNicks)
 }
 
 // pending holds each in-flight request's own user message, and any tool call forced for it,
