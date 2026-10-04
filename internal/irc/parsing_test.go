@@ -39,6 +39,11 @@ func TestCheckAddressed(t *testing.T) {
 		{"other bot's tag then someone else", "[otherbot] greg, bot is my sister", "bot", false},
 		{"mid-line plain", "i think bot is cute", "bot", false},
 		{"possessive", "bot's code is neat", "bot", false},
+		{"statement about it", "bot is my little-sister fork", "bot", false},
+		{"statement after a tag", "[otherbot] Bot is Monica Everett", "bot", false},
+		{"question with is", "bot is this right?", "bot", true},
+		{"comma then is", "bot, is it raining", "bot", true},
+		{"who's at the end", "who's bot", "bot", false},
 		{"embedded in longer word", "botter hello", "bot", false},
 		{"embedded mid message", "hey heybot there", "bot", false},
 		{"all caps longer word", "ROBOTS hello", "bot", false},
@@ -224,4 +229,22 @@ func findSubstring(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// A line opening with someone else's name is talking to them, whatever follows.
+func TestCheckAddressedAmong(t *testing.T) {
+	others := func(w string) bool { return w == "otherbot" || w == "alice" }
+	cases := map[string]bool{
+		"otherbot who's bot":                            false,
+		"otherbot make a song about alice stalking bot": false,
+		"alice what do you think bot?":                  false,
+		"bot what do you think?":                        true,
+		"hey bot, what does otherbot say?":              true,
+		"so what do you think bot?":                     true,
+	}
+	for msg, want := range cases {
+		if got := CheckAddressedAmong(msg, "bot", others); got != want {
+			t.Errorf("CheckAddressedAmong(%q) = %v, want %v", msg, got, want)
+		}
+	}
 }

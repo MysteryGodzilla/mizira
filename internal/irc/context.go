@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"regexp"
+	"strings"
 
 	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/lrstanley/girc"
@@ -136,7 +137,24 @@ func (s ChatContext) IsAddressed() bool {
 	if trigger == "" {
 		trigger = s.client.GetNick()
 	}
-	return CheckAddressed(s.event.Last(), trigger)
+	return CheckAddressedAmong(s.event.Last(), trigger, s.otherName)
+}
+
+// otherName reports whether word names someone else here: a nick in the channel, a configured bot
+// nick, or the name inside a bot's tag ("[metalai]" names metalai). The bot itself never counts.
+func (s ChatContext) otherName(word string) bool {
+	if word == "" || isBotName(word, s.Config.Bot.Trigger, s.client.GetNick()) ||
+		girc.ToRFC1459(word) == girc.ToRFC1459(s.client.GetNick()) {
+		return false
+	}
+	names := append([]string{}, s.Config.Bot.BotNicks...)
+	for _, p := range s.Config.Bot.BotPrefixes {
+		names = append(names, strings.Trim(p, "[]<>() "))
+	}
+	if ch := s.client.LookupChannel(s.Config.Server.Channel); ch != nil {
+		names = append(names, ch.UserList...)
+	}
+	return NickInList(word, names)
 }
 
 func (c ChatContext) Nick(nickname string) bool {

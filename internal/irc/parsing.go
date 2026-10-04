@@ -22,7 +22,11 @@ func isTriggerWordChar(r rune) bool {
 // than just mentioning it. "bot do this", "hey bot, ...", "what do you think bot?" call on it;
 // "did you see what bot did", "alice say hi to bot" and "alice: bot is great" only talk about it.
 // A leading tag such as "[otherbot]" is skipped first. An empty trigger matches everything.
-func CheckAddressed(message, trigger string) bool {
+func CheckAddressed(message, trigger string) bool { return CheckAddressedAmong(message, trigger, nil) }
+
+// CheckAddressedAmong is CheckAddressed knowing who else is around: a line that opens with
+// someone else's name ("otherbot who's bot?") is talking to them.
+func CheckAddressedAmong(message, trigger string, otherName func(word string) bool) bool {
 	if trigger == "" {
 		return true
 	}
@@ -40,8 +44,15 @@ func CheckAddressed(message, trigger string) bool {
 	}
 	before, after := words[:at], words[at+len(trig):]
 
-	// "alice: ..." or "alice, ..." opens by talking to someone else.
-	if len(before) > 0 && strings.ContainsAny(lastRune(before[0]), ":,") && !fillerWords[bareAddressWord(before[0])] {
+	// "alice: ..." or "alice, ..." opens by talking to someone else, and so does "alice who's bot".
+	if len(before) > 0 && !fillerWords[bareAddressWord(before[0])] &&
+		(strings.ContainsAny(lastRune(before[0]), ":,") || otherName != nil && otherName(bareAddressWord(before[0]))) {
+		return false
+	}
+	// "bot is my sister" states something about it; "bot, is it raining?" and "bot is this right?"
+	// call on it.
+	if len(before) == 0 && len(after) > 0 && !strings.ContainsAny(lastRune(words[at+len(trig)-1]), ",:") &&
+		statementVerbs[bareAddressWord(after[0])] && !strings.HasSuffix(strings.TrimSpace(message), "?") {
 		return false
 	}
 	allFiller := true
@@ -74,6 +85,13 @@ var fillerWords = map[string]bool{
 	"gm": true, "gn": true, "welcome": true, "back": true, "dear": true, "lol": true, "haha": true,
 }
 
+// statementVerbs right after a leading name make the line a statement about it: "bot is ...".
+var statementVerbs = map[string]bool{
+	"is": true, "was": true, "isn't": true, "wasn't": true, "has": true, "hasn't": true,
+	"seems": true, "looks": true, "sounds": true, "can't": true, "doesn't": true, "didn't": true,
+	"won't": true, "will": true, "would": true, "should": true, "must": true, "might": true,
+}
+
 // objectMarkers before a trailing name make it the object of the sentence, not someone called.
 var objectMarkers = map[string]bool{
 	"to": true, "at": true, "about": true, "with": true, "for": true, "from": true, "of": true,
@@ -81,6 +99,7 @@ var objectMarkers = map[string]bool{
 	"by": true, "on": true, "in": true, "tell": true, "ask": true, "told": true, "asked": true,
 	"see": true, "saw": true, "meet": true, "met": true, "love": true, "hate": true, "said": true,
 	"says": true, "does": true, "did": true, "slap": true, "ignore": true, "ping": true, "the": true,
+	"who's": true, "whos": true, "what's": true, "whats": true, "where's": true, "wheres": true,
 }
 
 // findWords returns the index in words where want starts, comparing words without punctuation.
