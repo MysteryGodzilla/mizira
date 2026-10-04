@@ -19,6 +19,7 @@
   import Settings from "./mz/Settings.svelte";
   import Tools from "./mz/Tools.svelte";
   import Memories from "./mz/Memories.svelte";
+  import Safety from "./mz/Safety.svelte";
 
   // Signed in (by the auth proxy, or with a token) means a dashboard; signing out drops it and stops
   // its polling.
@@ -32,7 +33,7 @@
 
   // The view lives in the URL hash, so a reload or a bookmark keeps it.
   const VIEWS = { dashboard: "Dashboard", conversation: "Conversation", people: "People", memories: "Memories", bots: "Bots", settings: "Settings",
-    tools: "Tools", logs: "Logs", thinking: "Thinking" } as const;
+    tools: "Tools", safety: "Safety", logs: "Logs", thinking: "Thinking" } as const;
   type View = keyof typeof VIEWS;
   const fromHash = (): View => { const h = location.hash.slice(1); return h in VIEWS ? (h as View) : "dashboard"; };
   let view = $state<View>(fromHash());
@@ -72,6 +73,8 @@
       <People {mz} {board} />
     {:else if view === "memories" && mz}
       <Memories {mz} {board} />
+    {:else if view === "safety" && mz}
+      <Safety {mz} />
     {:else if view === "bots" && mz}
       <Bots {mz} />
     {:else if view === "settings" && mz}

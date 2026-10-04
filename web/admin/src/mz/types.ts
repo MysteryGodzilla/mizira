@@ -47,3 +47,13 @@ export interface SelfNote {
   id: number; text: string; why: string; status: "pending" | "approved" | "denied"; created: number;
   decidedBy: string; decidedAt: number; memoryId: number;
 }
+
+// Mirrors internal/admin/mz_safety.go.
+
+export interface SafetyEvent { time: number; kind: string; event: string; who: string; channel: string; detail: string; suspicion?: string }
+
+export interface PersonCount { who: string; total: number; byKind: Record<string, number> }
+
+export interface Safety {
+  events: SafetyEvent[]; people: PersonCount[]; kinds: Record<string, number>; days: number; truncated: boolean;
+}

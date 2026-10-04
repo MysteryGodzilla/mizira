@@ -65,6 +65,9 @@ type Mizira interface {
 	SelfNotes(network, status string) ([]SelfNoteView, error)
 	ApproveSelfNote(network string, id int64, text, by string) (memoryID int64, merged bool, err error)
 	DenySelfNote(network string, id int64, by string) error
+
+	// Safety events from the log file over the last days, newest first, at most limit.
+	SafetyEvents(days, limit int) ([]SafetyEventView, error)
 }
 
 // WithMizira adds the console's own pages. Without it the server is upstream's page as it was.
@@ -85,6 +88,7 @@ func (s *Server) mzRoutes(api *http.ServeMux) {
 	s.mzSettingsRoutes(api)
 	s.mzMemoryRoutes(api)
 	s.mzSelfNoteRoutes(api)
+	s.mzSafetyRoutes(api)
 }
 
 type feature struct {

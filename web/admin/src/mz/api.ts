@@ -1,5 +1,5 @@
 import { Api } from "../lib/api";
-import type { Bots, Conversation, Feature, Memory, People, Reset, RunState, SelfNote, Setting, SettingChange, Subject, Tool } from "./types";
+import type { Bots, Conversation, Feature, Memory, People, Reset, RunState, Safety, SelfNote, Setting, SettingChange, Subject, Tool } from "./types";
 
 const q = (params: Record<string, string>) => new URLSearchParams(params).toString();
 
@@ -51,6 +51,8 @@ export class MzApi extends Api {
     this.call<{ facts: string[]; basedOn: number[] }>("POST", "memories/compact/preview", { network, subject });
   compactApply = (network: string, subject: string, basedOn: number[], facts: string[]) =>
     this.call<{ stored: number }>("POST", "memories/compact/apply", { network, subject, basedOn, facts });
+
+  safety = (days: number, kind = "", who = "") => this.call<Safety>("GET", `safety?${q({ days: String(days), kind, who })}`);
 
   selfNotes = (network: string, status: "" | SelfNote["status"]) =>
     this.call<{ notes: SelfNote[] }>("GET", `selfnotes?${q({ network, status })}`).then((r) => r.notes);

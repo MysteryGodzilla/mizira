@@ -151,7 +151,8 @@ func TestMiziraEndpointsNeedTheToken(t *testing.T) {
 		{"GET", "/api/v1/memories/subjects?network=net"}, {"GET", "/api/v1/memories?network=net"}, {"POST", "/api/v1/memories"},
 		{"PUT", "/api/v1/memories/1?network=net"}, {"DELETE", "/api/v1/memories/1?network=net"},
 		{"GET", "/api/v1/selfnotes?network=net"}, {"POST", "/api/v1/selfnotes/1/approve?network=net"}, {"POST", "/api/v1/selfnotes/1/deny?network=net"},
-		{"POST", "/api/v1/memories/compact/preview"}, {"POST", "/api/v1/memories/compact/apply"}} {
+		{"POST", "/api/v1/memories/compact/preview"}, {"POST", "/api/v1/memories/compact/apply"},
+		{"GET", "/api/v1/safety"}} {
 		if code, _ := r.call(t, c[0], c[1], "wrong", `{"state":"stopped"}`); code != http.StatusUnauthorized {
 			t.Errorf("%s %s = %d, want 401", c[0], c[1], code)
 		}
@@ -601,5 +602,38 @@ func TestCompactionFromTheConsole(t *testing.T) {
 	}
 	if code, out := r.call(t, "POST", "/api/v1/memories/compact/apply", "s3cret", `{"network":"net","subject":"bob","basedOn":[1,2],"facts":["bob plays chess on Sundays","bob lives in Osaka"]}`); code != http.StatusOK || out["stored"] != float64(2) || len(m.compacted) != 2 {
 		t.Errorf("apply = %d %v", code, out)
+	}
+}
+
+func (f *fakeMizira) SafetyEvents(days, limit int) ([]SafetyEventView, error) {
+	return []SafetyEventView{
+		{Time: 3, Kind: "quarantine", Event: "exchange_quarantined", Who: "eve"},
+		{Time: 2, Kind: "gatekeeper", Event: "screen_denied", Who: "Mallory", Detail: "prompt break"},
+		{Time: 1, Kind: "gatekeeper", Event: "screen_denied", Who: "mallory"},
+		{Time: 1, Kind: "console", Event: "console_action", Who: "console:token", Detail: "screen nick=eve"},
+	}, nil
+}
+
+func TestSafetyFromTheConsole(t *testing.T) {
+	r, _ := newMzRig(t)
+	_, out := r.call(t, "GET", "/api/v1/safety", "s3cret", "")
+	if len(out["events"].([]any)) != 3 || out["days"] != float64(7) {
+		t.Fatalf("all = %v", out)
+	}
+	people := out["people"].([]any)
+	top := people[0].(map[string]any)
+	if len(people) != 2 || top["total"] != float64(2) || top["byKind"].(map[string]any)["gatekeeper"] != float64(2) {
+		t.Errorf("people = %v (console actions aren't a person's doing; nick case doesn't split a count)", people)
+	}
+	if _, out := r.call(t, "GET", "/api/v1/safety?kind=gatekeeper&who=MALLORY", "s3cret", ""); len(out["events"].([]any)) != 2 {
+		t.Errorf("filtered = %v", out["events"])
+	}
+	if _, out := r.call(t, "GET", "/api/v1/safety?kind=console", "s3cret", ""); len(out["events"].([]any)) != 1 {
+		t.Errorf("console actions when asked for = %v", out["events"])
+	}
+	for _, bad := range []string{"0", "31", "x"} {
+		if code, _ := r.call(t, "GET", "/api/v1/safety?days="+bad, "s3cret", ""); code != http.StatusBadRequest {
+			t.Errorf("days=%s = %d, want 400", bad, code)
+		}
 	}
 }

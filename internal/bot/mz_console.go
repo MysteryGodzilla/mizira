@@ -402,3 +402,20 @@ func (c console) CompactApply(network, subject string, basedOn []int64, facts []
 	}
 	return stored, err
 }
+
+func (c console) SafetyEvents(days, limit int) ([]admin.SafetyEventView, error) {
+	out := []admin.SafetyEventView{}
+	path := core.LogFilePath(c.cfg.Bot.DataDir, c.cfg.Bot.LogFile)
+	if path == "" {
+		return out, nil
+	}
+	events, err := core.ReadSafetyEvents(path, c.cfg.Bot.LogKeep, time.Now().AddDate(0, 0, -days), limit)
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range events {
+		out = append(out, admin.SafetyEventView{Time: e.Time.Unix(), Kind: e.Kind, Event: e.Event, Who: e.Who,
+			Channel: e.Channel, Detail: e.Detail, Suspicion: e.Suspicion})
+	}
+	return out, nil
+}
