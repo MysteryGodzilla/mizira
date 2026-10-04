@@ -374,7 +374,7 @@ func startAdmin(ctx context.Context, cfg *config.Configuration, nets []*config.S
 		core.GetLogger().Error("admin_failed", "error", err.Error())
 		return
 	}
-	srv.WithMizira(console{cfg: cfg, sys: sys})
+	srv.WithMizira(console{cfg: cfg, sys: sys, nets: nets})
 	go func() {
 		core.GetLogger().Info("admin_listening", "addr", cfg.Bot.AdminListen)
 		if err := srv.Run(ctx, cfg.Bot.AdminListen); err != nil {

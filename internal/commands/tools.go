@@ -87,6 +87,8 @@ func (c *ToolsCommand) setRestriction(ctx irc.ChatContextInterface, pattern stri
 	}
 
 	var changed []string
+	configMu.Lock()
+	defer configMu.Unlock()
 	for _, name := range matches {
 		tool, ok := registry.Get(name)
 		if !ok {

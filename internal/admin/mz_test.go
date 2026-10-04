@@ -5,9 +5,12 @@
 package admin
 
 import (
+	"errors"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 type fakeMizira struct {
@@ -15,6 +18,12 @@ type fakeMizira struct {
 	tools []string
 	think bool
 	by    []string
+
+	persona  string
+	recap    bool
+	ignores  []IgnoreView
+	screened []string
+	scores   []ScoreView
 }
 
 func (f *fakeMizira) RunState() string { return f.state }
@@ -31,6 +40,56 @@ func (f *fakeMizira) SetRunState(state, by string) (string, bool, int) {
 }
 func (f *fakeMizira) Tools() []string { return f.tools }
 func (f *fakeMizira) Thinking() bool  { return f.think }
+
+func (f *fakeMizira) Conversations() []ConversationView {
+	return []ConversationView{{Network: "net", Channel: "#chat", Messages: 4, Persona: f.persona,
+		Recent: []LineView{{Role: "user", Text: "(nick:bob) <b>hi</b>"}}}}
+}
+func (f *fakeMizira) ResetConversation(network, by string) (ResetView, error) {
+	f.by = append(f.by, by)
+	cleared := f.persona != ""
+	f.persona = ""
+	return ResetView{PersonaCleared: cleared}, nil
+}
+func (f *fakeMizira) ClearRecap(network, by string) (bool, error) {
+	had := f.recap
+	f.recap = false
+	return had, nil
+}
+func (f *fakeMizira) Ignores() []IgnoreView { return f.ignores }
+func (f *fakeMizira) Ignore(network, nick string, d time.Duration, reason, by string) (time.Time, error) {
+	if nick == "alice" {
+		return time.Time{}, errors.New("alice is an admin; admins are exempt from ignore")
+	}
+	until := time.Now().Add(d)
+	f.ignores = append(f.ignores, IgnoreView{Network: network, Nick: nick, Until: until.Unix(), Kind: "admin", By: by, Reason: reason})
+	return until, nil
+}
+func (f *fakeMizira) Unignore(network, nick, by string) bool {
+	for i, e := range f.ignores {
+		if e.Network == network && e.Nick == nick {
+			f.ignores = slices.Delete(f.ignores, i, i+1)
+			return true
+		}
+	}
+	return false
+}
+func (f *fakeMizira) Screened() ScreenView { return ScreenView{In: f.screened, Out: f.screened} }
+func (f *fakeMizira) Screen(network, nick, by string) (int, error) {
+	f.screened = append(f.screened, nick)
+	return 2, nil
+}
+func (f *fakeMizira) Unscreen(nick, by string) bool {
+	n := len(f.screened)
+	f.screened = slices.DeleteFunc(f.screened, func(s string) bool { return s == nick })
+	return len(f.screened) < n
+}
+func (f *fakeMizira) Suspicion() ([]ScoreView, float64) { return f.scores, 3 }
+func (f *fakeMizira) ClearSuspicion(network, key, by string) bool {
+	n := len(f.scores)
+	f.scores = slices.DeleteFunc(f.scores, func(s ScoreView) bool { return s.Network == network && s.Key == key })
+	return len(f.scores) < n
+}
 
 func newMzRig(t *testing.T) (*rig, *fakeMizira) {
 	t.Helper()
@@ -77,7 +136,10 @@ func TestRunRefusesEveryInterface(t *testing.T) {
 
 func TestMiziraEndpointsNeedTheToken(t *testing.T) {
 	r, m := newMzRig(t)
-	for _, c := range [][2]string{{"GET", "/api/v1/features"}, {"GET", "/api/v1/mizira/state"}, {"PUT", "/api/v1/mizira/state"}} {
+	for _, c := range [][2]string{{"GET", "/api/v1/features"}, {"GET", "/api/v1/mizira/state"}, {"PUT", "/api/v1/mizira/state"},
+		{"GET", "/api/v1/conversation"}, {"POST", "/api/v1/conversation/reset"}, {"DELETE", "/api/v1/recap?network=net"},
+		{"GET", "/api/v1/people"}, {"POST", "/api/v1/ignores"}, {"DELETE", "/api/v1/ignores?network=net&nick=bob"},
+		{"POST", "/api/v1/screens"}, {"DELETE", "/api/v1/screens?nick=bob"}, {"DELETE", "/api/v1/suspicion?network=net&key=bob"}} {
 		if code, _ := r.call(t, c[0], c[1], "wrong", `{"state":"stopped"}`); code != http.StatusUnauthorized {
 			t.Errorf("%s %s = %d, want 401", c[0], c[1], code)
 		}
@@ -178,5 +240,77 @@ func TestARightTokenClearsEarlierMistakes(t *testing.T) {
 		if code := r.callFrom(t, "198.51.100.9", "GET", "/api/v1/status", "s3cret"); code != http.StatusOK {
 			t.Fatalf("right token after %d typos = %d", authFailures-1, code)
 		}
+	}
+}
+
+func TestResetAndRecapFromTheConsole(t *testing.T) {
+	r, m := newMzRig(t)
+	m.persona, m.recap = "a pirate", true
+	_, out := r.call(t, "GET", "/api/v1/conversation", "s3cret", "")
+	conv := out["conversations"].([]any)[0].(map[string]any)
+	if conv["persona"] != "a pirate" || conv["channel"] != "#chat" {
+		t.Errorf("conversation = %v", conv)
+	}
+	if code, out := r.call(t, "POST", "/api/v1/conversation/reset", "s3cret", `{"network":"net"}`); code != http.StatusOK || out["personaCleared"] != true {
+		t.Errorf("reset = %d %v", code, out)
+	}
+	if code, _ := r.call(t, "POST", "/api/v1/conversation/reset", "s3cret", `{"network":"elsewhere"}`); code != http.StatusNotFound {
+		t.Errorf("reset on an unknown network = %d", code)
+	}
+	if code, _ := r.call(t, "DELETE", "/api/v1/recap?network=net", "s3cret", ""); code != http.StatusOK {
+		t.Errorf("clear recap = %d", code)
+	}
+	if code, _ := r.call(t, "DELETE", "/api/v1/recap?network=net", "s3cret", ""); code != http.StatusConflict {
+		t.Errorf("clear an empty recap = %d, want 409", code)
+	}
+}
+
+func TestIgnoresFromTheConsole(t *testing.T) {
+	r, m := newMzRig(t)
+	if code, out := r.call(t, "POST", "/api/v1/ignores", "s3cret", `{"network":"net","nick":"mallory","minutes":90,"reason":"spam"}`); code != http.StatusOK || out["until"] == nil {
+		t.Fatalf("ignore = %d %v", code, out)
+	}
+	if len(m.ignores) != 1 || m.ignores[0].By != "console:token" || m.ignores[0].Reason != "spam" {
+		t.Errorf("ignores = %+v", m.ignores)
+	}
+	for _, bad := range []string{
+		`{"network":"net","nick":"mallory","minutes":0}`, `{"network":"net","nick":"mallory","minutes":43201}`,
+		`{"network":"net","nick":"two words","minutes":5}`, `{"network":"net","nick":"*!*@*","minutes":5}`,
+		`{"network":"net","nick":"","minutes":5}`, `not json`,
+	} {
+		if code, _ := r.call(t, "POST", "/api/v1/ignores", "s3cret", bad); code != http.StatusBadRequest {
+			t.Errorf("%s = %d, want 400", bad, code)
+		}
+	}
+	if code, out := r.call(t, "POST", "/api/v1/ignores", "s3cret", `{"network":"net","nick":"alice","minutes":5}`); code != http.StatusConflict ||
+		!strings.Contains(out["error"].(string), "admin") {
+		t.Errorf("ignoring an admin = %d %v", code, out)
+	}
+	if code, _ := r.call(t, "DELETE", "/api/v1/ignores?network=net&nick=mallory", "s3cret", ""); code != http.StatusOK || len(m.ignores) != 0 {
+		t.Errorf("unignore = %d", code)
+	}
+	if code, _ := r.call(t, "DELETE", "/api/v1/ignores?network=net&nick=mallory", "s3cret", ""); code != http.StatusNotFound {
+		t.Errorf("unignore twice = %d, want 404", code)
+	}
+}
+
+func TestScreensAndSuspicionFromTheConsole(t *testing.T) {
+	r, m := newMzRig(t)
+	m.scores = []ScoreView{{Network: "net", Key: "eve", Score: 2.5}}
+	if code, out := r.call(t, "POST", "/api/v1/screens", "s3cret", `{"network":"net","nick":"eve"}`); code != http.StatusOK || out["dropped"] != float64(2) {
+		t.Fatalf("screen = %d %v", code, out)
+	}
+	_, out := r.call(t, "GET", "/api/v1/people", "s3cret", "")
+	if asJSON(out["screened"]) != `{"in":["eve"],"out":["eve"]}` || out["quarantineAt"] != float64(3) || len(out["suspicion"].([]any)) != 1 {
+		t.Errorf("people = %v", out)
+	}
+	if code, _ := r.call(t, "DELETE", "/api/v1/screens?nick=eve", "s3cret", ""); code != http.StatusOK {
+		t.Errorf("unscreen = %d", code)
+	}
+	if code, _ := r.call(t, "DELETE", "/api/v1/suspicion?network=net&key=eve", "s3cret", ""); code != http.StatusOK || len(m.scores) != 0 {
+		t.Errorf("clear suspicion = %d", code)
+	}
+	if code, _ := r.call(t, "DELETE", "/api/v1/suspicion?network=net&key=eve", "s3cret", ""); code != http.StatusNotFound {
+		t.Errorf("clear a missing score = %d, want 404", code)
 	}
 }

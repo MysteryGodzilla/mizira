@@ -5,10 +5,10 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
-	"B4reMetal/metald/internal/core"
 	"B4reMetal/metald/internal/irc"
 )
 
@@ -36,29 +36,19 @@ func (c *ScreenCommand) Execute(ctx irc.ChatContextInterface) {
 	}
 
 	nick := args[1]
-	if isAdminNick(ctx, nick) {
+	// Their earlier turns in this conversation were never screened, so ScreenNick drops them.
+	dropped, err := ScreenNick(ctx.GetConfig(), ctx.GetSession(), ctx.GetBotNick(), nick, ctx.GetSource(), ctx.GetLogger())
+	switch {
+	case errors.Is(err, ErrIsAdmin):
 		ctx.Reply(fmt.Sprintf("%s is an admin - not screening", nick))
 		return
-	}
-	if strings.EqualFold(nick, ctx.GetBotNick()) {
+	case errors.Is(err, ErrIsSelf):
 		ctx.Reply("Refusing to screen myself")
 		return
-	}
-	bot := ctx.GetConfig().Bot
-	addedIn := addNick(&bot.ScreenNicks, nick)
-	addedOut := addNick(&bot.FilterNicks, nick)
-	if !addedIn && !addedOut {
+	case errors.Is(err, ErrAlreadyScreened):
 		ctx.Reply(fmt.Sprintf("%s is already screened", nick))
 		return
 	}
-	PersistScreening(bot.ScreenNicks, bot.FilterNicks)
-	// Their earlier turns in this conversation were never screened; drop
-	// them so nothing already planted keeps steering the model.
-	dropped := 0
-	if session := ctx.GetSession(); session != nil {
-		dropped = core.QuarantineSpeaker(session, nick)
-	}
-	ctx.GetLogger().Info("screen_added", "nick", nick, "quarantined", dropped)
 	ctx.Reply(fmt.Sprintf("Screening %s: messages gated, replies checked, %d earlier turns dropped", nick, dropped))
 }
 
@@ -78,15 +68,10 @@ func (c *UnscreenCommand) Execute(ctx irc.ChatContextInterface) {
 }
 
 func removeScreen(ctx irc.ChatContextInterface, nick string) {
-	bot := ctx.GetConfig().Bot
-	removedIn := removeNick(&bot.ScreenNicks, nick)
-	removedOut := removeNick(&bot.FilterNicks, nick)
-	if !removedIn && !removedOut {
+	if !UnscreenNick(ctx.GetConfig(), nick, ctx.GetSource(), ctx.GetLogger()) {
 		ctx.Reply(fmt.Sprintf("%s wasn't screened", nick))
 		return
 	}
-	PersistScreening(bot.ScreenNicks, bot.FilterNicks)
-	ctx.GetLogger().Info("screen_removed", "nick", nick)
 	ctx.Reply(fmt.Sprintf("No longer screening %s", nick))
 }
 

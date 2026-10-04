@@ -67,6 +67,8 @@ func (c *AdminCommand) addAdmin(ctx irc.ChatContextInterface, hostmask string) {
 		return
 	}
 
+	configMu.Lock()
+	defer configMu.Unlock()
 	cfg := ctx.GetConfig()
 
 	// Check if already exists
@@ -91,6 +93,8 @@ func (c *AdminCommand) removeAdmin(ctx irc.ChatContextInterface, hostmask string
 		return
 	}
 
+	configMu.Lock()
+	defer configMu.Unlock()
 	cfg := ctx.GetConfig()
 
 	// Find and remove

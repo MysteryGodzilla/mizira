@@ -37,6 +37,8 @@ func (c *SetCommand) Execute(ctx irc.ChatContextInterface) {
 		return
 	}
 
+	configMu.Lock()
+	defer configMu.Unlock()
 	if err := field.setter(cfg, value); err != nil {
 		ctx.Reply(err.Error())
 		return

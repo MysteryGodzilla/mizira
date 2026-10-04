@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"time"
 )
 
 // Mizira is what the console's own pages need from the bot, on top of upstream's services. The bot
@@ -23,6 +24,21 @@ type Mizira interface {
 	Tools() []string
 	// Thinking reports whether the model is asked to reason before answering.
 	Thinking() bool
+
+	// The channel conversation on each network: ~reset and ~recap clear.
+	Conversations() []ConversationView
+	ResetConversation(network, by string) (ResetView, error)
+	ClearRecap(network, by string) (bool, error)
+
+	// ~ignore, ~screen and ~suspicion. A refusal's error is the reason, shown as is.
+	Ignores() []IgnoreView
+	Ignore(network, nick string, d time.Duration, reason, by string) (time.Time, error)
+	Unignore(network, nick, by string) bool
+	Screened() ScreenView
+	Screen(network, nick, by string) (dropped int, err error)
+	Unscreen(nick, by string) bool
+	Suspicion() (scores []ScoreView, quarantineAt float64)
+	ClearSuspicion(network, key, by string) bool
 }
 
 // WithMizira adds the console's own pages. Without it the server is upstream's page as it was.
@@ -39,6 +55,7 @@ func (s *Server) mzRoutes(api *http.ServeMux) {
 	api.HandleFunc("GET /features", s.features)
 	api.HandleFunc("GET /mizira/state", s.mizState)
 	api.HandleFunc("PUT /mizira/state", s.setMizState)
+	s.mzPeopleRoutes(api)
 }
 
 type feature struct {

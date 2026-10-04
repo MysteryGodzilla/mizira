@@ -36,6 +36,10 @@ type runtimeOverrides struct {
 
 var overridesMu sync.Mutex
 
+// configMu serialises changes to the live configuration. The ~ commands and the operator console
+// both change it; two changes must not interleave. Readers don't take it.
+var configMu sync.Mutex
+
 // defaultModel is the model config.yml names, captured before any persisted override is layered on
 // top.
 var (

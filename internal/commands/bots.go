@@ -34,6 +34,8 @@ func (c *BotsCommand) Execute(ctx irc.ChatContextInterface) {
 		return
 	}
 	adding := args[1] == "add"
+	configMu.Lock()
+	defer configMu.Unlock()
 
 	var list *[]string
 	var value string

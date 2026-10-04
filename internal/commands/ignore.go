@@ -5,6 +5,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -56,25 +57,16 @@ func (c *IgnoreCommand) Execute(ctx irc.ChatContextInterface) {
 	}
 	reason := strings.Join(rest, " ")
 
-	// Admins are exempt from the ignore filter, so an entry for one would silently do nothing.
-	if isAdminNick(ctx, nick) {
+	expiry, err := IgnoreNick(ctx.GetConfig(), ctx.GetNetwork(), ctx.GetBotNick(), nick, duration, reason,
+		ctx.GetSource(), ctx.GetRequestID(), ctx.GetLogger())
+	switch {
+	case errors.Is(err, ErrIsAdmin):
 		ctx.Reply(fmt.Sprintf("%s is an admin - admins are exempt from ignore", nick))
 		return
-	}
-	if strings.EqualFold(nick, ctx.GetBotNick()) {
+	case errors.Is(err, ErrIsSelf):
 		ctx.Reply("Refusing to ignore myself")
 		return
 	}
-
-	expiry := core.Ignores().AddWithInfo(ctx.GetNetwork(), nick, duration, core.IgnoreInfo{
-		Kind:   core.IgnoreByAdmin,
-		By:     ctx.GetSource(),
-		Reason: reason,
-	})
-	// An ignore that leaves their current request running would answer them
-	// one more time after being told they were ignored.
-	core.Requests().CancelSource(nick, ctx.GetRequestID())
-	ctx.GetLogger().Info("ignore_added", "nick", nick, "duration", duration.String(), "until", expiry.UTC(), "reason", reason)
 	ctx.Reply(fmt.Sprintf("Ignoring %s for %s (until %s UTC)",
 		nick, duration, expiry.UTC().Format("2006-01-02 15:04")))
 }
@@ -95,8 +87,7 @@ func (c *UnignoreCommand) Execute(ctx irc.ChatContextInterface) {
 }
 
 func removeIgnore(ctx irc.ChatContextInterface, nick string) {
-	if core.Ignores().Remove(ctx.GetNetwork(), nick) {
-		ctx.GetLogger().Info("ignore_removed", "nick", nick)
+	if UnignoreNick(ctx.GetNetwork(), nick, ctx.GetSource(), ctx.GetLogger()) {
 		ctx.Reply(fmt.Sprintf("No longer ignoring %s", nick))
 		return
 	}
@@ -155,17 +146,7 @@ func formatRemaining(d time.Duration) string {
 	return fmt.Sprintf("%dm", int(d.Minutes()))
 }
 
-// isAdminNick reports whether nick belongs to a configured admin, by
-// matching the nick portion of each admin hostmask (nick!ident@host).
+// isAdminNick reports whether nick belongs to a configured admin.
 func isAdminNick(ctx irc.ChatContextInterface, nick string) bool {
-	for _, mask := range ctx.GetConfig().Bot.Admins {
-		adminNick, _, found := strings.Cut(mask, "!")
-		if !found {
-			adminNick = mask
-		}
-		if strings.EqualFold(adminNick, nick) {
-			return true
-		}
-	}
-	return false
+	return isAdmin(ctx.GetConfig(), nick)
 }

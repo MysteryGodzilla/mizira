@@ -37,8 +37,7 @@ func (c *RecapCommand) Execute(ctx irc.ChatContextInterface) {
 			ctx.Reply("usage: +recap | +recap clear")
 			return
 		}
-		if db.ClearRecap(key) {
-			ctx.GetLogger().Info("recap_cleared", "key", key, "by", ctx.GetSource())
+		if cleared, _ := ClearRecap(key, ctx.GetSource(), ctx.GetLogger()); cleared {
 			ctx.Reply("recap cleared.")
 		} else {
 			ctx.Reply("there is no recap to clear.")

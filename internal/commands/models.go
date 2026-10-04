@@ -91,6 +91,8 @@ func (c *ModelsCommand) Execute(ctx irc.ChatContextInterface) {
 		value = prefix + "/" + canonical
 	}
 
+	configMu.Lock()
+	defer configMu.Unlock()
 	field := configFields["model"]
 	if err := field.setter(cfg, value); err != nil {
 		ctx.Reply(err.Error())
