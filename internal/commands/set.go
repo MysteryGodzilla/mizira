@@ -47,5 +47,7 @@ func (c *SetCommand) Execute(ctx irc.ChatContextInterface) {
 	}
 
 	ctx.Reply(fmt.Sprintf("%s set to: %s", param, field.getter(cfg)))
-	ctx.GetSession().Clear()
+	if ClearsHistory(param) {
+		ctx.GetSession().Clear()
+	}
 }

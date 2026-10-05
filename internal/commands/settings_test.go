@@ -10,7 +10,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alexschlessinger/pollytool/messages"
+	"github.com/alexschlessinger/pollytool/sessions"
+
 	"B4reMetal/metald/internal/config"
+	"B4reMetal/metald/internal/core"
 	mocktest "B4reMetal/metald/internal/testing"
 )
 
@@ -111,5 +115,32 @@ func TestToolSwitchesLayerOverConfig(t *testing.T) {
 	ClearToolSwitches()
 	if on, off := ToolOverrides(); len(on)+len(off) != 0 {
 		t.Errorf("after clear: %v %v", on, off)
+	}
+}
+
+// ~set wipes the conversation only for a new model or prompt; a new prompt reaches it either way.
+func TestSetKeepsHistoryExceptModelAndPrompt(t *testing.T) {
+	cfg := settingsCfg(t)
+	db, err := core.Context()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sys := mocktest.NewMockSystem()
+	sys.SessionStore = core.NewPersistentSessionStore(db, &sessions.Metadata{SystemPrompt: cfg.Bot.Prompt})
+	session, _ := sys.SessionStore.Get("net/#setkeeps")
+	session.AddMessage(messages.ChatMessage{Role: messages.MessageRoleUser, Content: "(nick:bob) hi"})
+	run := func(args ...string) {
+		ctx := mocktest.NewMockContext().WithConfig(cfg).WithSystem(sys).WithSession(session).WithAdmin(true).WithArgs(args...)
+		(&SetCommand{}).Execute(ctx)
+	}
+
+	run("+set", "maxreplylines", "7")
+	if len(session.GetHistory()) != 2 {
+		t.Errorf("history after ~set maxreplylines = %d messages, want it kept", len(session.GetHistory()))
+	}
+	run("+set", "prompt", "you are a test bot, version two")
+	h := session.GetHistory()
+	if len(h) != 1 || h[0].Content != "you are a test bot, version two" {
+		t.Errorf("history after ~set prompt = %+v, want just the new prompt", h)
 	}
 }

@@ -33,7 +33,7 @@ export const META: Record<string, Meta> = {
   sessionduration: { group: "Timing", kind: "duration", help: "Idle time before the conversation folds into the recap." },
   apitimeout: { group: "Timing", kind: "duration", help: "How long one model call may take." },
 
-  model: { group: "Model", kind: "text", help: "The model asked for (as ~models switches)." },
+  model: { group: "Model", kind: "text", help: "The model asked for (as ~models switches). Changing it clears the channel conversation." },
   temperature: { group: "Model", kind: "number", help: "Sampling temperature." },
   thinkingeffort: { group: "Model", kind: "choice", choices: ["none", "off", "low", "medium", "high"],
     help: "How much she reasons first. Checked against the model server." },

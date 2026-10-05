@@ -44,7 +44,7 @@ func secretSetting(key string) bool {
 
 // consoleReadOnly are settings shown but not changed from the console.
 var consoleReadOnly = []string{
-	"prompt", // ~set prompt doesn't reach existing conversations yet (T13 review note 3)
+	"prompt", // many lines long: edited in config.yml, or with ~set prompt
 	// The API key goes wherever these point, so a page that could change them could send it away.
 	"openaiurl", "ollamaurl",
 }
@@ -108,8 +108,14 @@ func applySetting(cfg *config.Configuration, sys core.System, key, value string,
 	}
 	configMu.Lock()
 	defer configMu.Unlock()
+	old := field.getter(cfg)
 	if err := field.setter(cfg, value); err != nil {
 		return err
+	}
+	if key == "prompt" && sys != nil {
+		if store, ok := sys.GetSessionStore().(interface{ SetSystemPrompt(old, prompt string) int }); ok {
+			log.Info("prompt_applied", "conversations", store.SetSystemPrompt(old, cfg.Bot.Prompt))
+		}
 	}
 	var warn error
 	if sys != nil && (strings.Contains(key, "key") || strings.Contains(key, "url") || strings.Contains(key, "model")) {
@@ -121,6 +127,10 @@ func applySetting(cfg *config.Configuration, sys core.System, key, value string,
 	PersistSet(key, value)
 	return warn
 }
+
+// ClearsHistory reports whether a change to key wipes the conversation: a new model or prompt
+// shouldn't carry on from turns written under the old one. Other settings keep it.
+func ClearsHistory(key string) bool { return key == "model" || key == "prompt" }
 
 // ErrLLMNotUpdated: the value was saved, but the model client couldn't be rebuilt with it.
 var ErrLLMNotUpdated = errors.New("saved, but the model client didn't update")

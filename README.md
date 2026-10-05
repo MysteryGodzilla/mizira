@@ -214,7 +214,7 @@ Commands start with the command prefix, `+` by default (`commandprefix: "!"` to 
 | `+tools` | | list loaded tools |
 | `+tools load <spec>` / `+tools rm <pattern>` | yes | load or unload a tool |
 | `+tools restrict <pattern>` / `+tools unrestrict <pattern>` | yes | make tools admin-only, or lift that |
-| `+get <key>` / `+set <key> <value>` | yes | read or change a setting |
+| `+get <key>` / `+set <key> <value>` | yes | read or change a setting; changing `model` or `prompt` clears this channel's history, other settings keep it. A new `prompt` reaches every conversation not running a `+prompt` persona |
 | `+models` / `+models <name>` | yes | list the models an OpenAI-compatible backend (`openaiurl`) serves, or switch to one |
 | `+backend` | yes | check that the OpenAI-compatible backend answers |
 | `+admins` / `+admins add <hostmask>` / `+admins remove <hostmask>` | yes | manage admins |

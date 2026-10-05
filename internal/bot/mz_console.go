@@ -265,11 +265,24 @@ func (c console) Settings() []admin.SettingView {
 }
 
 func (c console) SetSetting(key, value, by string) (admin.SettingChange, error) {
-	return settingChange(key)(commands.SetSetting(c.cfg, c.sys, key, value, by, core.GetLogger()))
+	return c.clearIfNeeded(settingChange(key)(commands.SetSetting(c.cfg, c.sys, key, value, by, core.GetLogger())))
 }
 
 func (c console) ResetSetting(key, by string) (admin.SettingChange, error) {
-	return settingChange(key)(commands.ResetSetting(c.cfg, c.sys, key, by, core.GetLogger()))
+	return c.clearIfNeeded(settingChange(key)(commands.ResetSetting(c.cfg, c.sys, key, by, core.GetLogger())))
+}
+
+// clearIfNeeded wipes each channel conversation after a change that ~set would wipe it for.
+func (c console) clearIfNeeded(change admin.SettingChange, err error) (admin.SettingChange, error) {
+	if err != nil || !commands.ClearsHistory(change.Key) {
+		return change, err
+	}
+	for _, n := range c.nets {
+		if session, _, serr := c.channelSession(n); serr == nil {
+			session.Clear()
+		}
+	}
+	return change, err
 }
 
 // settingChange sorts a saved-with-a-warning result from a refusal.
