@@ -44,7 +44,7 @@ var folding sync.Map
 func historyTokens(msgs []messages.ChatMessage) int {
 	n := 0
 	for _, m := range msgs {
-		n += sessions.EstimateTokens(m)
+		n += core.EstimateTokens(m)
 	}
 	return n
 }
@@ -65,7 +65,7 @@ func cutForSize(convo []messages.ChatMessage, keep int) int {
 		if total <= keep {
 			return nextTurnStart(convo, i)
 		}
-		total -= sessions.EstimateTokens(m)
+		total -= core.EstimateTokens(m)
 	}
 	return len(convo)
 }

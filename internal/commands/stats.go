@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"B4reMetal/metald/internal/core"
 	"B4reMetal/metald/internal/irc"
 
 	"github.com/alexschlessinger/pollytool/messages"
-	"github.com/alexschlessinger/pollytool/sessions"
 )
 
 // StatsCommand handles the +stats command for showing session statistics
@@ -29,7 +29,7 @@ func (c *StatsCommand) Execute(ctx irc.ChatContextInterface) {
 	historySize := 0
 	for _, msg := range history {
 		if msg.Role != messages.MessageRoleSystem {
-			historySize += sessions.EstimateTokens(msg)
+			historySize += core.EstimateTokens(msg)
 		}
 	}
 	maxContext := ctx.GetConfig().Session.MaxContext
@@ -52,7 +52,7 @@ func (c *StatsCommand) Execute(ctx irc.ChatContextInterface) {
 			totalOutputTokens += output
 		} else {
 			// Using estimation fallback
-			estimated := sessions.EstimateTokens(msg)
+			estimated := core.EstimateTokens(msg)
 			totalEstimated += estimated
 		}
 

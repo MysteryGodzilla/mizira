@@ -92,7 +92,9 @@ func (c console) Conversations() []admin.ConversationView {
 		v := admin.ConversationView{Network: n.Name, Channel: n.Channel, Messages: len(history),
 			MaxContext: c.cfg.Session.MaxContext, LastUsed: session.GetLastUsed().Unix(), Recent: []admin.LineView{}}
 		for _, m := range history {
-			v.Tokens += sessions.EstimateTokens(m)
+			if m.Role != messages.MessageRoleSystem { // measured as the fold measures it
+				v.Tokens += core.EstimateTokens(m)
+			}
 		}
 		for _, m := range history[max(0, len(history)-recentLines):] {
 			if m.Role != messages.MessageRoleSystem {
