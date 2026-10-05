@@ -26,6 +26,8 @@ type PersistentSessionStore struct {
 	db       *ContextDB
 	wrappers sync.Map // key -> *PersistentSession
 	dirty    sync.Map // key -> struct{}
+	// prompt replaces defaults.SystemPrompt once the operator's prompt changes at runtime.
+	prompt sync.Map // "" -> string
 }
 
 // PersistentSession is a session whose changes are queued for writing.
@@ -63,6 +65,9 @@ func (s *PersistentSessionStore) Get(key string) (sessions.Session, error) {
 	actual, loaded := s.wrappers.LoadOrStore(key, w)
 	if loaded {
 		return actual.(*PersistentSession), nil
+	}
+	if p, ok := s.prompt.Load(""); ok {
+		withPrompt(inner, p.(string))
 	}
 
 	for _, m := range s.load(key) {
