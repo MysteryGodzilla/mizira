@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -250,42 +251,59 @@ func clipRecap(recap string, max int) string {
 	return strings.TrimSpace(cut)
 }
 
+// FoldResult is what a fold did: messages summarised into the recap, messages kept verbatim.
+type FoldResult struct {
+	Folded, Kept, RecapChars int
+}
+
+var (
+	ErrFoldBusy      = errors.New("a fold is already running")
+	ErrNothingToFold = errors.New("nothing to fold")
+	ErrFoldPersona   = errors.New("a custom persona is active")
+	ErrFoldChanged   = errors.New("the conversation changed while folding")
+)
+
 // fold summarises the first cut(convo) messages of a session into its recap and removes them. The
 // summary is written without holding the commit lock; the history is only replaced if it still starts
 // with the messages that were summarised.
-func fold(cfg *config.Configuration, session sessions.Session, reason string, cut func([]messages.ChatMessage) int) {
+func fold(cfg *config.Configuration, session sessions.Session, reason string, cut func([]messages.ChatMessage) int) (FoldResult, error) {
 	key := session.GetName()
 	// A custom persona is a supervised test; folding its turns would carry it into the recap, which
 	// outlives +reset. hardTrim still bounds the history meanwhile.
 	if core.Prompts().Active(key) {
 		hardTrim(cfg, session)
-		return
+		return FoldResult{}, ErrFoldPersona
 	}
 	if _, busy := folding.LoadOrStore(key, true); busy {
-		return
+		return FoldResult{}, ErrFoldBusy
 	}
 	defer folding.Delete(key)
 
 	db, err := core.Context()
 	if err != nil {
 		slog.Warn("recap_unavailable", "error", err.Error())
-		return
+		return FoldResult{}, err
 	}
 
 	_, convo := splitSystem(session.GetHistory())
 	n := cut(convo)
 	if n <= 0 {
-		return
+		return FoldResult{}, ErrNothingToFold
 	}
 	old := append([]messages.ChatMessage(nil), convo[:n]...)
 
 	start := time.Now()
 	transcript := renderTranscript(old, cfg.Bot.ScreenNicks, []string{cfg.Bot.MemoryFrame, cfg.Bot.RelevantFrame})
-	recap, err := summarize(cfg, db.Recap(key), transcript)
+	var recap string
+	gateCtx, cancel := context.WithTimeout(context.Background(), recapTimeout)
+	if !core.WithModelGate(gateCtx, func() { recap, err = summarize(cfg, db.Recap(key), transcript) }) {
+		err = errors.New("the model stayed busy")
+	}
+	cancel()
 	if err != nil {
 		slog.Warn("recap_failed", "key", key, "reason", reason, "error", err.Error())
 		hardTrim(cfg, session)
-		return
+		return FoldResult{}, err
 	}
 
 	mu := core.CommitLock(session)
@@ -294,17 +312,17 @@ func fold(cfg *config.Configuration, session sessions.Session, reason string, cu
 	_, cur := splitSystem(session.GetHistory())
 	if len(cur) < n {
 		slog.Info("recap_discarded", "key", key, "why", "history changed")
-		return
+		return FoldResult{}, ErrFoldChanged
 	}
 	for i := range old {
 		if !sameMessage(old[i], cur[i]) {
 			slog.Info("recap_discarded", "key", key, "why", "history changed")
-			return
+			return FoldResult{}, ErrFoldChanged
 		}
 	}
 	if err := db.SetRecap(key, recap); err != nil {
 		slog.Warn("recap_save_failed", "key", key, "error", err.Error())
-		return
+		return FoldResult{}, err
 	}
 	rest := append([]messages.ChatMessage(nil), cur[n:]...)
 	session.Clear()
@@ -314,6 +332,13 @@ func fold(cfg *config.Configuration, session sessions.Session, reason string, cu
 	slog.Info("recap_folded", "key", key, "reason", reason, "messages", n, "kept", len(rest),
 		"recap_chars", len(recap), "duration_ms", time.Since(start).Milliseconds())
 	go proposeSelfNotes(cfg, key, transcript)
+	return FoldResult{Folded: n, Kept: len(rest), RecapChars: len(recap)}, nil
+}
+
+// FoldNow folds a conversation on an operator's request, keeping the same recent turns an idle fold
+// keeps.
+func FoldNow(cfg *config.Configuration, session sessions.Session) (FoldResult, error) {
+	return fold(cfg, session, "manual", func(c []messages.ChatMessage) int { return cutKeepTurns(c, idleKeepTurns) })
 }
 
 // hardTrim drops the oldest turns without a summary once history is well past maxcontext, so a
