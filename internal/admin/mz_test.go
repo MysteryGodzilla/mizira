@@ -21,6 +21,7 @@ type fakeMizira struct {
 
 	persona   string
 	recap     bool
+	foldErr   error
 	ignores   []IgnoreView
 	screened  []string
 	scores    []ScoreView
@@ -60,6 +61,13 @@ func (f *fakeMizira) ClearRecap(network, by string) (bool, error) {
 	had := f.recap
 	f.recap = false
 	return had, nil
+}
+func (f *fakeMizira) FoldConversation(network, by string) (FoldView, error) {
+	if f.foldErr != nil {
+		return FoldView{}, f.foldErr
+	}
+	f.by = append(f.by, by)
+	return FoldView{Folded: 8, Kept: 12, RecapChars: 300}, nil
 }
 func (f *fakeMizira) Ignores() []IgnoreView { return f.ignores }
 func (f *fakeMizira) Ignore(network, nick string, d time.Duration, reason, by string) (time.Time, error) {
@@ -143,6 +151,7 @@ func TestMiziraEndpointsNeedTheToken(t *testing.T) {
 	r, m := newMzRig(t)
 	for _, c := range [][2]string{{"GET", "/api/v1/features"}, {"GET", "/api/v1/mizira/state"}, {"PUT", "/api/v1/mizira/state"},
 		{"GET", "/api/v1/conversation"}, {"POST", "/api/v1/conversation/reset"}, {"DELETE", "/api/v1/recap?network=net"},
+		{"POST", "/api/v1/conversation/fold"},
 		{"GET", "/api/v1/people"}, {"POST", "/api/v1/ignores"}, {"DELETE", "/api/v1/ignores?network=net&nick=bob"},
 		{"POST", "/api/v1/screens"}, {"DELETE", "/api/v1/screens?nick=bob"}, {"DELETE", "/api/v1/suspicion?network=net&key=bob"},
 		{"GET", "/api/v1/bots"}, {"POST", "/api/v1/bots"}, {"DELETE", "/api/v1/bots?kind=nick&value=bob"},
@@ -275,6 +284,21 @@ func TestResetAndRecapFromTheConsole(t *testing.T) {
 	}
 	if code, _ := r.call(t, "DELETE", "/api/v1/recap?network=net", "s3cret", ""); code != http.StatusConflict {
 		t.Errorf("clear an empty recap = %d, want 409", code)
+	}
+}
+
+func TestFoldFromTheConsole(t *testing.T) {
+	r, m := newMzRig(t)
+	if code, out := r.call(t, "POST", "/api/v1/conversation/fold", "s3cret", `{"network":"net"}`); code != http.StatusOK || out["folded"] != float64(8) {
+		t.Errorf("fold = %d %v", code, out)
+	}
+	m.foldErr = FoldRefused{Reason: "nothing to fold"}
+	if code, out := r.call(t, "POST", "/api/v1/conversation/fold", "s3cret", `{"network":"net"}`); code != http.StatusConflict || out["error"] != "nothing to fold" {
+		t.Errorf("refused fold = %d %v", code, out)
+	}
+	m.foldErr = errors.New("connection refused")
+	if code, _ := r.call(t, "POST", "/api/v1/conversation/fold", "s3cret", `{"network":"net"}`); code != http.StatusBadGateway {
+		t.Errorf("failed fold = %d, want 502", code)
 	}
 }
 

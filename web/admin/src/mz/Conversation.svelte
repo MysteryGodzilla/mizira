@@ -23,6 +23,21 @@
     }
   }
 
+  let folding = $state("");
+  let folded = $state("");
+  function fold(c: Conversation) {
+    if (!confirm(`Fold ${where(c)} now?
+
+Everything but the last 6 turns is summarised into the recap, then self-notes are proposed, as after any fold. It waits for the model, so it can take a minute. Same as ~recap fold.`)) return;
+    folding = c.network;
+    folded = "";
+    void mz.act(async () => {
+      const r = await mz.api.fold(c.network);
+      folded = `Folded ${r.folded} messages into the recap; kept the last ${r.kept}.`;
+      await poll.refresh();
+    }, `folded ${where(c)}`).finally(() => (folding = ""));
+  }
+
   function clearRecap(c: Conversation) {
     if (confirm(`Clear the recap of ${where(c)}?\n\nIt's the summary of everything older than the history and can't be brought back. Same as ~recap clear.`)) {
       void mz.act(async () => { await mz.api.clearRecap(c.network); await poll.refresh(); }, `cleared the recap of ${where(c)}`);
@@ -56,8 +71,10 @@
 
     <Card title="Recap">
       {#snippet actions()}
+        <button onclick={() => fold(c)} disabled={folding !== ""}>{folding === c.network ? "Folding…" : "Fold now"}</button>
         {#if c.recap}<button class="danger" onclick={() => clearRecap(c)}>Clear recap</button>{/if}
       {/snippet}
+      {#if folded}<p class="sub">{folded}</p>{/if}
       {#if c.recap}
         <p class="sub">{c.recap.length} characters, sent with every request in this channel.</p>
         <blockquote class="recap">{c.recap}</blockquote>

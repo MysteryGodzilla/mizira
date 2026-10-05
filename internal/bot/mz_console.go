@@ -131,6 +131,22 @@ func (c console) ClearRecap(network, by string) (bool, error) {
 	return commands.ClearRecap(core.ScopeKey(n.Name, n.Channel), by, core.GetLogger())
 }
 
+func (c console) FoldConversation(network, by string) (admin.FoldView, error) {
+	n, ok := c.network(network)
+	if !ok {
+		return admin.FoldView{}, errors.New("no such network")
+	}
+	session, _, err := c.channelSession(n)
+	if err != nil {
+		return admin.FoldView{}, err
+	}
+	r, err := commands.FoldConversation(c.cfg, session, by, core.GetLogger())
+	if why := commands.FoldRefusal(err); why != "" {
+		return admin.FoldView{}, admin.FoldRefused{Reason: why}
+	}
+	return admin.FoldView{Folded: r.Folded, Kept: r.Kept, RecapChars: r.RecapChars}, err
+}
+
 func (c console) Ignores() []admin.IgnoreView {
 	out := []admin.IgnoreView{}
 	for _, n := range c.nets {

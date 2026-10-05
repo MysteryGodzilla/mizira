@@ -1,5 +1,5 @@
 import { Api } from "../lib/api";
-import type { Bots, Conversation, Feature, Memory, People, Reset, RunState, Safety, SelfNote, Setting, SettingChange, Subject, Tool } from "./types";
+import type { Bots, Conversation, Feature, Fold, Memory, People, Reset, RunState, Safety, SelfNote, Setting, SettingChange, Subject, Tool } from "./types";
 
 const q = (params: Record<string, string>) => new URLSearchParams(params).toString();
 
@@ -12,6 +12,7 @@ export class MzApi extends Api {
 
   conversations = () => this.call<{ conversations: Conversation[] }>("GET", "conversation").then((r) => r.conversations);
   reset = (network: string) => this.call<Reset>("POST", "conversation/reset", { network });
+  fold = (network: string) => this.call<Fold>("POST", "conversation/fold", { network });
   clearRecap = (network: string) => this.call<{ cleared: boolean }>("DELETE", `recap?${q({ network })}`);
 
   people = () => this.call<People>("GET", "people");

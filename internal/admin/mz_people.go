@@ -6,6 +6,7 @@ package admin
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"slices"
@@ -43,6 +44,18 @@ type ResetView struct {
 	Cancelled      int    `json:"cancelled"`
 }
 
+// FoldView is what a fold on request did.
+type FoldView struct {
+	Folded     int `json:"folded"`
+	Kept       int `json:"kept"`
+	RecapChars int `json:"recapChars"`
+}
+
+// FoldRefused is a fold that didn't run, with the reason to show.
+type FoldRefused struct{ Reason string }
+
+func (e FoldRefused) Error() string { return e.Reason }
+
 type IgnoreView struct {
 	Network string `json:"network"`
 	Nick    string `json:"nick"`
@@ -73,6 +86,7 @@ func (s *Server) mzPeopleRoutes(api *http.ServeMux) {
 	api.HandleFunc("GET /conversation", s.conversations)
 	api.HandleFunc("POST /conversation/reset", s.resetConversation)
 	api.HandleFunc("DELETE /recap", s.clearRecap)
+	api.HandleFunc("POST /conversation/fold", s.foldConversation)
 	api.HandleFunc("GET /people", s.people)
 	api.HandleFunc("POST /ignores", s.addIgnore)
 	api.HandleFunc("DELETE /ignores", s.removeIgnore)
@@ -145,6 +159,29 @@ func (s *Server) clearRecap(w http.ResponseWriter, r *http.Request) {
 	default:
 		s.log.Info("console_action", "action", "recap_clear", "network", n, "by", by)
 		respond(w, http.StatusOK, map[string]any{"cleared": true})
+	}
+}
+
+// foldConversation can take a minute or more: the summary waits for the model like any reply.
+func (s *Server) foldConversation(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Network string `json:"network"`
+	}
+	if !decode(w, r, &in) || !s.knownNetwork(w, in.Network) {
+		return
+	}
+	by := s.who(r)
+	out, err := s.mz.FoldConversation(in.Network, by)
+	var refused FoldRefused
+	switch {
+	case errors.As(err, &refused):
+		fail(w, http.StatusConflict, refused.Reason)
+	case err != nil:
+		fail(w, http.StatusBadGateway, "the fold failed: the recap model call didn't work (see the log)")
+	default:
+		s.log.Info("console_action", "action", "recap_fold", "network", in.Network, "by", by,
+			"folded", out.Folded, "kept", out.Kept)
+		respond(w, http.StatusOK, out)
 	}
 }
 

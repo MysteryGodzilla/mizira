@@ -12,6 +12,8 @@ export interface Conversation {
   persona: string; personaBy: string; recap: string; recent: Line[];
 }
 
+export interface Fold { folded: number; kept: number; recapChars: number }
+
 export interface Reset { personaCleared: boolean; modelRestored: string; cancelled: number }
 
 export interface Ignore { network: string; nick: string; until: number; kind: string; by: string; reason: string }

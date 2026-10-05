@@ -29,6 +29,7 @@ type Mizira interface {
 	Conversations() []ConversationView
 	ResetConversation(network, by string) (ResetView, error)
 	ClearRecap(network, by string) (bool, error)
+	FoldConversation(network, by string) (FoldView, error)
 
 	// ~ignore, ~screen and ~suspicion. A refusal's error is the reason, shown as is.
 	Ignores() []IgnoreView
