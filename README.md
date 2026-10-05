@@ -202,7 +202,7 @@ Commands start with the command prefix, `+` by default (`commandprefix: "!"` to 
 | `+goal <objective> [done when: <criteria>]` | quota for non-admins | work on something in rounds until a reviewer confirms the criteria are met; `+goal status <id>` shows its round, checklist and last review, `+goal nudge <id> <hint>` steers its next round, `+goal accept <id>` starts a goal the bot proposed, `+goal cancel <id>` stops it |
 | `+schedule in <30m\|2h\|1d> <what to do>` | quota for non-admins | run something once, later |
 | `+schedule every <2h> <...>` / `+schedule daily <HH:MM> <...>` | admin | run something on repeat (at most every 15 minutes; times are UTC); `+schedule cancel <id>` stops it |
-| `+recap` / `+recap clear` | admin | post this channel's recap as a paste (inline if no paste tool is loaded), or delete it |
+| `+recap` / `+recap clear` / `+recap fold` | admin | post this channel's recap as a paste (inline if no paste tool is loaded), delete it, or fold the older conversation into it now (keeps the last 6 turns) |
 | `+suspicion` / `+suspicion <nick>` | anyone | show the decaying per-speaker suspicion scores on this network, highest first, or one nick's score |
 | `+np` | anyone | say what the web radio is playing (reads `RADIO_API_URL` / `RADIO_PAGE_URL`) |
 | `+skip` | anyone | skip the web radio's current track; one skip per 20 seconds across everyone (reads `RADIO_API_URL` / `RADIO_TOKEN`) |

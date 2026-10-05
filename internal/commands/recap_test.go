@@ -52,3 +52,14 @@ func TestResetKeepsRecap(t *testing.T) {
 		t.Error("+reset wiped the recap")
 	}
 }
+
+// +recap fold says why nothing happened rather than staying silent.
+func TestRecapFoldShortConversation(t *testing.T) {
+	sys := mocktest.NewMockSystem()
+	session, _ := sys.SessionStore.Get("net/#recapfold")
+	ctx := mocktest.NewMockContext().WithSystem(sys).WithSession(session).WithAdmin(true).WithArgs("+recap", "fold")
+	(&RecapCommand{}).Execute(ctx)
+	if got := strings.Join(ctx.Replies, "\n"); !strings.Contains(got, "nothing to fold") {
+		t.Errorf("replies = %q", got)
+	}
+}

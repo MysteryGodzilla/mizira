@@ -17,6 +17,7 @@ import (
 
 	"B4reMetal/metald/internal/config"
 	"B4reMetal/metald/internal/core"
+	"B4reMetal/metald/internal/llm"
 )
 
 var (
@@ -151,4 +152,11 @@ func ClearRecap(key, by string, log *slog.Logger) (bool, error) {
 	}
 	log.Info("recap_cleared", "key", key, "by", by)
 	return true, nil
+}
+
+// FoldConversation is "+recap fold": the older turns go into the recap now, without waiting for the
+// conversation to go idle or outgrow maxcontext.
+func FoldConversation(cfg *config.Configuration, session sessions.Session, by string, log *slog.Logger) (llm.FoldResult, error) {
+	log.Info("recap_fold_requested", "key", session.GetName(), "by", by)
+	return llm.FoldNow(cfg, session)
 }

@@ -5,6 +5,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -16,7 +17,8 @@ import (
 // recapInline bounds a recap shown in the channel when there is no paste tool.
 const recapInline = 600
 
-// RecapCommand shows or clears this channel's recap: the running summary of its older conversation.
+// RecapCommand shows, clears or folds this channel's recap: the running summary of its older
+// conversation. It skips the request lock; a fold takes the model gate itself.
 type RecapCommand struct{}
 
 func (c *RecapCommand) Name() string    { return "+recap" }
@@ -33,8 +35,14 @@ func (c *RecapCommand) Execute(ctx irc.ChatContextInterface) {
 	args := ctx.GetArgs()
 
 	if len(args) > 1 {
-		if strings.ToLower(args[1]) != "clear" {
-			ctx.Reply("usage: +recap | +recap clear")
+		switch strings.ToLower(args[1]) {
+		case "clear":
+		case "fold":
+			ctx.Reply("folding the older conversation into the recap...")
+			ctx.Reply(foldReply(FoldConversation(ctx.GetConfig(), ctx.GetSession(), ctx.GetSource(), ctx.GetLogger())))
+			return
+		default:
+			ctx.Reply("usage: +recap | +recap clear | +recap fold")
 			return
 		}
 		if cleared, _ := ClearRecap(key, ctx.GetSource(), ctx.GetLogger()); cleared {
@@ -63,6 +71,32 @@ func (c *RecapCommand) Execute(ctx irc.ChatContextInterface) {
 			ctx.Reply(line)
 		}
 	}
+}
+
+// foldReply says what "+recap fold" did.
+func foldReply(r llm.FoldResult, err error) string {
+	if err == nil {
+		return fmt.Sprintf("folded %d messages into the recap (%d chars); kept the last %d.", r.Folded, r.RecapChars, r.Kept)
+	}
+	if why := FoldRefusal(err); why != "" {
+		return why
+	}
+	return "the fold failed: the recap model call didn't work (see the log)."
+}
+
+// FoldRefusal says why a fold didn't run, or "" if it was tried and failed.
+func FoldRefusal(err error) string {
+	switch {
+	case errors.Is(err, llm.ErrNothingToFold):
+		return "nothing to fold: the conversation is no longer than the 6 turns a fold keeps."
+	case errors.Is(err, llm.ErrFoldPersona):
+		return "not folded: a custom persona is active (reset first)."
+	case errors.Is(err, llm.ErrFoldBusy):
+		return "a fold is already running for this channel."
+	case errors.Is(err, llm.ErrFoldChanged):
+		return "not folded: the conversation was reset or changed while I was summarising."
+	}
+	return ""
 }
 
 // pasteRecap posts the recap with the paste tool and returns its url, or "" if that is not possible.
