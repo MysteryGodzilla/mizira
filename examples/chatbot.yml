@@ -27,7 +27,7 @@ channel: '#metald'
 #   - "somebot"
 # botprefixes:
 #   - "[metalai]"
-# botreplylimit: 3
+# botreplylimit: 5
 # botcooldown: 10m
 
 # Most IRC lines one reply may post; anything longer is cut off (0 = no limit). Prompts can ask

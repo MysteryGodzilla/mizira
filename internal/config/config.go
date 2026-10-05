@@ -306,7 +306,7 @@ func GetFlags() []cli.Flag {
 		&cli.BoolFlag{Name: "ignoreprivate", Usage: "ignore direct/private messages entirely (no response, no commands)", Sources: src("ignoreprivate", "METALD_IGNOREPRIVATE")},
 		&cli.StringSliceFlag{Name: "botprefixes", Usage: "line prefixes that mark other bots' messages (e.g. '[metalai]')", Sources: src("botprefixes", "METALD_BOTPREFIXES")},
 		&cli.StringSliceFlag{Name: "botnicks", Usage: "nicks of bots that have their own account; all their lines count as bot lines", Sources: src("botnicks", "METALD_BOTNICKS")},
-		&cli.IntFlag{Name: "botreplylimit", Value: 3, Usage: "replies to other bots allowed in a row per channel before waiting for a human (0 = never reply to bots)", Sources: src("botreplylimit", "METALD_BOTREPLYLIMIT")},
+		&cli.IntFlag{Name: "botreplylimit", Value: 5, Usage: "replies to other bots allowed in a row per channel before waiting for a human (0 = never reply to bots)", Sources: src("botreplylimit", "METALD_BOTREPLYLIMIT")},
 		&cli.DurationFlag{Name: "botcooldown", Value: 10 * time.Minute, Usage: "quiet time after which the bot reply count resets", Sources: src("botcooldown", "METALD_BOTCOOLDOWN")},
 		&cli.BoolFlag{Name: "commandsneedname", Value: true, Usage: "commands only work when addressed by name, e.g. 'Mizira +help'", Sources: src("commandsneedname", "METALD_COMMANDSNEEDNAME")},
 		&cli.IntFlag{Name: "maxreplylines", Value: 4, Usage: "most IRC lines one reply may post; the rest is dropped (0 = no limit)", Sources: src("maxreplylines", "METALD_MAXREPLYLINES")},
