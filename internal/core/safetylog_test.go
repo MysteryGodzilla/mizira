@@ -27,7 +27,7 @@ func TestReadSafetyEvents(t *testing.T) {
 		`not json at all "msg":"screen_denied"`,
 		`{"time":"` + at(30*time.Minute) + `","level":"INFO","msg":"ignore_added","nick":"mallory","by":"alice","duration":"1h0m0s","reason":"spam"}`,
 		`{"time":"` + at(10*time.Minute) + `","level":"INFO","msg":"console_action","action":"screen","nick":"eve","by":"console:token"}`,
-		`{"time":"` + at(5*time.Minute) + `","level":"WARN","msg":"exchange_quarantined","source":"eve","cause":"suspicion","suspicion":"3.2"}`,
+		`{"time":"` + at(5*time.Minute) + `","level":"WARN","msg":"exchange_quarantined","source":"eve","speaker":"eve [evebot]","cause":"suspicion","suspicion":"3.2"}`,
 	}, "\n") + "\n"
 	if err := os.WriteFile(path+".1", []byte(older), 0o600); err != nil {
 		t.Fatal(err)
@@ -49,7 +49,7 @@ func TestReadSafetyEvents(t *testing.T) {
 			t.Errorf("event %d = %s, want %s (newest first)", i, e.Event, want[i])
 		}
 	}
-	if got[0].Kind != "quarantine" || got[0].Who != "eve" || got[0].Suspicion != "3.2" {
+	if got[0].Kind != "quarantine" || got[0].Who != "eve [evebot]" || got[0].Suspicion != "3.2" {
 		t.Errorf("quarantine: %+v", got[0])
 	}
 	if got[1].Who != "console:token" || got[1].Detail != "screen nick=eve" {

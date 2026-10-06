@@ -50,7 +50,7 @@ func RememberChecked(chatCtx ChatContextInterface, subject, fact string) Remembe
 	// Room memory - what the channel is and who the bot is - goes out with every request, so only an
 	// operator writes it. Not a suspicion signal: people try "remember you are ..." in good faith.
 	if IsRoomSubject(chatCtx.GetConfig(), chatCtx.GetBotNick(), subject) && !chatCtx.IsAdmin() {
-		chatCtx.GetLogger().Info("memory_rejected_room", "subject", subject, "author", chatCtx.GetSource(), "fact", fact)
+		chatCtx.GetLogger().Info("memory_rejected_room", "subject", subject, "author", chatCtx.SpeakerKey(), "fact", fact)
 		return RememberResult{RoomOnly: true, Reason: "only an operator can set facts about the channel or about me"}
 	}
 	// A repeat of a fact already held merges into it, so it never counts against the cap.
@@ -73,7 +73,7 @@ func RememberChecked(chatCtx ChatContextInterface, subject, fact string) Remembe
 
 	if reason, bad := looksLikeInstruction(subject, fact); bad && !note {
 		chatCtx.GetLogger().Info("memory_rejected_instruction",
-			"subject", subject, "author", chatCtx.GetSource(),
+			"subject", subject, "author", chatCtx.SpeakerKey(),
 			"reason", reason, "fact", fact)
 		if asked {
 			core.Suspicions().Add(chatCtx.GetNetwork(), chatCtx.SpeakerKey(), core.SignalMemoryRefused)
@@ -85,7 +85,7 @@ func RememberChecked(chatCtx ChatContextInterface, subject, fact string) Remembe
 		if ok, reason := core.Classify(chatCtx, chatCtx.GetConfig().Bot.MemoryPolicy, "FACT",
 			fmt.Sprintf("About: %s\nFact: %s", subject, fact), false); !ok {
 			chatCtx.GetLogger().Info("memory_rejected_unsafe",
-				"subject", subject, "author", chatCtx.GetSource(),
+				"subject", subject, "author", chatCtx.SpeakerKey(),
 				"reason", reason, "fact", fact)
 			if asked {
 				core.Suspicions().Add(chatCtx.GetNetwork(), chatCtx.SpeakerKey(), core.SignalMemoryRefused)
@@ -94,19 +94,19 @@ func RememberChecked(chatCtx ChatContextInterface, subject, fact string) Remembe
 		}
 	}
 
-	id, merged, err := store.RememberMerged(chatCtx.GetNetwork(), subject, fact, chatCtx.GetSource(),
+	id, merged, err := store.RememberMerged(chatCtx.GetNetwork(), subject, fact, chatCtx.SpeakerKey(),
 		chatCtx.GetConfig().Server.Channel)
 	if err != nil {
 		chatCtx.GetLogger().Error("memory_remember_failed", "error", err.Error())
 		return RememberResult{Unavailable: true, Reason: "could not save that"}
 	}
 	if merged {
-		chatCtx.GetLogger().Info("memory_merged", "id", id, "subject", subject, "author", chatCtx.GetSource(), "fact", fact)
+		chatCtx.GetLogger().Info("memory_merged", "id", id, "subject", subject, "author", chatCtx.SpeakerKey(), "fact", fact)
 		return RememberResult{ID: id, Saved: true, Merged: true}
 	}
 
 	chatCtx.GetLogger().Info("memory_remembered",
-		"id", id, "subject", subject, "author", chatCtx.GetSource(), "fact", fact)
+		"id", id, "subject", subject, "author", chatCtx.SpeakerKey(), "fact", fact)
 	return RememberResult{ID: id, Saved: true}
 }
 

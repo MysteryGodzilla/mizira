@@ -7,6 +7,7 @@ package core
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -146,7 +147,7 @@ func safetyEvent(rec map[string]any) (SafetyEvent, bool) {
 		return SafetyEvent{}, false
 	}
 	t, _ := time.Parse(time.RFC3339Nano, str("time"))
-	e := SafetyEvent{Time: t, Kind: kind, Event: msg, Who: str("source"), Channel: str("channel"), Suspicion: str("suspicion")}
+	e := SafetyEvent{Time: t, Kind: kind, Event: msg, Who: cmp.Or(str("speaker"), str("source")), Channel: str("channel"), Suspicion: str("suspicion")}
 	switch msg {
 	case "ignore_added":
 		e.Who, e.Detail = str("nick"), fmt.Sprintf("for %s by %s", str("duration"), str("by"))
