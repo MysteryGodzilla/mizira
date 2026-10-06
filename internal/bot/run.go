@@ -77,41 +77,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	}
 	go llm.RunChatLogPruner(ctx, cfg.Session.HistoryDays)
 
-	// Initialize command registry
-	cmdRegistry := commands.NewRegistry()
-	cmdRegistry.Register(&commands.SetCommand{})
-	cmdRegistry.Register(&commands.GetCommand{})
-	cmdRegistry.Register(commands.NewHelpCommand(cmdRegistry))
-	cmdRegistry.Register(&commands.VersionCommand{Version: "v" + Version})
-	cmdRegistry.Register(&commands.CompletionCommand{})
-	cmdRegistry.Register(&commands.ToolsCommand{})
-	cmdRegistry.Register(&commands.AdminCommand{})
-	cmdRegistry.Register(&commands.StatsCommand{})
-	cmdRegistry.Register(&commands.IgnoreCommand{})
-	cmdRegistry.Register(&commands.ScreenCommand{})
-	cmdRegistry.Register(&commands.UnscreenCommand{})
-	cmdRegistry.Register(&commands.UnignoreCommand{})
-	cmdRegistry.Register(&commands.ResetCommand{})
-	cmdRegistry.Register(&commands.BackendCommand{})
-	cmdRegistry.Register(&commands.ModelsCommand{})
-	cmdRegistry.Register(&commands.PromptCommand{})
-	cmdRegistry.Register(&commands.MemoriesCommand{})
-	cmdRegistry.Register(&commands.ForgetCommand{})
-	cmdRegistry.Register(&commands.RememberCommand{})
-	cmdRegistry.Register(&commands.RecallCommand{})
-	cmdRegistry.Register(&commands.BotsCommand{})
-	cmdRegistry.Register(&commands.PauseCommand{})
-	cmdRegistry.Register(&commands.ResumeCommand{})
-	cmdRegistry.Register(&commands.StopCommand{})
-	cmdRegistry.Register(&commands.RecapCommand{})
-	cmdRegistry.Register(&commands.SelfNotesCommand{})
-	cmdRegistry.Register(&commands.SuspicionCommand{})
-	cmdRegistry.Register(&commands.NowPlayingCommand{})
-	cmdRegistry.Register(&commands.SkipCommand{})
-	cmdRegistry.Register(&commands.TaskCommand{})
-	cmdRegistry.Register(&commands.TasksCommand{})
-	cmdRegistry.Register(&commands.GoalCommand{})
-	cmdRegistry.Register(&commands.ScheduleCommand{})
+	cmdRegistry := newCommandRegistry()
 
 	// Initialize behavior registry (order matters: passive watchers first, addressed last as fallback)
 	behaviorRegistry := behaviors.NewRegistry()
@@ -133,7 +99,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	}
 
 	adoptUnscoped(nets)
-	startAdmin(ctx, cfg, nets, sys)
+	startAdmin(ctx, cfg, nets, sys, cmdRegistry)
 
 	// Memories written before this bot knew about networks carry no network of their own.
 	if len(nets) > 0 && nets[0].Name != "" {
@@ -341,7 +307,7 @@ func checkAdminMasks(admins []string) {
 }
 
 // startAdmin serves the operator page when it is configured; without a token it stays off.
-func startAdmin(ctx context.Context, cfg *config.Configuration, nets []*config.ServerConfig, sys core.System) {
+func startAdmin(ctx context.Context, cfg *config.Configuration, nets []*config.ServerConfig, sys core.System, cmds *commands.Registry) {
 	if cfg.Bot.AdminListen == "" {
 		return
 	}
@@ -376,11 +342,50 @@ func startAdmin(ctx context.Context, cfg *config.Configuration, nets []*config.S
 		core.GetLogger().Error("admin_failed", "error", err.Error())
 		return
 	}
-	srv.WithMizira(console{cfg: cfg, sys: sys, nets: nets})
+	srv.WithMizira(console{cfg: cfg, sys: sys, nets: nets, cmds: cmds})
 	go func() {
 		core.GetLogger().Info("admin_listening", "addr", cfg.Bot.AdminListen)
 		if err := srv.Run(ctx, cfg.Bot.AdminListen); err != nil {
 			core.GetLogger().Error("admin_failed", "error", err.Error())
 		}
 	}()
+}
+
+// newCommandRegistry registers every + command.
+func newCommandRegistry() *commands.Registry {
+	r := commands.NewRegistry()
+	r.Register(&commands.SetCommand{})
+	r.Register(&commands.GetCommand{})
+	r.Register(commands.NewHelpCommand(r))
+	r.Register(&commands.VersionCommand{Version: "v" + Version})
+	r.Register(&commands.CompletionCommand{})
+	r.Register(&commands.ToolsCommand{})
+	r.Register(&commands.AdminCommand{})
+	r.Register(&commands.StatsCommand{})
+	r.Register(&commands.IgnoreCommand{})
+	r.Register(&commands.ScreenCommand{})
+	r.Register(&commands.UnscreenCommand{})
+	r.Register(&commands.UnignoreCommand{})
+	r.Register(&commands.ResetCommand{})
+	r.Register(&commands.BackendCommand{})
+	r.Register(&commands.ModelsCommand{})
+	r.Register(&commands.PromptCommand{})
+	r.Register(&commands.MemoriesCommand{})
+	r.Register(&commands.ForgetCommand{})
+	r.Register(&commands.RememberCommand{})
+	r.Register(&commands.RecallCommand{})
+	r.Register(&commands.BotsCommand{})
+	r.Register(&commands.PauseCommand{})
+	r.Register(&commands.ResumeCommand{})
+	r.Register(&commands.StopCommand{})
+	r.Register(&commands.RecapCommand{})
+	r.Register(&commands.SelfNotesCommand{})
+	r.Register(&commands.SuspicionCommand{})
+	r.Register(&commands.NowPlayingCommand{})
+	r.Register(&commands.SkipCommand{})
+	r.Register(&commands.TaskCommand{})
+	r.Register(&commands.TasksCommand{})
+	r.Register(&commands.GoalCommand{})
+	r.Register(&commands.ScheduleCommand{})
+	return r
 }
