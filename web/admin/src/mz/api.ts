@@ -1,10 +1,11 @@
 import { Api } from "../lib/api";
-import type { Bots, Conversation, Feature, Fold, Memory, People, Reset, RunState, Safety, SelfNote, Setting, SettingChange, Subject, Tool } from "./types";
+import type { Bots, Cheatsheet, ExportResult, Conversation, Feature, Fold, Memory, People, Reset, RunState, Safety, SelfNote, Setting, SettingChange, Subject, Tool } from "./types";
 
 const q = (params: Record<string, string>) => new URLSearchParams(params).toString();
 
 /** Upstream's API plus the console's own endpoints (internal/admin/mz_*.go). */
 export class MzApi extends Api {
+  commands = () => this.call<Cheatsheet>("GET", "commands");
   features = () => this.call<{ features: Feature[] }>("GET", "features").then((r) => r.features);
   runState = () => this.call<{ state: RunState }>("GET", "mizira/state").then((r) => r.state);
   setRunState = (state: RunState) =>
@@ -30,6 +31,9 @@ export class MzApi extends Api {
     this.call<{ value: string }>("DELETE", `bots?${q({ kind, value })}`);
 
   settings = () => this.call<{ settings: Setting[] }>("GET", "settings").then((r) => r.settings);
+  settingsAndLists = () => this.call<{ settings: Setting[]; lists: string[] }>("GET", "settings");
+  exportSettings = () => this.call<ExportResult>("POST", "settings/export");
+  resetAll = () => this.call<{ reset: string[]; onRestart: string[] }>("POST", "settings/reset-all");
   set = (key: string, value: string) => this.call<SettingChange>("PUT", `settings/${encodeURIComponent(key)}`, { value });
   resetSetting = (key: string) => this.call<SettingChange>("DELETE", `settings/${encodeURIComponent(key)}`);
 

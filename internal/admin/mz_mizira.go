@@ -29,6 +29,8 @@ type Mizira interface {
 	Conversations() []ConversationView
 	ResetConversation(network, by string) (ResetView, error)
 	ClearRecap(network, by string) (bool, error)
+	// The IRC command cheatsheet.
+	Commands() CheatsheetView
 	FoldConversation(network, by string) (FoldView, error)
 
 	// ~ignore, ~screen and ~suspicion. A refusal's error is the reason, shown as is.
@@ -50,6 +52,11 @@ type Mizira interface {
 	ToolCatalog() []ToolView
 	SwitchTool(spec string, on bool, by string) error
 	ResetToolSwitches(by string) error
+	// Export writes config.yml with the overrides folded in, beside it (never over it); ResetAll
+	// drops every override. ListOverrides names list settings that differ from config.yml.
+	ExportConfig() (ExportView, error)
+	ResetAll(by string) (ResetAllView, error)
+	ListOverrides() []string
 
 	// Memories. Edit and forget return ErrNoSuchMemory for an id not on the network.
 	MemorySubjects(network string) (subjects []SubjectView, perSubject int, err error)
@@ -84,6 +91,7 @@ func (s *Server) mzRoutes(api *http.ServeMux) {
 		return
 	}
 	api.HandleFunc("GET /features", s.features)
+	api.HandleFunc("GET /commands", s.commands)
 	api.HandleFunc("GET /mizira/state", s.mizState)
 	api.HandleFunc("PUT /mizira/state", s.setMizState)
 	s.mzPeopleRoutes(api)

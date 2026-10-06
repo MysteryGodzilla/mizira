@@ -35,6 +35,7 @@ type ConversationView struct {
 type LineView struct {
 	Role string `json:"role"`
 	Text string `json:"text"`
+	At   int64  `json:"at,omitempty"` // when it entered history; 0 for lines saved before times were kept
 }
 
 // ResetView is what a reset did.

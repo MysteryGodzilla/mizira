@@ -5,6 +5,7 @@
 package admin
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 )
@@ -55,6 +56,8 @@ func (s *Server) mzSettingsRoutes(api *http.ServeMux) {
 	api.HandleFunc("GET /settings", s.settings)
 	api.HandleFunc("PUT /settings/{key}", s.setSetting)
 	api.HandleFunc("DELETE /settings/{key}", s.resetSetting)
+	api.HandleFunc("POST /settings/export", s.exportSettings)
+	api.HandleFunc("POST /settings/reset-all", s.resetAllSettings)
 	api.HandleFunc("GET /tools", s.tools)
 	api.HandleFunc("PUT /tools", s.switchTool)
 	api.HandleFunc("DELETE /tools/switches", s.resetTools)
@@ -107,7 +110,53 @@ func (s *Server) changeBot(w http.ResponseWriter, r *http.Request, add bool, kin
 }
 
 func (s *Server) settings(w http.ResponseWriter, _ *http.Request) {
-	respond(w, http.StatusOK, map[string]any{"settings": s.mz.Settings()})
+	respond(w, http.StatusOK, map[string]any{"settings": s.mz.Settings(), "lists": s.mz.ListOverrides()})
+}
+
+// ExportView is where an export was written and what it changed; the file itself stays on the PC.
+type ExportView struct {
+	Path    string         `json:"path"`
+	Changes []ExportChange `json:"changes"`
+}
+
+type ExportChange struct {
+	Key  string `json:"key"`
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+// ResetAllView is what Reset all put back now, and what goes back at the next restart.
+type ResetAllView struct {
+	Reset     []string `json:"reset"`
+	OnRestart []string `json:"onRestart"`
+}
+
+// ErrNothingToExport: nothing differs from config.yml.
+var ErrNothingToExport = errors.New("nothing differs from config.yml")
+
+func (s *Server) exportSettings(w http.ResponseWriter, r *http.Request) {
+	by := s.who(r)
+	out, err := s.mz.ExportConfig()
+	switch {
+	case errors.Is(err, ErrNothingToExport):
+		fail(w, http.StatusConflict, err.Error())
+	case err != nil:
+		fail(w, http.StatusInternalServerError, "export failed: "+err.Error())
+	default:
+		s.log.Info("console_action", "action", "settings_export", "to", out.Path, "changes", len(out.Changes), "by", by)
+		respond(w, http.StatusOK, out)
+	}
+}
+
+func (s *Server) resetAllSettings(w http.ResponseWriter, r *http.Request) {
+	by := s.who(r)
+	out, err := s.mz.ResetAll(by)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.log.Info("console_action", "action", "settings_reset_all", "by", by)
+	respond(w, http.StatusOK, out)
 }
 
 func (s *Server) setSetting(w http.ResponseWriter, r *http.Request) {

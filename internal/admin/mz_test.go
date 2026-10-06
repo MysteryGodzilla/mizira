@@ -69,6 +69,50 @@ func (f *fakeMizira) FoldConversation(network, by string) (FoldView, error) {
 	f.by = append(f.by, by)
 	return FoldView{Folded: 8, Kept: 12, RecapChars: 300}, nil
 }
+func (f *fakeMizira) Commands() CheatsheetView {
+	return CheatsheetView{Name: "Botty", NeedName: true, Groups: []string{"Basics"},
+		Commands: []CommandView{{Name: "~stats", Group: "Basics", Usage: []string{"~stats"}, Text: "size"}}}
+}
+
+func TestCommandsCheatsheet(t *testing.T) {
+	r, _ := newMzRig(t)
+	code, out := r.call(t, "GET", "/api/v1/commands", "s3cret", "")
+	cmds, _ := out["commands"].([]any)
+	if code != http.StatusOK || out["name"] != "Botty" || len(cmds) != 1 {
+		t.Errorf("commands = %d %v", code, out)
+	}
+}
+
+func (f *fakeMizira) ExportConfig() (ExportView, error) {
+	if f.setting == "" {
+		return ExportView{}, ErrNothingToExport
+	}
+	return ExportView{Path: "config.yml.export-x", Changes: []ExportChange{{Key: "maxreplylines", From: "4", To: f.setting}}}, nil
+}
+func (f *fakeMizira) ResetAll(by string) (ResetAllView, error) {
+	f.setting, f.by = "", append(f.by, by)
+	return ResetAllView{Reset: []string{"maxreplylines"}, OnRestart: []string{}}, nil
+}
+func (f *fakeMizira) ListOverrides() []string { return []string{"admins"} }
+
+func TestExportAndResetAll(t *testing.T) {
+	r, m := newMzRig(t)
+	if code, _ := r.call(t, "POST", "/api/v1/settings/export", "s3cret", ""); code != http.StatusConflict {
+		t.Errorf("export with nothing changed = %d, want 409", code)
+	}
+	m.setting = "7"
+	code, out := r.call(t, "POST", "/api/v1/settings/export", "s3cret", "")
+	if code != http.StatusOK || out["path"] != "config.yml.export-x" {
+		t.Errorf("export = %d %v", code, out)
+	}
+	if code, out := r.call(t, "POST", "/api/v1/settings/reset-all", "s3cret", ""); code != http.StatusOK || m.setting != "" {
+		t.Errorf("reset all = %d %v", code, out)
+	}
+	if _, out := r.call(t, "GET", "/api/v1/settings", "s3cret", ""); out["lists"] == nil {
+		t.Errorf("settings without lists: %v", out)
+	}
+}
+
 func (f *fakeMizira) Ignores() []IgnoreView { return f.ignores }
 func (f *fakeMizira) Ignore(network, nick string, d time.Duration, reason, by string) (time.Time, error) {
 	if nick == "alice" {
@@ -149,7 +193,7 @@ func TestRunRefusesEveryInterface(t *testing.T) {
 
 func TestMiziraEndpointsNeedTheToken(t *testing.T) {
 	r, m := newMzRig(t)
-	for _, c := range [][2]string{{"GET", "/api/v1/features"}, {"GET", "/api/v1/mizira/state"}, {"PUT", "/api/v1/mizira/state"},
+	for _, c := range [][2]string{{"GET", "/api/v1/features"}, {"GET", "/api/v1/commands"}, {"POST", "/api/v1/settings/export"}, {"POST", "/api/v1/settings/reset-all"}, {"GET", "/api/v1/mizira/state"}, {"PUT", "/api/v1/mizira/state"},
 		{"GET", "/api/v1/conversation"}, {"POST", "/api/v1/conversation/reset"}, {"DELETE", "/api/v1/recap?network=net"},
 		{"PUT", "/api/v1/memories/1/lock?network=net"}, {"DELETE", "/api/v1/memories/1/lock?network=net"},
 		{"POST", "/api/v1/conversation/fold"},

@@ -15,6 +15,14 @@
     return () => clearInterval(t);
   });
 
+  // "14:32" today, "6 Oct 14:32" before; lines saved before times were kept show none.
+  function clock(unix?: number): string {
+    if (!unix) return "";
+    const d = new Date(unix * 1000);
+    const t = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    return d.toDateString() === new Date().toDateString() ? t : `${d.toLocaleDateString(undefined, { day: "numeric", month: "short" })} ${t}`;
+  }
+
   const where = (c: Conversation) => (c.network ? `${c.channel} on ${c.network}` : c.channel);
 
   function reset(c: Conversation) {
@@ -87,7 +95,7 @@ Everything but the last 6 turns is summarised into the recap, then self-notes an
       {#if c.recent.length}
         <ul class="rows lines">
           {#each c.recent as line, i (i)}
-            <li><span class="role {line.role}">{line.role}</span><span class="grow">{line.text}</span></li>
+            <li><span class="time" title={line.at ? new Date(line.at * 1000).toLocaleString() : "saved before times were kept"}>{clock(line.at)}</span><span class="role {line.role}">{line.role}</span><span class="grow">{line.text}</span></li>
           {/each}
         </ul>
       {:else}
@@ -111,6 +119,7 @@ Everything but the last 6 turns is summarised into the recap, then self-notes an
   .sub { margin: 0 0 6px; }
   .lines { max-height: 520px; overflow-y: auto; }
   .lines li { align-items: flex-start; font-size: 14px; white-space: pre-wrap; }
+  .time { flex: none; width: 88px; font-size: 12px; color: var(--muted); padding-top: 2px; font-variant-numeric: tabular-nums; }
   .role { flex: none; width: 68px; font-size: 12px; color: var(--muted); padding-top: 2px; }
   .role.assistant { color: var(--accent); }
 </style>

@@ -12,11 +12,13 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/alexschlessinger/pollytool/tools"
 
 	"B4reMetal/metald/internal/admin"
 	"B4reMetal/metald/internal/commands"
+	"B4reMetal/metald/internal/config"
 	"B4reMetal/metald/internal/core"
 	"B4reMetal/metald/internal/irc"
 )
@@ -184,4 +186,32 @@ func (c console) ResetToolSwitches(by string) error {
 		return fmt.Errorf("these didn't switch back and need a restart: %s", strings.Join(failed, ", "))
 	}
 	return nil
+}
+
+func (c console) ExportConfig() (admin.ExportView, error) {
+	path := config.Path()
+	if path == "" {
+		return admin.ExportView{}, errors.New("not started with a config file")
+	}
+	out, changes, err := commands.ExportConfig(path, time.Now())
+	if errors.Is(err, commands.ErrNothingToExport) {
+		return admin.ExportView{}, admin.ErrNothingToExport
+	}
+	v := admin.ExportView{Path: out, Changes: []admin.ExportChange{}}
+	for _, ch := range changes {
+		v.Changes = append(v.Changes, admin.ExportChange{Key: ch.Key, From: ch.From, To: ch.To})
+	}
+	return v, err
+}
+
+func (c console) ResetAll(by string) (admin.ResetAllView, error) {
+	reset, later := commands.ResetAll(c.cfg, c.sys, by, core.GetLogger())
+	if err := c.ResetToolSwitches(by); err != nil {
+		return admin.ResetAllView{}, err
+	}
+	return admin.ResetAllView{Reset: append([]string{}, reset...), OnRestart: append([]string{}, later...)}, nil
+}
+
+func (c console) ListOverrides() []string {
+	return append([]string{}, commands.ListOverrides(config.Path())...)
 }

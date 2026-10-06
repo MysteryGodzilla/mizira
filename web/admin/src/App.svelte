@@ -20,6 +20,8 @@
   import Tools from "./mz/Tools.svelte";
   import Memories from "./mz/Memories.svelte";
   import Safety from "./mz/Safety.svelte";
+  import Commands from "./mz/Commands.svelte";
+  import Overrides from "./mz/Overrides.svelte";
 
   // Signed in (by the auth proxy, or with a token) means a dashboard; signing out drops it and stops
   // its polling.
@@ -33,7 +35,7 @@
 
   // The view lives in the URL hash, so a reload or a bookmark keeps it.
   const VIEWS = { dashboard: "Dashboard", conversation: "Conversation", people: "People", memories: "Memories", bots: "Bots", settings: "Settings",
-    tools: "Tools", safety: "Safety", logs: "Logs", thinking: "Thinking" } as const;
+    tools: "Tools", safety: "Safety", commands: "Commands", logs: "Logs", thinking: "Thinking" } as const;
   type View = keyof typeof VIEWS;
   const fromHash = (): View => { const h = location.hash.slice(1); return h in VIEWS ? (h as View) : "dashboard"; };
   let view = $state<View>(fromHash());
@@ -60,10 +62,7 @@
     {/if}
   </header>
   {#if board}
-    {#if mz?.differences.length}
-      <p class="differs" role="note">Differs from config.yml: {mz.differences.join(" · ")} ·
-        <a href="#settings">Settings</a> · <a href="#tools">Tools</a></p>
-    {/if}
+    {#if mz}<Overrides {mz} />{/if}
     {#if board.message}
       <p class="message" class:bad={board.message.bad} role="status">{board.message.text}</p>
     {/if}
@@ -75,6 +74,8 @@
       <Memories {mz} {board} />
     {:else if view === "safety" && mz}
       <Safety {mz} />
+    {:else if view === "commands" && mz}
+      <Commands {mz} />
     {:else if view === "bots" && mz}
       <Bots {mz} />
     {:else if view === "settings" && mz}
@@ -108,9 +109,6 @@
   nav a.on, nav a:hover { color: var(--fg); }
   nav a.on { border-bottom: 2px solid var(--accent); }
   .inactive { margin-left: auto; font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
-  .differs { font-size: 13px; border: 1px solid var(--accent); border-radius: 8px; padding: 6px 10px; margin: -6px 0 14px;
-    overflow-wrap: anywhere; }
-  .differs a { color: var(--accent); }
   .message { min-height: 20px; font-size: 13px; color: var(--muted); margin: -8px 0 12px; }
   .message.bad { color: var(--bad); }
 </style>

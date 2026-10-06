@@ -29,6 +29,20 @@ type console struct {
 	cfg  *config.Configuration
 	sys  core.System
 	nets []*config.ServerConfig
+	cmds *commands.Registry
+}
+
+func (c console) Commands() admin.CheatsheetView {
+	v := admin.CheatsheetView{Name: llm.SelfName(c.cfg), NeedName: c.cfg.Bot.CommandsNeedName, Groups: commands.CheatGroups,
+		Commands: []admin.CommandView{}}
+	if c.cmds == nil {
+		return v
+	}
+	for _, e := range commands.Cheatsheet(c.cmds, c.cfg.Bot.CommandPrefix) {
+		v.Commands = append(v.Commands, admin.CommandView{Name: e.Name, Admin: e.Admin, Group: e.Group, Usage: e.Usage,
+			Text: e.Text, Feature: e.Feature})
+	}
+	return v
 }
 
 // recentLines is how much of the conversation the page shows; lineChars clips each line.
@@ -98,7 +112,7 @@ func (c console) Conversations() []admin.ConversationView {
 		}
 		for _, m := range history[max(0, len(history)-recentLines):] {
 			if m.Role != messages.MessageRoleSystem {
-				v.Recent = append(v.Recent, admin.LineView{Role: m.Role, Text: clip(m.Content, lineChars)})
+				v.Recent = append(v.Recent, admin.LineView{Role: m.Role, Text: clip(m.Content, lineChars), At: core.MessageTime(m)})
 			}
 		}
 		if o, ok := core.Prompts().Get(key); ok {

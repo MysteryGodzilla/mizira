@@ -15,6 +15,8 @@ export class MzConsole {
   runState = $state<RunState | null>(null);
   // For the "differs from config.yml" banner, and the Settings and Tools pages.
   settings = $state<Setting[]>([]);
+  /** List settings (admins, screening, bots) changed at runtime; they show in config.yml only after an export. */
+  lists = $state<string[]>([]);
   tools = $state<Tool[]>([]);
   // Self-notes waiting for a decision, on every network.
   pendingNotes = $state<SelfNote[]>([]);
@@ -42,6 +44,7 @@ export class MzConsole {
     return [
       ...this.settings.filter((s) => s.overridden).map((s) => `${s.key} ${s.value} (config.yml: ${s.default || "empty"})`),
       ...this.tools.filter((t) => t.switched).map((t) => `${t.spec} ${t.loaded ? "on" : "off"}`),
+      ...this.lists.map((l) => `${l} list changed`),
     ];
   }
 
@@ -52,12 +55,12 @@ export class MzConsole {
 
   async refresh() {
     try {
-      const [features, runState, settings, tools] = await Promise.all([
-        this.api.features(), this.api.runState(), this.api.settings(), this.api.tools(),
+      const [features, runState, { settings, lists }, tools] = await Promise.all([
+        this.api.features(), this.api.runState(), this.api.settingsAndLists(), this.api.tools(),
       ]);
       const networks = this.board.status?.networks.map((n) => n.name) ?? [];
       const pendingNotes = (await Promise.all(networks.map((n) => this.api.selfNotes(n, "pending")))).flat();
-      Object.assign(this, { features, runState, settings, tools, pendingNotes });
+      Object.assign(this, { features, runState, settings, lists, tools, pendingNotes });
     } catch { /* upstream's refresh reports errors; don't say it twice */ }
   }
 

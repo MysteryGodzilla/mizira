@@ -3,9 +3,15 @@
 export type RunState = "running" | "paused" | "stopped";
 
 /** An optional part of the bot; its cards are hidden while it's off. */
+export interface ExportResult { path: string; changes: { key: string; from: string; to: string }[] }
+
+export interface CommandInfo { name: string; admin: boolean; group: string; usage: string[]; text: string; feature?: string }
+export interface Cheatsheet { name: string; needName: boolean; groups: string[]; commands: CommandInfo[] }
+
 export interface Feature { id: string; label: string; active: boolean; how: string }
 
-export interface Line { role: string; text: string }
+
+export interface Line { role: string; text: string; at?: number }
 
 export interface Conversation {
   network: string; channel: string; messages: number; tokens: number; maxContext: number; lastUsed: number;
