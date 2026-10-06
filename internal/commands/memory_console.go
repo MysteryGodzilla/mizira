@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"B4reMetal/metald/internal/config"
@@ -69,7 +70,7 @@ func EditMemory(network string, id int64, fact, by string, log *slog.Logger) err
 	if !ok {
 		return ErrNoSuchMemory
 	}
-	if _, err := store.Update(network, id, fact); err != nil {
+	if _, err := store.Reword(network, id, fact); err != nil {
 		return err
 	}
 	log.Info("memory_edited", "id", id, "subject", old.Subject, "from", old.Fact, "to", fact, "by", by)
@@ -127,6 +128,35 @@ func LockMemory(network string, id int64, locked bool, by string, log *slog.Logg
 	return nil
 }
 
+// compactionAuthor credits the operator and who taught the facts being merged: "compaction:by from
+// alice, bob". An earlier compaction's own list is carried over rather than nested.
+func compactionAuthor(store *core.MemoryStore, network string, ids []int64, by string) string {
+	var from []string
+	for _, id := range ids {
+		mem, ok, err := store.Get(network, id)
+		if err != nil || !ok || mem.Author == "" {
+			continue
+		}
+		names := []string{mem.Author}
+		if rest, ok := strings.CutPrefix(mem.Author, "compaction:"); ok {
+			names = nil
+			if _, list, ok := strings.Cut(rest, " from "); ok {
+				names = strings.Split(list, ", ")
+			}
+		}
+		for _, n := range names {
+			if n = strings.TrimSpace(n); n != "" && !slices.Contains(from, n) {
+				from = append(from, n)
+			}
+		}
+	}
+	author := "compaction:" + by
+	if len(from) > 0 {
+		author += " from " + strings.Join(from, ", ")
+	}
+	return author
+}
+
 // ApplyCompaction replaces every memory about subject with the operator's reviewed list, if the
 // subject still holds exactly the memories the preview was based on. The list is the operator's own
 // words now, held to the same per-subject cap and fact length as any save.
@@ -151,7 +181,7 @@ func ApplyCompaction(cfg *config.Configuration, network, subject string, basedOn
 	if err != nil {
 		return 0, err
 	}
-	stored, err := store.ReplaceSubject(network, subject, basedOn, kept, "compaction:"+by, cfg.Server.Channel)
+	stored, err := store.ReplaceSubject(network, subject, basedOn, kept, compactionAuthor(store, network, basedOn, by), cfg.Server.Channel)
 	if err != nil {
 		return 0, err
 	}

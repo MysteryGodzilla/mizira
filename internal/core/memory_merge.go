@@ -106,8 +106,8 @@ func (m *MemoryStore) Similar(network, subject, fact string) (Memory, bool, erro
 	return Memory{}, false, nil
 }
 
-// Update rewrites one memory's fact. False if there is no such memory; an error if the new text
-// equals another memory about the same subject.
+// Update rewrites one memory's fact and dates it now, as a repeat that merged into it does. False if
+// there is no such memory; an error if the new text equals another memory about the same subject.
 func (m *MemoryStore) Update(network string, id int64, fact string) (bool, error) {
 	fact = strings.TrimSpace(fact)
 	if fact == "" {
@@ -120,8 +120,10 @@ func (m *MemoryStore) Update(network string, id int64, fact string) (bool, error
 	if err != nil {
 		return false, err
 	}
-	n, _ := res.RowsAffected()
-	return n > 0, nil
+	if n, _ := res.RowsAffected(); n == 0 {
+		return false, nil
+	}
+	return true, m.markEdited(id)
 }
 
 // SubjectCount is one subject and how many memories it holds.

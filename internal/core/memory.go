@@ -117,6 +117,10 @@ func OpenMemoryStore(path string) (*MemoryStore, error) {
 			return nil, fmt.Errorf("build memory search index: %w", err)
 		}
 	}
+	if err := createMemoryEdits(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("create memory edits table: %w", err)
+	}
 	if err := createMemoryLocks(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("create memory locks table: %w", err)

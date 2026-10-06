@@ -121,8 +121,12 @@ func TestApplyCompaction(t *testing.T) {
 	store, _ := core.Memories()
 	t.Cleanup(func() { store.ForgetSubject("compact-cmd", "dave") })
 	var ids []int64
-	for _, f := range []string{"dave has a rat", "Pip is dave's rat", "dave plays go"} {
-		id, _ := store.Remember("compact-cmd", "dave", f, "dave", "#test")
+	for i, f := range []string{"dave has a rat", "Pip is dave's rat", "dave plays go"} {
+		author := "dave"
+		if i == 1 {
+			author = "carol"
+		}
+		id, _ := store.Remember("compact-cmd", "dave", f, author, "#test")
 		ids = append(ids, id)
 	}
 	for _, bad := range [][]string{{}, {" "}, {"a", "b", "c", "d"}, {strings.Repeat("x", 401)}} {
@@ -137,7 +141,15 @@ func TestApplyCompaction(t *testing.T) {
 	if err != nil || n != 2 {
 		t.Fatalf("apply: %d %v", n, err)
 	}
-	if held, _ := store.Recall("compact-cmd", "dave", 10); len(held) != 2 || held[0].Author != "compaction:console:token" {
+	held, _ := store.Recall("compact-cmd", "dave", 10)
+	if len(held) != 2 || held[0].Author != "compaction:console:token from dave, carol" {
 		t.Errorf("after: %+v", held)
+	}
+	// Compacting again carries the names over instead of nesting them.
+	if _, err := ApplyCompaction(cfg, "compact-cmd", "dave", []int64{held[0].ID, held[1].ID}, []string{"dave has a rat called Pip and plays go"}, "alice", quiet); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := store.Recall("compact-cmd", "dave", 10); len(again) != 1 || again[0].Author != "compaction:alice from dave, carol" {
+		t.Errorf("after a second compaction: %+v", again)
 	}
 }
