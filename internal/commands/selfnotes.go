@@ -19,9 +19,9 @@ import (
 
 var ErrNotPending = errors.New("isn't waiting for a decision")
 
-// ApproveSelfNote saves a pending self-note as room memory about the bot, as worded or with the
-// admin's edit (text non-empty), and marks it approved. It returns the room memory's id and whether
-// that merged into a fact already held.
+// ApproveSelfNote saves a pending note as a memory about its subject (room memory, for a note about
+// the bot), as worded or with the admin's edit (text non-empty), and marks it approved. It returns
+// the memory's id and whether that merged into a fact already held.
 func ApproveSelfNote(cfg *config.Configuration, network string, id int64, text, by string, log *slog.Logger) (int64, bool, error) {
 	store, err := core.Memories()
 	if err != nil {
@@ -37,8 +37,13 @@ func ApproveSelfNote(cfg *config.Configuration, network string, id int64, text, 
 	if text = strings.TrimSpace(text); text == "" {
 		text = note.Text
 	}
-	subject := strings.ToLower(llm.SelfName(cfg))
-	memID, merged, err := OperatorRemember(cfg, network, subject, text, by, log)
+	subject, author := note.Subject, by
+	if bot := strings.ToLower(llm.SelfName(cfg)); subject == "" || subject == bot {
+		subject = bot
+	} else {
+		author = "fold:" + by // a people-note: what the chat showed, approved by the operator
+	}
+	memID, merged, err := OperatorRemember(cfg, network, subject, text, author, log)
 	if err != nil {
 		return 0, false, err
 	}
@@ -69,7 +74,8 @@ func DenySelfNote(network string, id int64, by string, log *slog.Logger) error {
 	return nil
 }
 
-// SelfNotesCommand handles +selfnotes: the notes the bot proposed about itself, waiting for an admin.
+// SelfNotesCommand handles +selfnotes: the notes the bot proposed about itself and the people it
+// chats with, waiting for an admin.
 // The console's Memories tab does the same with more room.
 type SelfNotesCommand struct{}
 
@@ -98,17 +104,17 @@ func (c *SelfNotesCommand) Execute(ctx irc.ChatContextInterface) {
 	}
 	if args[1] == "deny" {
 		if err := DenySelfNote(ctx.GetNetwork(), id, ctx.GetSource(), ctx.GetLogger()); err != nil {
-			ctx.Reply(fmt.Sprintf("Self-note #%d %s.", id, refusalText(err)))
+			ctx.Reply(fmt.Sprintf("Note #%d %s.", id, refusalText(err)))
 			return
 		}
-		ctx.Reply(fmt.Sprintf("Denied self-note #%d.", id))
+		ctx.Reply(fmt.Sprintf("Denied note #%d.", id))
 		return
 	}
 	memID, merged, err := ApproveSelfNote(ctx.GetConfig(), ctx.GetNetwork(), id, strings.Join(args[3:], " "),
 		ctx.GetSource(), ctx.GetLogger())
 	switch {
 	case err != nil:
-		ctx.Reply(fmt.Sprintf("Self-note #%d %s.", id, refusalText(err)))
+		ctx.Reply(fmt.Sprintf("Note #%d %s.", id, refusalText(err)))
 	case merged:
 		ctx.Reply(fmt.Sprintf("Approved #%d; I already knew that, so memory #%d keeps one copy.", id, memID))
 	default:
@@ -135,7 +141,7 @@ func listSelfNotes(ctx irc.ChatContextInterface) {
 		return
 	}
 	if len(notes) == 0 {
-		ctx.Reply("No self-notes waiting.")
+		ctx.Reply("No notes waiting.")
 		return
 	}
 	for i, n := range notes {

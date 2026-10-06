@@ -11,8 +11,9 @@ import (
 )
 
 // Self-notes are notes the bot proposes about itself when a stretch of chat is folded into the
-// recap. They wait for an admin: approved ones become room memory, denied ones stay recorded so
-// the same note isn't proposed again. Nothing pending ever reaches a prompt.
+// recap; people-notes are the same about the people who spoke. They wait for an admin: approved ones
+// become memories, denied ones stay recorded so the same note isn't proposed again. Nothing pending
+// ever reaches a prompt.
 
 const (
 	SelfNotePending  = "pending"
@@ -24,6 +25,7 @@ const (
 type SelfNote struct {
 	ID        int64
 	Network   string
+	Subject   string // who it's about; "" on notes from before people-notes, which are about the bot
 	Text      string
 	Why       string // the words from the chat that prompted it
 	Status    string
@@ -46,6 +48,9 @@ func createSelfNotes(db *sql.DB) error {
 		memory_id  INTEGER NOT NULL DEFAULT 0
 	);
 	CREATE INDEX IF NOT EXISTS idx_self_notes_status ON self_notes(network, status);`)
+	if err == nil && !hasColumn(db, "self_notes", "subject") {
+		_, err = db.Exec(`ALTER TABLE self_notes ADD COLUMN subject TEXT NOT NULL DEFAULT ''`)
+	}
 	return err
 }
 
@@ -63,15 +68,19 @@ func (m *MemoryStore) ProposeSelfNote(network, subject, text, why string) (int64
 	if err != nil {
 		return 0, err
 	}
+	subject = normalizeSubject(subject)
 	for _, n := range earlier {
+		if n.Subject != "" && n.Subject != subject {
+			continue
+		}
 		if n.Text == text || SameFact(subject, n.Text, text) {
 			return 0, nil
 		}
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	res, err := m.db.Exec(`INSERT INTO self_notes (network, text, why, status, created) VALUES (?, ?, ?, ?, ?)`,
-		network, text, why, SelfNotePending, time.Now().Unix())
+	res, err := m.db.Exec(`INSERT INTO self_notes (network, subject, text, why, status, created) VALUES (?, ?, ?, ?, ?, ?)`,
+		network, subject, text, why, SelfNotePending, time.Now().Unix())
 	if err != nil {
 		return 0, err
 	}
@@ -85,7 +94,7 @@ func (m *MemoryStore) SelfNotes(network, status string, limit int) ([]SelfNote, 
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	rows, err := m.db.Query(`SELECT id, network, text, why, status, created, decided_by, decided_at, memory_id
+	rows, err := m.db.Query(`SELECT id, network, subject, text, why, status, created, decided_by, decided_at, memory_id
 		FROM self_notes WHERE network = ? AND (? = '' OR status = ?) ORDER BY id DESC LIMIT ?`,
 		network, status, status, limit)
 	if err != nil {
@@ -96,7 +105,7 @@ func (m *MemoryStore) SelfNotes(network, status string, limit int) ([]SelfNote, 
 	for rows.Next() {
 		var n SelfNote
 		var created, decided int64
-		if err := rows.Scan(&n.ID, &n.Network, &n.Text, &n.Why, &n.Status, &created, &n.DecidedBy, &decided, &n.MemoryID); err != nil {
+		if err := rows.Scan(&n.ID, &n.Network, &n.Subject, &n.Text, &n.Why, &n.Status, &created, &n.DecidedBy, &decided, &n.MemoryID); err != nil {
 			return nil, err
 		}
 		n.Created = time.Unix(created, 0)

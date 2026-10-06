@@ -53,7 +53,7 @@ func TestApproveEditAndDenySelfNotes(t *testing.T) {
 	(&SelfNotesCommand{}).Execute(ctx)
 	ctx.WithArgs("+selfnotes", "deny", itoa(c))
 	(&SelfNotesCommand{}).Execute(ctx)
-	if lastReply(t, ctx) != "Denied self-note #"+itoa(c)+"." {
+	if lastReply(t, ctx) != "Denied note #"+itoa(c)+"." {
 		t.Errorf("deny: %q", lastReply(t, ctx))
 	}
 
@@ -74,9 +74,28 @@ func TestApproveEditAndDenySelfNotes(t *testing.T) {
 	}
 	ctx.WithArgs("+selfnotes")
 	(&SelfNotesCommand{}).Execute(ctx)
-	if lastReply(t, ctx) != "No self-notes waiting." {
+	if lastReply(t, ctx) != "No notes waiting." {
 		t.Errorf("after deciding all: %q", lastReply(t, ctx))
 	}
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+
+// Approving a people-note saves a memory about that person, credited to the fold and the approver;
+// a self-note still goes to the bot's room memory.
+func TestApprovePeopleNote(t *testing.T) {
+	ctx, store := selfNotesCtx(t, "peoplenotes-cmd")
+	net := "peoplenotes-cmd"
+	t.Cleanup(func() { store.ForgetSubject(net, "carol") })
+	id, _ := store.ProposeSelfNote(net, "carol", "carol is learning the cello", "cello lessons")
+
+	ctx.WithArgs("+selfnotes", "approve", strconv.FormatInt(id, 10))
+	(&SelfNotesCommand{}).Execute(ctx)
+	held, _ := store.Recall(net, "carol", 5)
+	if len(held) != 1 || held[0].Fact != "carol is learning the cello" || held[0].Author != "fold:alice" {
+		t.Fatalf("carol's memories: %+v (reply %q)", held, lastReply(t, ctx))
+	}
+	if bot, _ := store.Recall(net, "botty", 5); len(bot) != 0 {
+		t.Error("a people-note landed in the bot's room memory")
+	}
+}

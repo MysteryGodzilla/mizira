@@ -331,7 +331,10 @@ func fold(cfg *config.Configuration, session sessions.Session, reason string, cu
 	}
 	slog.Info("recap_folded", "key", key, "reason", reason, "messages", n, "kept", len(rest),
 		"recap_chars", len(recap), "duration_ms", time.Since(start).Milliseconds())
-	go proposeSelfNotes(cfg, key, transcript)
+	go func() {
+		proposeSelfNotes(cfg, key, transcript)
+		proposePeopleNotes(cfg, key, transcript)
+	}()
 	return FoldResult{Folded: n, Kept: len(rest), RecapChars: len(recap)}, nil
 }
 

@@ -143,6 +143,7 @@ type BotConfig struct {
 	QuotedPolicy       string
 	RoomMemoryFrame    string
 	SelfNotePrompt     string // proposes notes about the bot from a folded stretch of chat; {name} is replaced
+	PeopleNotePrompt   string // the same for facts about the people who spoke; {name} is replaced
 	SelfNotes          bool   // propose self-notes when channel chat is folded into the recap
 	CompactPrompt      string // merges one subject's memories into a shorter list for the operator to review; {subject} is replaced
 	RoomMemoryLimit    int    // room facts (about the channel and about the bot) sent with each request
@@ -340,6 +341,7 @@ func GetFlags() []cli.Flag {
 		&cli.StringFlag{Name: "quotedpolicy", Usage: "policy for channel lines the bot reads as background (backlog, history search) under screenall (required)", Sources: src("quotedpolicy", "METALD_QUOTEDPOLICY")},
 		&cli.BoolFlag{Name: "selfnotes", Value: true, Usage: "when channel chat is folded into the recap, ask the model for notes about the bot itself, for an admin to approve", Sources: src("selfnotes", "METALD_SELFNOTES")},
 		&cli.StringFlag{Name: "compactprompt", Usage: "asks the model to merge one subject's memories into a shorter list, which the operator reviews before it replaces them; {subject} is replaced (required)", Sources: src("compactprompt", "METALD_COMPACTPROMPT")},
+		&cli.StringFlag{Name: "peoplenoteprompt", Usage: "asks the model for facts about the people who spoke in chat being folded into the recap, for an admin to approve; {name} is replaced (required)", Sources: src("peoplenoteprompt", "METALD_PEOPLENOTEPROMPT")},
 		&cli.StringFlag{Name: "selfnoteprompt", Usage: "asks the model for notes about the bot itself from chat being folded into the recap, for an admin to approve; {name} is replaced (required)", Sources: src("selfnoteprompt", "METALD_SELFNOTEPROMPT")},
 		&cli.StringFlag{Name: "roommemoryframe", Usage: "text introducing room memory: facts about the channel and about the bot; {channel} is replaced (required)", Sources: src("roommemoryframe", "METALD_ROOMMEMORYFRAME")},
 		&cli.IntFlag{Name: "roommemorylimit", Value: 15, Usage: "room facts (about the channel and the bot, admin-written) sent with each request", Sources: src("roommemorylimit", "METALD_ROOMMEMORYLIMIT")},
@@ -573,6 +575,7 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			QuotedPolicy:        c.String("quotedpolicy"),
 			RoomMemoryFrame:     c.String("roommemoryframe"),
 			SelfNotePrompt:      c.String("selfnoteprompt"),
+			PeopleNotePrompt:    c.String("peoplenoteprompt"),
 			SelfNotes:           c.Bool("selfnotes"),
 			CompactPrompt:       c.String("compactprompt"),
 			RoomMemoryLimit:     int(c.Int("roommemorylimit")),

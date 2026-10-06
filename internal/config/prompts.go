@@ -30,6 +30,7 @@ var PromptKeys = []string{
 	"quotedpolicy",
 	"roommemoryframe",
 	"selfnoteprompt",
+	"peoplenoteprompt",
 	"compactprompt",
 }
 
@@ -61,6 +62,7 @@ func MissingPrompts(b *BotConfig) []string {
 		"quotedpolicy":       b.QuotedPolicy,
 		"roommemoryframe":    b.RoomMemoryFrame,
 		"selfnoteprompt":     b.SelfNotePrompt,
+		"peoplenoteprompt":   b.PeopleNotePrompt,
 		"compactprompt":      b.CompactPrompt,
 	}
 	var missing []string
