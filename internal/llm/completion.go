@@ -11,6 +11,7 @@ import (
 	"github.com/alexschlessinger/pollytool/messages"
 	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/alexschlessinger/pollytool/tools"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -489,9 +490,22 @@ func commitExchange(session sessions.Session, msgs []messages.ChatMessage) {
 	mu := core.CommitLock(session)
 	mu.Lock()
 	defer mu.Unlock()
+	now := time.Now().Unix()
 	for _, m := range msgs {
-		session.AddMessage(trimForHistory(m))
+		session.AddMessage(stampTime(trimForHistory(m), now))
 	}
+}
+
+// stampTime records when a message entered history, for the operator page. Metadata is never sent
+// to the model, so the prompt and its cache are unchanged.
+func stampTime(m messages.ChatMessage, at int64) messages.ChatMessage {
+	md := maps.Clone(m.Metadata)
+	if md == nil {
+		md = map[string]any{}
+	}
+	md[core.MessageTimeKey] = at
+	m.Metadata = md
+	return m
 }
 
 // applySampling puts the set sampling values on the request. top_p and presence_penalty are OpenAI
