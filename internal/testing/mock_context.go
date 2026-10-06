@@ -209,6 +209,13 @@ func (m *MockChatContext) SpeakerKey() string {
 	return m.GetSource()
 }
 
+func (m *MockChatContext) Speaker() string {
+	if m.BotLine && m.BotTag != "" {
+		return strings.Trim(m.BotTag, "[]")
+	}
+	return m.GetSource()
+}
+
 func (m *MockChatContext) GetCommand() string {
 	return m.Command
 }

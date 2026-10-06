@@ -159,15 +159,15 @@ func newMemoryForgetTool() tools.Tool {
 			}
 			subject := strings.TrimSpace(args.String("subject"))
 			if subject == "" {
-				subject = chatCtx.GetSource()
+				subject = chatCtx.Speaker()
 			}
 			query := strings.TrimSpace(args.String("fact"))
 			if query == "" {
 				return "", fmt.Errorf("say which memory to forget, in its own words")
 			}
-			if !strings.EqualFold(subject, chatCtx.GetSource()) && !chatCtx.IsAdmin() {
+			if !strings.EqualFold(subject, chatCtx.Speaker()) && !chatCtx.IsAdmin() {
 				chatCtx.GetLogger().Info("memory_forget_denied",
-					"subject", subject, "requested_by", chatCtx.GetSource())
+					"subject", subject, "requested_by", chatCtx.SpeakerKey())
 				return fmt.Sprintf("Refused: those memories are about %s, not about the person asking. Only they or an operator can remove them.", subject), nil
 			}
 			store, err := core.Memories()
@@ -181,7 +181,7 @@ func newMemoryForgetTool() tools.Tool {
 					chatCtx.GetLogger().Error("memory_forget_failed", "error", err.Error())
 					return "Error: could not forget that", nil
 				}
-				chatCtx.GetLogger().Info("memories_cleared", "subject", subject, "count", n, "by", chatCtx.GetSource())
+				chatCtx.GetLogger().Info("memories_cleared", "subject", subject, "count", n, "by", chatCtx.SpeakerKey())
 				if n == 0 {
 					return fmt.Sprintf("Nothing was remembered about %s. Say so plainly.", subject), nil
 				}
@@ -210,7 +210,7 @@ func newMemoryForgetTool() tools.Tool {
 				return fmt.Sprintf("Nothing remembered about %s matches %q.", subject, query), nil
 			}
 			chatCtx.GetLogger().Info("memory_forgotten",
-				"id", match.ID, "subject", match.Subject, "fact", match.Fact, "requested_by", chatCtx.GetSource())
+				"id", match.ID, "subject", match.Subject, "fact", match.Fact, "requested_by", chatCtx.SpeakerKey())
 			return fmt.Sprintf("Forgot about %s: %q. Say briefly that it's forgotten.", subject, match.Fact), nil
 		},
 	}
@@ -327,14 +327,14 @@ func forgetByID(chatCtx ChatContextInterface, id int64) string {
 	if !found {
 		return fmt.Sprintf("There is no memory number %d. Say so plainly.", id)
 	}
-	if !strings.EqualFold(mem.Subject, chatCtx.GetSource()) && !chatCtx.IsAdmin() {
-		chatCtx.GetLogger().Info("memory_forget_denied", "id", id, "subject", mem.Subject, "requested_by", chatCtx.GetSource())
+	if !strings.EqualFold(mem.Subject, chatCtx.Speaker()) && !chatCtx.IsAdmin() {
+		chatCtx.GetLogger().Info("memory_forget_denied", "id", id, "subject", mem.Subject, "requested_by", chatCtx.SpeakerKey())
 		return fmt.Sprintf("Refused: memory %d is about %s, not about the person asking. Only they or an operator can remove it.", id, mem.Subject)
 	}
 	if ok, err := store.Forget(chatCtx.GetNetwork(), id); err != nil || !ok {
 		return "Error: could not forget that"
 	}
-	chatCtx.GetLogger().Info("memory_forgotten", "id", id, "subject", mem.Subject, "fact", mem.Fact, "requested_by", chatCtx.GetSource())
+	chatCtx.GetLogger().Info("memory_forgotten", "id", id, "subject", mem.Subject, "fact", mem.Fact, "requested_by", chatCtx.SpeakerKey())
 	return fmt.Sprintf("Forgot memory %d about %s: %q. Say briefly that it's forgotten.", id, mem.Subject, mem.Fact)
 }
 

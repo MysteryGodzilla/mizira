@@ -28,6 +28,9 @@ type ChatContextInterface interface {
 	// SpeakerKey names who suspicion is scored against: the nick, or for a bot that shares its
 	// owner's nick, the nick and the bot's tag ("bob [botty]"), so the bot's refusals stay its own.
 	SpeakerKey() string
+	// Speaker is who "me" means: the nick, or for a bot that shares its owner's nick, the bot's own
+	// name from its tag ("botty"), so a bot's line never speaks for its owner.
+	Speaker() string
 	GetCommand() string
 	GetSource() string
 	GetSourceMask() string // the sender's full nick!user@host

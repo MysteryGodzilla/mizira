@@ -73,7 +73,7 @@ const maxBacklogLine = 300
 // recallForSpeaker builds the memory block for the current speaker, or "" if
 // there is nothing to say.
 func recallForSpeaker(ctx irc.ChatContextInterface, known func(string) bool) string {
-	source := ctx.GetSource()
+	source := ctx.Speaker()
 	if source == "" {
 		return ""
 	}
@@ -135,7 +135,7 @@ func relevantMemories(ctx irc.ChatContextInterface, text string, known func(stri
 	if err != nil {
 		return ""
 	}
-	exclude := []string{ctx.GetSource(), ctx.GetConfig().Server.Channel}
+	exclude := []string{ctx.Speaker(), ctx.GetConfig().Server.Channel}
 	if t := ctx.GetConfig().Bot.Trigger; t != "" {
 		exclude = append(exclude, t)
 	} else {

@@ -7,6 +7,7 @@ package irc
 import (
 	"errors"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/lrstanley/girc"
@@ -72,6 +73,11 @@ func BotTag(cfg *config.Configuration, text string) string {
 		}
 	}
 	return ""
+}
+
+// botName is a bot tag without its punctuation: "[botty]" -> "botty".
+func botName(tag string) string {
+	return strings.TrimFunc(tag, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
 }
 
 // TrackLine runs on every event after the channel gate. It returns true when the event must

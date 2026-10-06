@@ -80,6 +80,10 @@ func NewChatContext(parentctx context.Context, config *config.Configuration, sys
 		),
 	}
 
+	if speaker := ctx.SpeakerKey(); speaker != e.Source.Name {
+		ctx.logger = ctx.logger.With("speaker", speaker)
+	}
+
 	key := channel
 	if !girc.IsValidChannel(key) {
 		key = e.Source.Name
@@ -230,6 +234,10 @@ func (c ChatContext) GetSource() string {
 }
 
 func (c ChatContext) IsAdmin() bool {
+	// A bot's line carries its owner's hostmask, but its words come from its own model.
+	if c.IsBotLine() {
+		return false
+	}
 	hostmask := c.event.Source.String()
 	c.logger.Debug("admin_check", "hostmask", hostmask)
 	isAdmin := CheckAdmin(hostmask, c.Config.Bot.Admins)
@@ -493,6 +501,15 @@ func (c ChatContext) SpeakerKey() string {
 	if c.IsBotLine() {
 		if tag := BotTag(c.Config, c.event.Last()); tag != "" {
 			return c.GetSource() + " " + tag
+		}
+	}
+	return c.GetSource()
+}
+
+func (c ChatContext) Speaker() string {
+	if c.IsBotLine() {
+		if name := botName(BotTag(c.Config, c.event.Last())); name != "" {
+			return name
 		}
 	}
 	return c.GetSource()
