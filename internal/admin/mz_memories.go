@@ -30,10 +30,16 @@ type MemoryView struct {
 	Created int64  `json:"created"`
 	// SameAs is the id of another memory about the subject that says the same thing, if any.
 	SameAs int64 `json:"sameAs,omitempty"`
+	// Locked memories survive every forget from IRC; the console forgets one only once unlocked.
+	Locked bool `json:"locked"`
 }
 
-// ErrNoSuchMemory is a memory id that isn't on the network.
-var ErrNoSuchMemory = errors.New("no such memory")
+var (
+	// ErrNoSuchMemory is a memory id that isn't on the network.
+	ErrNoSuchMemory = errors.New("no such memory")
+	// ErrMemoryLocked is a forget of a locked memory.
+	ErrMemoryLocked = errors.New("that memory is locked; unlock it first")
+)
 
 func (s *Server) mzMemoryRoutes(api *http.ServeMux) {
 	api.HandleFunc("GET /memories/subjects", s.memorySubjects)
@@ -41,6 +47,8 @@ func (s *Server) mzMemoryRoutes(api *http.ServeMux) {
 	api.HandleFunc("POST /memories", s.addMemory)
 	api.HandleFunc("PUT /memories/{id}", s.editMemory)
 	api.HandleFunc("DELETE /memories/{id}", s.forgetMemory)
+	api.HandleFunc("PUT /memories/{id}/lock", s.lockMemory)
+	api.HandleFunc("DELETE /memories/{id}/lock", s.lockMemory)
 	api.HandleFunc("POST /memories/compact/preview", s.compactPreview)
 	api.HandleFunc("POST /memories/compact/apply", s.compactApply)
 }
@@ -139,9 +147,31 @@ func (s *Server) forgetMemory(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusOK, map[string]any{"id": id})
 }
 
+func (s *Server) lockMemory(w http.ResponseWriter, r *http.Request) {
+	n, id, ok := s.memoryID(w, r)
+	if !ok {
+		return
+	}
+	by, locked := s.who(r), r.Method == http.MethodPut
+	if err := s.mz.LockMemory(n, id, locked, by); err != nil {
+		s.memoryFail(w, err)
+		return
+	}
+	action := "memory_unlock"
+	if locked {
+		action = "memory_lock"
+	}
+	s.log.Info("console_action", "action", action, "id", id, "by", by)
+	respond(w, http.StatusOK, map[string]any{"id": id, "locked": locked})
+}
+
 func (s *Server) memoryFail(w http.ResponseWriter, err error) {
-	if errors.Is(err, ErrNoSuchMemory) {
+	switch {
+	case errors.Is(err, ErrNoSuchMemory):
 		fail(w, http.StatusNotFound, err.Error())
+		return
+	case errors.Is(err, ErrMemoryLocked):
+		fail(w, http.StatusConflict, err.Error())
 		return
 	}
 	fail(w, http.StatusBadRequest, err.Error())

@@ -56,7 +56,8 @@ type Mizira interface {
 	Memories(network, subject, query string) ([]MemoryView, error)
 	AddMemory(network, subject, fact, by string) (id int64, merged bool, err error)
 	EditMemory(network string, id int64, fact, by string) error
-	ForgetMemory(network string, id int64, by string) error
+	ForgetMemory(network string, id int64, by string) error // ErrMemoryLocked while locked
+	LockMemory(network string, id int64, locked bool, by string) error
 	// Compaction: a model-proposed shorter list (nothing changes), then the operator's reviewed list
 	// replaces the memories the preview was based on, or ErrMemoriesChanged.
 	CompactPreview(network, subject string) (facts []string, basedOn []int64, err error)

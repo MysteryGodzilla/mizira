@@ -89,10 +89,41 @@ func ForgetMemory(network string, id int64, by string, log *slog.Logger) error {
 	if !ok {
 		return ErrNoSuchMemory
 	}
+	if store.IsLocked(network, id) {
+		return core.ErrMemoryLocked
+	}
 	if _, err := store.Forget(network, id); err != nil {
 		return err
 	}
 	log.Info("memory_forgotten", "id", id, "subject", old.Subject, "fact", old.Fact, "by", by)
+	return nil
+}
+
+// LockMemory locks or unlocks one memory. Locked, it survives every forget from IRC, and the
+// console forgets it only once unlocked.
+func LockMemory(network string, id int64, locked bool, by string, log *slog.Logger) error {
+	store, err := core.Memories()
+	if err != nil {
+		return err
+	}
+	old, ok, err := store.Get(network, id)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrNoSuchMemory
+	}
+	event := "memory_unlocked"
+	if locked {
+		event = "memory_locked"
+		_, err = store.Lock(network, id, by)
+	} else {
+		_, err = store.Unlock(network, id)
+	}
+	if err != nil {
+		return err
+	}
+	log.Info(event, "id", id, "subject", old.Subject, "fact", old.Fact, "by", by)
 	return nil
 }
 

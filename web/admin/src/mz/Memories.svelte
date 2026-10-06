@@ -79,6 +79,12 @@
     }
   }
 
+  function lock(m: Memory) {
+    if (net === null) return;
+    const n = net;
+    void change(() => mz.api.lockMemory(n, m.id, !m.locked), m.locked ? `unlocked #${m.id}` : `locked #${m.id}`);
+  }
+
   const full = (s: Subject) => perSubject > 0 && s.count >= perSubject;
   let dupes = $derived(list?.filter((m) => m.sameAs).length ?? 0);
 </script>
@@ -142,12 +148,14 @@
                 {:else}
                   <div>{m.fact}</div>
                   <div class="sub">#{m.id}{#if !selected} · {m.subject}{/if} · by {m.author || "?"} · {when(m.created)}
+                    {#if m.locked}<Badge text="locked" tone="good" />{/if}
                     {#if m.sameAs}<Badge text={`same as #${m.sameAs}`} tone="busy" />{/if}</div>
                 {/if}
               </div>
               {#if editing !== m.id}
                 <button onclick={() => { editing = m.id; editText = m.fact; }}>Edit</button>
-                <button class="danger" onclick={() => forget(m)}>Forget</button>
+                <button onclick={() => lock(m)} title={m.locked ? "Allow forgetting again" : "Keep it: nothing in IRC can forget it, and Forget here needs Unlock first"}>{m.locked ? "Unlock" : "Lock"}</button>
+                <button class="danger" onclick={() => forget(m)} disabled={m.locked} title={m.locked ? "Unlock it first" : ""}>Forget</button>
               {/if}
             </li>
           {/each}

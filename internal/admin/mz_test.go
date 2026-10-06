@@ -151,6 +151,7 @@ func TestMiziraEndpointsNeedTheToken(t *testing.T) {
 	r, m := newMzRig(t)
 	for _, c := range [][2]string{{"GET", "/api/v1/features"}, {"GET", "/api/v1/mizira/state"}, {"PUT", "/api/v1/mizira/state"},
 		{"GET", "/api/v1/conversation"}, {"POST", "/api/v1/conversation/reset"}, {"DELETE", "/api/v1/recap?network=net"},
+		{"PUT", "/api/v1/memories/1/lock?network=net"}, {"DELETE", "/api/v1/memories/1/lock?network=net"},
 		{"POST", "/api/v1/conversation/fold"},
 		{"GET", "/api/v1/people"}, {"POST", "/api/v1/ignores"}, {"DELETE", "/api/v1/ignores?network=net&nick=bob"},
 		{"POST", "/api/v1/screens"}, {"DELETE", "/api/v1/screens?nick=bob"}, {"DELETE", "/api/v1/suspicion?network=net&key=bob"},
@@ -498,12 +499,45 @@ func (f *fakeMizira) EditMemory(network string, id int64, fact, by string) error
 	return ErrNoSuchMemory
 }
 func (f *fakeMizira) ForgetMemory(network string, id int64, by string) error {
+	if i := slices.IndexFunc(f.mems, func(m MemoryView) bool { return m.ID == id }); i >= 0 && f.mems[i].Locked {
+		return ErrMemoryLocked
+	}
 	n := len(f.mems)
 	f.mems = slices.DeleteFunc(f.mems, func(m MemoryView) bool { return m.ID == id })
 	if len(f.mems) == n {
 		return ErrNoSuchMemory
 	}
 	return nil
+}
+func (f *fakeMizira) LockMemory(network string, id int64, locked bool, by string) error {
+	for i := range f.mems {
+		if f.mems[i].ID == id {
+			f.mems[i].Locked = locked
+			return nil
+		}
+	}
+	return ErrNoSuchMemory
+}
+
+// A locked memory can't be forgotten until it's unlocked.
+func TestLockedMemoryFromTheConsole(t *testing.T) {
+	r, m := newMzRig(t)
+	m.mems = []MemoryView{{ID: 5, Subject: "bob", Fact: "bob plays the bass"}}
+	if code, _ := r.call(t, "PUT", "/api/v1/memories/5/lock?network=net", "s3cret", ""); code != http.StatusOK || !m.mems[0].Locked {
+		t.Fatalf("lock = %d, locked %v", code, m.mems[0].Locked)
+	}
+	if code, out := r.call(t, "DELETE", "/api/v1/memories/5?network=net", "s3cret", ""); code != http.StatusConflict {
+		t.Errorf("forget a locked memory = %d %v, want 409", code, out)
+	}
+	if code, _ := r.call(t, "DELETE", "/api/v1/memories/5/lock?network=net", "s3cret", ""); code != http.StatusOK || m.mems[0].Locked {
+		t.Fatalf("unlock = %d", code)
+	}
+	if code, _ := r.call(t, "DELETE", "/api/v1/memories/5?network=net", "s3cret", ""); code != http.StatusOK {
+		t.Errorf("forget after unlocking = %d", code)
+	}
+	if code, _ := r.call(t, "PUT", "/api/v1/memories/9/lock?network=net", "s3cret", ""); code != http.StatusNotFound {
+		t.Errorf("lock a missing memory = %d", code)
+	}
 }
 
 func TestMemoriesFromTheConsole(t *testing.T) {

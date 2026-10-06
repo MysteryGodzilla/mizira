@@ -46,6 +46,8 @@ export class MzApi extends Api {
     this.call<{ id: number; merged: boolean }>("POST", "memories", { network, subject, fact });
   editMemory = (network: string, id: number, fact: string) =>
     this.call<{ id: number }>("PUT", `memories/${id}?${q({ network })}`, { fact });
+  lockMemory = (network: string, id: number, locked: boolean) =>
+    this.call<{ id: number; locked: boolean }>(locked ? "PUT" : "DELETE", `memories/${id}/lock?${q({ network })}`);
   forgetMemory = (network: string, id: number) => this.call<{ id: number }>("DELETE", `memories/${id}?${q({ network })}`);
 
   compactPreview = (network: string, subject: string) =>

@@ -25,6 +25,8 @@
   }
   $effect(() => { void subject; void preview(); });
 
+  let open = $derived(current.filter((m) => !m.locked));
+  let locked = $derived(current.filter((m) => m.locked));
   let facts = $derived(text.split("\n").map((l) => l.trim()).filter(Boolean));
   let tooMany = $derived(perSubject > 0 && facts.length > perSubject);
 
@@ -41,7 +43,7 @@
     <button onclick={() => onclose(false)}>Cancel</button>
   {/snippet}
   {#if asking}
-    <p class="empty">Asking the model to merge {current.length} memories… (waits its turn behind replies)</p>
+    <p class="empty">Asking the model to merge {open.length} memories… (waits its turn behind replies)</p>
   {:else if error}
     <p class="bad">{error}</p>
     <button onclick={preview}>Try again</button>
@@ -50,8 +52,12 @@
       (one fact per line), then apply. Apply is refused if a memory about {subject} was saved meanwhile.</p>
     <div class="cols">
       <div>
-        <h3>Now ({current.length})</h3>
-        <ul class="now">{#each current as m (m.id)}<li>{m.fact}</li>{/each}</ul>
+        <h3>Now ({open.length})</h3>
+        <ul class="now">{#each open as m (m.id)}<li>{m.fact}</li>{/each}</ul>
+        {#if locked.length}
+          <p class="sub">Locked, kept as they are ({locked.length}):</p>
+          <ul class="now">{#each locked as m (m.id)}<li>{m.fact}</li>{/each}</ul>
+        {/if}
       </div>
       <div>
         <h3>After ({facts.length}{perSubject ? ` / ${perSubject}` : ""})</h3>

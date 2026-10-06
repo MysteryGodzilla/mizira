@@ -343,9 +343,14 @@ func (c console) Memories(network, subject, query string) ([]admin.MemoryView, e
 	if err != nil {
 		return nil, err
 	}
+	locked, err := store.LockedIDs(network)
+	if err != nil {
+		return nil, err
+	}
 	out := []admin.MemoryView{}
 	for i, m := range list {
-		v := admin.MemoryView{ID: m.ID, Subject: m.Subject, Fact: m.Fact, Author: m.Author, Created: m.Created.Unix()}
+		v := admin.MemoryView{ID: m.ID, Subject: m.Subject, Fact: m.Fact, Author: m.Author, Created: m.Created.Unix(),
+			Locked: locked[m.ID]}
 		// Repeats saved before merging existed: point each at an older one saying the same.
 		for _, older := range list[i+1:] {
 			if older.Subject == m.Subject && core.SameFact(m.Subject, m.Fact, older.Fact) {
@@ -370,9 +375,16 @@ func (c console) ForgetMemory(network string, id int64, by string) error {
 	return memoryErr(commands.ForgetMemory(network, id, by, core.GetLogger()))
 }
 
+func (c console) LockMemory(network string, id int64, locked bool, by string) error {
+	return memoryErr(commands.LockMemory(network, id, locked, by, core.GetLogger()))
+}
+
 func memoryErr(err error) error {
-	if errors.Is(err, commands.ErrNoSuchMemory) {
+	switch {
+	case errors.Is(err, commands.ErrNoSuchMemory):
 		return admin.ErrNoSuchMemory
+	case errors.Is(err, core.ErrMemoryLocked):
+		return admin.ErrMemoryLocked
 	}
 	return err
 }
