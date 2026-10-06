@@ -28,6 +28,7 @@ type MemoryView struct {
 	Fact    string `json:"fact"`
 	Author  string `json:"author"`
 	Created int64  `json:"created"`
+	Edited  int64  `json:"edited,omitempty"` // when its wording last changed, if it has
 	// SameAs is the id of another memory about the subject that says the same thing, if any.
 	SameAs int64 `json:"sameAs,omitempty"`
 	// Locked memories survive every forget from IRC; the console forgets one only once unlocked.

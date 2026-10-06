@@ -147,7 +147,7 @@
                   <div class="row"><button onclick={() => save(m)}>Save</button><button onclick={() => (editing = null)}>Cancel</button></div>
                 {:else}
                   <div>{m.fact}</div>
-                  <div class="sub">#{m.id}{#if !selected} · {m.subject}{/if} · by {m.author || "?"} · {when(m.created)}
+                  <div class="sub">#{m.id}{#if !selected} · {m.subject}{/if} · by {m.author || "?"} · {when(m.created)}{#if m.edited} · edited {when(m.edited)}{/if}
                     {#if m.locked}<Badge text="locked" tone="good" />{/if}
                     {#if m.sameAs}<Badge text={`same as #${m.sameAs}`} tone="busy" />{/if}</div>
                 {/if}

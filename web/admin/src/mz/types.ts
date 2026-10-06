@@ -41,7 +41,7 @@ export interface Tool {
 
 export interface Subject { subject: string; count: number; room: boolean }
 
-export interface Memory { id: number; subject: string; fact: string; author: string; created: number; sameAs?: number; locked: boolean }
+export interface Memory { id: number; subject: string; fact: string; author: string; created: number; edited?: number; sameAs?: number; locked: boolean }
 
 // Mirrors internal/admin/mz_selfnotes.go.
 

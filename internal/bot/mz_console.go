@@ -336,7 +336,7 @@ func (c console) Memories(network, subject, query string) ([]admin.MemoryView, e
 	case subject != "":
 		list, err = store.Recall(network, subject, memoryPageLimit)
 	case query != "":
-		list, err = store.Search(network, query, memoryPageLimit)
+		list, err = store.SearchWords(network, query, memoryPageLimit)
 	default:
 		list, err = store.List(network, 100)
 	}
@@ -347,10 +347,17 @@ func (c console) Memories(network, subject, query string) ([]admin.MemoryView, e
 	if err != nil {
 		return nil, err
 	}
+	edited, err := store.EditedAt(network)
+	if err != nil {
+		return nil, err
+	}
 	out := []admin.MemoryView{}
 	for i, m := range list {
 		v := admin.MemoryView{ID: m.ID, Subject: m.Subject, Fact: m.Fact, Author: m.Author, Created: m.Created.Unix(),
 			Locked: locked[m.ID]}
+		if at, ok := edited[m.ID]; ok {
+			v.Edited = at.Unix()
+		}
 		// Repeats saved before merging existed: point each at an older one saying the same.
 		for _, older := range list[i+1:] {
 			if older.Subject == m.Subject && core.SameFact(m.Subject, m.Fact, older.Fact) {
