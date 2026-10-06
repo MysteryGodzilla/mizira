@@ -38,9 +38,20 @@ func CompactPreview(cfg *config.Configuration, network, subject string) (facts [
 	if err != nil {
 		return nil, nil, err
 	}
-	held, err := store.Recall(network, subject, 1000)
+	all, err := store.Recall(network, subject, 1000)
 	if err != nil {
 		return nil, nil, err
+	}
+	locked, err := store.LockedIDs(network)
+	if err != nil {
+		return nil, nil, err
+	}
+	// Locked facts stay as they are, so they aren't offered for rewording.
+	var held []core.Memory
+	for _, m := range all {
+		if !locked[m.ID] {
+			held = append(held, m)
+		}
 	}
 	if len(held) < 2 {
 		return nil, nil, ErrNothingCompact

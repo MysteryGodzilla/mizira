@@ -85,8 +85,9 @@ func (c *MemoriesCommand) list(ctx irc.ChatContextInterface, store *core.MemoryS
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "%d memory(ies) stored, showing %d most recent:", total, len(mems))
+	locked, _ := store.LockedIDs(ctx.GetNetwork())
 	for _, m := range mems {
-		fmt.Fprintf(&b, "\n  [%d] %s: %s", m.ID, m.Subject, m.Fact)
+		fmt.Fprintf(&b, "\n  [%d] %s: %s%s", m.ID, m.Subject, m.Fact, lockMark(locked[m.ID]))
 	}
 	ctx.Reply(b.String())
 }
@@ -110,8 +111,9 @@ func (c *MemoriesCommand) about(ctx irc.ChatContextInterface, store *core.Memory
 	} else {
 		fmt.Fprintf(&b, "%d memory(ies) about %s:", len(mems), subject)
 	}
+	locked, _ := store.LockedIDs(ctx.GetNetwork())
 	for _, m := range mems {
-		fmt.Fprintf(&b, "\n  [%d] %s", m.ID, m.Fact)
+		fmt.Fprintf(&b, "\n  [%d] %s%s", m.ID, m.Fact, lockMark(locked[m.ID]))
 	}
 	ctx.Reply(b.String())
 }
@@ -144,6 +146,10 @@ func (c *MemoriesCommand) forget(ctx irc.ChatContextInterface, store *core.Memor
 		return
 	}
 
+	if store.IsLocked(ctx.GetNetwork(), id) {
+		ctx.Reply(fmt.Sprintf("memory %d is locked - unlock it in the console first", id))
+		return
+	}
 	if ok, err := store.Forget(ctx.GetNetwork(), id); err != nil || !ok {
 		ctx.Reply("could not forget that")
 		return
@@ -166,7 +172,7 @@ func (c *MemoriesCommand) clear(ctx irc.ChatContextInterface, store *core.Memory
 			return
 		}
 		ctx.GetLogger().Info("memories_cleared", "subject", subject, "count", n, "by", ctx.GetSource())
-		ctx.Reply(fmt.Sprintf("cleared %d memory(ies) about %s", n, subject))
+		ctx.Reply(fmt.Sprintf("cleared %d memory(ies) about %s%s", n, subject, keptLocked(store.LockedCount(ctx.GetNetwork(), subject))))
 		return
 	}
 
@@ -181,7 +187,23 @@ func (c *MemoriesCommand) clear(ctx irc.ChatContextInterface, store *core.Memory
 		return
 	}
 	ctx.GetLogger().Warn("memories_cleared_all", "count", n, "by", ctx.GetSource())
-	ctx.Reply(fmt.Sprintf("wiped %d memory(ies)", n))
+	locked, _ := store.LockedIDs(ctx.GetNetwork())
+	ctx.Reply(fmt.Sprintf("wiped %d memory(ies)%s", n, keptLocked(int64(len(locked)))))
+}
+
+func lockMark(locked bool) string {
+	if locked {
+		return " (locked)"
+	}
+	return ""
+}
+
+// keptLocked tells a clear how many locked memories it left.
+func keptLocked(n int64) string {
+	if n == 0 {
+		return ""
+	}
+	return fmt.Sprintf("; kept %d locked (unlock them in the console)", n)
 }
 
 // room lists room memory: the facts about the bot itself and about the channel that go out with

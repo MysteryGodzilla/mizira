@@ -210,7 +210,7 @@ Commands start with the command prefix, `+` by default (`commandprefix: "!"` to 
 | `+memories` / `+memories about <nick>` | | list stored memories |
 | `+remember <fact>` / `+remember <nick>: <fact>` | | save a fact about yourself or someone else, through the same safety checks as the bot's memory tool; the reply names the saved id |
 | `+recall [nick]` | | what is stored about someone (yourself by default) |
-| `+memories clear <nick>` / `+memories forget <id>` | own memories only | clear all memories about a nick, or delete one; admins may do either for anyone |
+| `+memories clear <nick>` / `+memories forget <id>` | own memories only | clear all memories about a nick, or delete one; admins may do either for anyone. A memory locked on the operator page is kept by every forget from IRC (and by compaction) until it is unlocked there |
 | `+tools` | | list loaded tools |
 | `+tools load <spec>` / `+tools rm <pattern>` | yes | load or unload a tool |
 | `+tools restrict <pattern>` / `+tools unrestrict <pattern>` | yes | make tools admin-only, or lift that |

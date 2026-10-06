@@ -117,6 +117,10 @@ func OpenMemoryStore(path string) (*MemoryStore, error) {
 			return nil, fmt.Errorf("build memory search index: %w", err)
 		}
 	}
+	if err := createMemoryLocks(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("create memory locks table: %w", err)
+	}
 	if err := createSelfNotes(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("create self-notes table: %w", err)
@@ -411,12 +415,12 @@ func (m *MemoryStore) Get(network string, id int64) (Memory, bool, error) {
 	return mem, true, nil
 }
 
-// Forget deletes one memory by id. Reports false if it wasn't there.
+// Forget deletes one memory by id. Reports false if it wasn't there, or is locked.
 func (m *MemoryStore) Forget(network string, id int64) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	res, err := m.db.Exec(`DELETE FROM memories WHERE id = ? AND network = ?`, id, network)
+	res, err := m.db.Exec(`DELETE FROM memories WHERE id = ? AND network = ? AND `+notLocked, id, network)
 	if err != nil {
 		return false, err
 	}
@@ -424,12 +428,12 @@ func (m *MemoryStore) Forget(network string, id int64) (bool, error) {
 	return n > 0, nil
 }
 
-// ForgetSubject deletes every memory about one subject, returning the count.
+// ForgetSubject deletes every unlocked memory about one subject, returning the count.
 func (m *MemoryStore) ForgetSubject(network, subject string) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	res, err := m.db.Exec(`DELETE FROM memories WHERE network = ? AND subject = ?`,
+	res, err := m.db.Exec(`DELETE FROM memories WHERE network = ? AND subject = ? AND `+notLocked,
 		network, normalizeSubject(subject))
 	if err != nil {
 		return 0, err
@@ -438,12 +442,12 @@ func (m *MemoryStore) ForgetSubject(network, subject string) (int64, error) {
 	return n, nil
 }
 
-// Clear deletes everything, returning how many memories were removed.
+// Clear deletes everything but locked memories, returning how many were removed.
 func (m *MemoryStore) Clear(network string) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	res, err := m.db.Exec(`DELETE FROM memories WHERE network = ?`, network)
+	res, err := m.db.Exec(`DELETE FROM memories WHERE network = ? AND `+notLocked, network)
 	if err != nil {
 		return 0, err
 	}

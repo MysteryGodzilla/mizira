@@ -182,10 +182,14 @@ func newMemoryForgetTool() tools.Tool {
 					return "Error: could not forget that", nil
 				}
 				chatCtx.GetLogger().Info("memories_cleared", "subject", subject, "count", n, "by", chatCtx.SpeakerKey())
-				if n == 0 {
-					return fmt.Sprintf("Nothing was remembered about %s. Say so plainly.", subject), nil
+				kept := ""
+				if locked := store.LockedCount(chatCtx.GetNetwork(), subject); locked > 0 {
+					kept = fmt.Sprintf(" %d locked memories about %s were kept: only the operator can remove those. Say that too.", locked, subject)
 				}
-				return fmt.Sprintf("Forgot all %d memories about %s. Say briefly that it's done.", n, subject), nil
+				if n == 0 {
+					return fmt.Sprintf("Nothing was forgotten about %s.%s Say so plainly.", subject, kept), nil
+				}
+				return fmt.Sprintf("Forgot %d memories about %s.%s Say briefly that it's done.", n, subject, kept), nil
 			}
 			mems, err := store.Recall(chatCtx.GetNetwork(), subject, 50)
 			if err != nil {
@@ -200,6 +204,9 @@ func newMemoryForgetTool() tools.Tool {
 				}
 				return fmt.Sprintf("More than one memory about %s could match %q: %s. Ask which one, or call "+
 					"again with more of its words.", subject, query, quoteFacts(candidates)), nil
+			}
+			if store.IsLocked(chatCtx.GetNetwork(), match.ID) {
+				return fmt.Sprintf("Not forgotten: the operator has locked the memory %q, so it can't be forgotten from chat. Tell them it's locked.", match.Fact), nil
 			}
 			ok, err := store.Forget(chatCtx.GetNetwork(), match.ID)
 			if err != nil {
@@ -330,6 +337,9 @@ func forgetByID(chatCtx ChatContextInterface, id int64) string {
 	if !strings.EqualFold(mem.Subject, chatCtx.Speaker()) && !chatCtx.IsAdmin() {
 		chatCtx.GetLogger().Info("memory_forget_denied", "id", id, "subject", mem.Subject, "requested_by", chatCtx.SpeakerKey())
 		return fmt.Sprintf("Refused: memory %d is about %s, not about the person asking. Only they or an operator can remove it.", id, mem.Subject)
+	}
+	if store.IsLocked(chatCtx.GetNetwork(), id) {
+		return fmt.Sprintf("Not forgotten: the operator has locked memory %d, so it can't be forgotten from chat. Tell them it's locked.", id)
 	}
 	if ok, err := store.Forget(chatCtx.GetNetwork(), id); err != nil || !ok {
 		return "Error: could not forget that"

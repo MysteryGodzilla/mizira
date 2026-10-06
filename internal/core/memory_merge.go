@@ -80,7 +80,8 @@ func (m *MemoryStore) RememberMerged(network, subject, fact, author, channel str
 	if same, ok, err := m.Similar(network, subject, fact); err != nil {
 		return 0, false, err
 	} else if ok {
-		if len(strings.TrimSpace(fact)) > len(same.Fact) {
+		// A locked fact keeps the operator's wording.
+		if len(strings.TrimSpace(fact)) > len(same.Fact) && !m.IsLocked(network, same.ID) {
 			if _, err := m.Update(network, same.ID, fact); err != nil {
 				return 0, false, err
 			}
@@ -153,9 +154,9 @@ func (m *MemoryStore) SubjectCounts(network string) ([]SubjectCount, error) {
 // ErrMemoriesChanged: a subject's memories changed after a compaction was previewed.
 var ErrMemoriesChanged = errors.New("the memories changed since the preview")
 
-// ReplaceSubject swaps every memory about subject for facts, in one transaction, but only if the
-// subject still holds exactly the memories expected (by id), so a fact saved while the operator was
-// reviewing isn't lost. Facts that repeat each other are stored once. It returns how many it stored.
+// ReplaceSubject swaps every unlocked memory about subject for facts, in one transaction, but only if
+// the subject still holds exactly the unlocked memories expected (by id), so a fact saved while the
+// operator was reviewing isn't lost. Locked memories stay as they are. Facts that repeat each other are stored once. It returns how many it stored.
 func (m *MemoryStore) ReplaceSubject(network, subject string, expected []int64, facts []string, author, channel string) (int, error) {
 	subject = normalizeSubject(subject)
 	m.mu.Lock()
@@ -166,7 +167,7 @@ func (m *MemoryStore) ReplaceSubject(network, subject string, expected []int64, 
 	}
 	defer tx.Rollback()
 
-	rows, err := tx.Query(`SELECT id FROM memories WHERE network = ? AND subject = ?`, network, subject)
+	rows, err := tx.Query(`SELECT id FROM memories WHERE network = ? AND subject = ? AND `+notLocked, network, subject)
 	if err != nil {
 		return 0, err
 	}
@@ -187,7 +188,7 @@ func (m *MemoryStore) ReplaceSubject(network, subject string, expected []int64, 
 		return 0, ErrMemoriesChanged
 	}
 
-	if _, err := tx.Exec(`DELETE FROM memories WHERE network = ? AND subject = ?`, network, subject); err != nil {
+	if _, err := tx.Exec(`DELETE FROM memories WHERE network = ? AND subject = ? AND `+notLocked, network, subject); err != nil {
 		return 0, err
 	}
 	now := time.Now().Unix()
