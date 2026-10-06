@@ -28,7 +28,7 @@
   function fold(c: Conversation) {
     if (!confirm(`Fold ${where(c)} now?
 
-Everything but the last 6 turns is summarised into the recap, then self-notes are proposed, as after any fold. It waits for the model, so it can take a minute. Same as ~recap fold.`)) return;
+Everything but the last 6 turns is summarised into the recap, then self-notes and people-notes are proposed, as after any fold. It waits for the model, so it can take a minute. Same as ~recap fold.`)) return;
     folding = c.network;
     folded = "";
     void mz.act(async () => {

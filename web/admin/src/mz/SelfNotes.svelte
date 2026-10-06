@@ -34,14 +34,15 @@
   }
 </script>
 
-<Card title={`Self-notes${mz.pendingNotes.length ? ` (${mz.pendingNotes.length} waiting)` : ""}`}>
+<Card title={`Notes from folds${mz.pendingNotes.length ? ` (${mz.pendingNotes.length} waiting)` : ""}`}>
   {#snippet actions()}
     <label class="toggle"><input type="checkbox" bind:checked={showDecided} /> show decided</label>
   {/snippet}
-  <p class="sub">What she noticed about herself when chat was folded into the recap. Nothing here reaches her until you
-    approve it; then it becomes room memory. Proposals come from chat, so read them as suggestions, not facts.</p>
+  <p class="sub">What she noticed about herself, and about the people who spoke, when chat was folded into the recap.
+    Nothing here reaches her until you approve it; then it becomes a memory about that person (room memory, for a note
+    about her). Proposals come from chat, so read them as suggestions, not facts.</p>
   {#if !notes.length}
-    <p class="empty">{showDecided ? "No self-notes yet." : "Nothing waiting."}</p>
+    <p class="empty">{showDecided ? "No notes yet." : "Nothing waiting."}</p>
   {:else}
     <ul class="rows">
       {#each notes as n (n.id)}
@@ -55,7 +56,7 @@
               </div>
             {:else}
               <div>{n.text}</div>
-              <div class="sub">#{n.id} · {when(n.created)}{#if n.why} · from “{n.why}”{/if}
+              <div class="sub">#{n.id} · about {n.subject} · {when(n.created)}{#if n.why} · from “{n.why}”{/if}
                 {#if n.status === "approved"}<Badge text={`approved → memory #${n.memoryId}`} tone="good" />{/if}
                 {#if n.status === "denied"}<Badge text="denied" />{/if}
                 {#if n.status !== "pending"}<span>by {n.decidedBy}</span>{/if}</div>

@@ -46,7 +46,7 @@ export interface Memory { id: number; subject: string; fact: string; author: str
 // Mirrors internal/admin/mz_selfnotes.go.
 
 export interface SelfNote {
-  id: number; text: string; why: string; status: "pending" | "approved" | "denied"; created: number;
+  id: number; subject: string; text: string; why: string; status: "pending" | "approved" | "denied"; created: number;
   decidedBy: string; decidedAt: number; memoryId: number;
 }
 

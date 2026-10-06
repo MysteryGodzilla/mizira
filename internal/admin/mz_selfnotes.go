@@ -15,6 +15,7 @@ import (
 
 type SelfNoteView struct {
 	ID        int64  `json:"id"`
+	Subject   string `json:"subject"` // who it's about: the bot (a self-note) or a person (a people-note)
 	Text      string `json:"text"`
 	Why       string `json:"why"`
 	Status    string `json:"status"` // pending, approved or denied

@@ -400,7 +400,11 @@ func (c console) SelfNotes(network, status string) ([]admin.SelfNoteView, error)
 	}
 	out := []admin.SelfNoteView{}
 	for _, n := range notes {
-		v := admin.SelfNoteView{ID: n.ID, Text: n.Text, Why: n.Why, Status: n.Status, Created: n.Created.Unix(),
+		subject := n.Subject
+		if subject == "" {
+			subject = strings.ToLower(llm.SelfName(c.cfg))
+		}
+		v := admin.SelfNoteView{ID: n.ID, Subject: subject, Text: n.Text, Why: n.Why, Status: n.Status, Created: n.Created.Unix(),
 			DecidedBy: n.DecidedBy, MemoryID: n.MemoryID}
 		if !n.DecidedAt.IsZero() {
 			v.DecidedAt = n.DecidedAt.Unix()
