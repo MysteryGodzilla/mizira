@@ -184,3 +184,9 @@ var saveWords = regexp.MustCompile(`(?i)\b(remember|save|note|keep in mind|don't
 func AskedToSave(chatCtx ChatContextInterface) bool {
 	return saveWords.MatchString(strings.Join(chatCtx.GetArgs(), " "))
 }
+
+// LooksLikeInstruction reports, with a reason, whether a fact about subject is an order dressed as
+// one, as a save would refuse it; the console marks such proposals.
+func LooksLikeInstruction(subject, fact string) (string, bool) {
+	return looksLikeInstruction(subject, fact)
+}

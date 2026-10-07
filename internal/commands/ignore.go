@@ -68,7 +68,19 @@ func (c *IgnoreCommand) Execute(ctx irc.ChatContextInterface) {
 		return
 	}
 	ctx.Reply(fmt.Sprintf("Ignoring %s for %s (until %s UTC)",
-		nick, duration, expiry.UTC().Format("2006-01-02 15:04")))
+		nick, shortDuration(duration), expiry.UTC().Format("2006-01-02 15:04")))
+}
+
+// shortDuration drops Go's zero units: "2h", "1h30m", "45m" rather than "2h0m0s".
+func shortDuration(d time.Duration) string {
+	s := d.String()
+	if strings.HasSuffix(s, "m0s") {
+		s = strings.TrimSuffix(s, "0s")
+	}
+	if strings.HasSuffix(s, "h0m") {
+		s = strings.TrimSuffix(s, "0m")
+	}
+	return s
 }
 
 // UnignoreCommand is a convenience alias for "+ignore remove <nick>".

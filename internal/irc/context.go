@@ -80,6 +80,9 @@ func NewChatContext(parentctx context.Context, config *config.Configuration, sys
 		),
 	}
 
+	if ircclient != nil {
+		core.NoteBotNick(config.Server.Name, ircclient.GetNick())
+	}
 	if speaker := ctx.SpeakerKey(); speaker != e.Source.Name {
 		ctx.logger = ctx.logger.With("speaker", speaker)
 	}

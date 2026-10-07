@@ -23,6 +23,19 @@ func (c *SuspicionCommand) AdminOnly() bool { return false }
 
 func (c *SuspicionCommand) Execute(ctx irc.ChatContextInterface) {
 	network := ctx.GetNetwork()
+	if args := ctx.GetArgs(); len(args) > 2 && strings.EqualFold(args[1], "clear") {
+		if !ctx.IsAdmin() {
+			ctx.Reply("only an admin can clear a suspicion score")
+			return
+		}
+		key := strings.Join(args[2:], " ")
+		if ClearSuspicion(network, key, ctx.GetSource(), ctx.GetLogger()) {
+			ctx.Reply(fmt.Sprintf("cleared %s's suspicion score", key))
+		} else {
+			ctx.Reply(fmt.Sprintf("%s has no suspicion score", key))
+		}
+		return
+	}
 	if args := ctx.GetArgs(); len(args) > 1 {
 		nick := args[1]
 		ctx.Reply(fmt.Sprintf("%s: %.1f (quarantine at %.1f)", nick, core.Suspicions().Score(network, nick), core.SuspicionQuarantine))

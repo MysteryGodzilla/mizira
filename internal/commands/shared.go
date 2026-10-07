@@ -48,7 +48,7 @@ func IgnoreNick(cfg *config.Configuration, network, botNick, nick string, d time
 	if isAdmin(cfg, nick) {
 		return time.Time{}, ErrIsAdmin
 	}
-	if strings.EqualFold(nick, botNick) {
+	if isSelf(cfg, botNick, nick) {
 		return time.Time{}, ErrIsSelf
 	}
 	expiry := core.Ignores().AddWithInfo(network, nick, d, core.IgnoreInfo{Kind: core.IgnoreByAdmin, By: by, Reason: reason})
@@ -74,7 +74,7 @@ func ScreenNick(cfg *config.Configuration, session sessions.Session, botNick, ni
 	if isAdmin(cfg, nick) {
 		return 0, ErrIsAdmin
 	}
-	if strings.EqualFold(nick, botNick) {
+	if isSelf(cfg, botNick, nick) {
 		return 0, ErrIsSelf
 	}
 	configMu.Lock()
@@ -159,4 +159,33 @@ func ClearRecap(key, by string, log *slog.Logger) (bool, error) {
 func FoldConversation(cfg *config.Configuration, session sessions.Session, by string, log *slog.Logger) (llm.FoldResult, error) {
 	log.Info("recap_fold_requested", "key", session.GetName(), "by", by)
 	return llm.FoldNow(cfg, session)
+}
+
+// ClearSuspicion is "+suspicion clear <nick>": forget one speaker's score now. key is a nick, or
+// "nick [tag]" for a bot that shares its owner's nick. False if there was no score.
+func ClearSuspicion(network, key, by string, log *slog.Logger) bool {
+	if core.Suspicions().Score(network, key) == 0 {
+		return false
+	}
+	core.Suspicions().Clear(network, key)
+	log.Info("suspicion_cleared", "network", network, "key", key, "by", by)
+	return true
+}
+
+// isSelf reports whether nick is the bot: the nick it was given, the one it uses now (an alternate,
+// when that was taken), or the name it answers to.
+func isSelf(cfg *config.Configuration, botNick, nick string) bool {
+	names := []string{botNick}
+	if cfg.Server != nil {
+		names = append(names, cfg.Server.Nick)
+	}
+	if cfg.Bot != nil {
+		names = append(names, cfg.Bot.Trigger)
+	}
+	for _, n := range names {
+		if n != "" && strings.EqualFold(n, nick) {
+			return true
+		}
+	}
+	return core.IsCurrentBotNick(nick)
 }
