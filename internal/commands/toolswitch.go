@@ -5,11 +5,17 @@
 package commands
 
 import (
+	"errors"
+	"log/slog"
 	"slices"
+	"strings"
 	"sync"
+
+	"github.com/alexschlessinger/pollytool/tools"
 
 	"B4reMetal/metald/internal/config"
 	"B4reMetal/metald/internal/core"
+	"B4reMetal/metald/internal/irc"
 )
 
 // config.yml's own tool list, before the console's switches are layered on.
@@ -80,4 +86,39 @@ func ClearToolSwitches() {
 	o := loadOverrides()
 	o.ToolsOn, o.ToolsOff = nil, nil
 	saveOverrides(o)
+}
+
+// ErrNoToolMatched: the pattern matched no loaded tool.
+var ErrNoToolMatched = errors.New("no tools matched")
+
+// RestrictTools makes the loaded tools pattern matches admin-only (or open to everyone again), and
+// keeps that across restarts. It's "+tools restrict" and "+tools unrestrict", shared with the
+// console. It returns the tools whose state changed.
+func RestrictTools(cfg *config.Configuration, registry *tools.ToolRegistry, pattern string, restrict bool, by string, log *slog.Logger) ([]string, error) {
+	matches := matchToolNames(registry.All(), pattern)
+	if len(matches) == 0 {
+		return nil, ErrNoToolMatched
+	}
+	var changed []string
+	configMu.Lock()
+	defer configMu.Unlock()
+	for _, name := range matches {
+		tool, ok := registry.Get(name)
+		if !ok || irc.IsAdminOnly(tool) == restrict {
+			continue
+		}
+		if restrict {
+			registry.Register(irc.NewAdminOnlyTool(tool))
+		} else {
+			registry.Register(irc.UnwrapAdminOnly(tool))
+		}
+		changed = append(changed, name)
+	}
+	if len(changed) == 0 {
+		return nil, nil
+	}
+	syncAdminToolsConfig(cfg, changed, restrict)
+	PersistAdminTools(cfg.Bot.AdminTools)
+	log.Info("tool_restriction_changed", "tools", strings.Join(changed, ","), "admin_only", restrict, "by", by)
+	return changed, nil
 }

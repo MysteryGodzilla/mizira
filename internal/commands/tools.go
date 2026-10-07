@@ -5,11 +5,13 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"path"
 	"sort"
 	"strings"
 
+	"B4reMetal/metald/internal/config"
 	"B4reMetal/metald/internal/irc"
 
 	"github.com/alexschlessinger/pollytool/tools"
@@ -79,33 +81,12 @@ func (c *ToolsCommand) setRestriction(ctx irc.ChatContextInterface, pattern stri
 		return
 	}
 
-	registry := ctx.GetSystem().GetToolRegistry()
-	matches := matchToolNames(registry.All(), pattern)
-	if len(matches) == 0 {
+	changed, err := RestrictTools(ctx.GetConfig(), ctx.GetSystem().GetToolRegistry(), pattern, restrict, ctx.GetSource(), ctx.GetLogger())
+	switch {
+	case errors.Is(err, ErrNoToolMatched):
 		ctx.Reply(fmt.Sprintf("No tools matched: %s", pattern))
 		return
-	}
-
-	var changed []string
-	configMu.Lock()
-	defer configMu.Unlock()
-	for _, name := range matches {
-		tool, ok := registry.Get(name)
-		if !ok {
-			continue
-		}
-		if irc.IsAdminOnly(tool) == restrict {
-			continue // already in the requested state
-		}
-		if restrict {
-			registry.Register(irc.NewAdminOnlyTool(tool))
-		} else {
-			registry.Register(irc.UnwrapAdminOnly(tool))
-		}
-		changed = append(changed, name)
-	}
-
-	if len(changed) == 0 {
+	case len(changed) == 0:
 		state := "unrestricted"
 		if restrict {
 			state = "already admin-only"
@@ -113,11 +94,6 @@ func (c *ToolsCommand) setRestriction(ctx irc.ChatContextInterface, pattern stri
 		ctx.Reply(fmt.Sprintf("No change - matched tools are %s", state))
 		return
 	}
-
-	syncAdminToolsConfig(ctx, changed, restrict)
-	PersistAdminTools(ctx.GetConfig().Bot.AdminTools)
-	ctx.GetLogger().Info("tool_restriction_changed",
-		"tools", strings.Join(changed, ","), "admin_only", restrict, "by", ctx.GetSource())
 
 	if restrict {
 		ctx.Reply(fmt.Sprintf("Restricted to admins: %s", strings.Join(changed, ", ")))
@@ -128,8 +104,7 @@ func (c *ToolsCommand) setRestriction(ctx irc.ChatContextInterface, pattern stri
 
 // syncAdminToolsConfig keeps cfg.Bot.AdminTools consistent with the live registry, so "+get
 // admintools" reflects reality.
-func syncAdminToolsConfig(ctx irc.ChatContextInterface, names []string, restrict bool) {
-	cfg := ctx.GetConfig()
+func syncAdminToolsConfig(cfg *config.Configuration, names []string, restrict bool) {
 	current := make(map[string]bool, len(cfg.Bot.AdminTools))
 	for _, n := range cfg.Bot.AdminTools {
 		current[n] = true
