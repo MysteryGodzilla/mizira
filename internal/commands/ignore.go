@@ -135,6 +135,8 @@ func describeIgnore(e core.IgnoreEntry, now time.Time) string {
 		line += " · admin " + e.By
 	case core.IgnoreByFlood:
 		line += " · flood"
+	case core.IgnoreByScreen:
+		line += " · repeated harassment"
 	}
 	if e.Reason != "" {
 		if e.Kind == core.IgnoreByFlood {

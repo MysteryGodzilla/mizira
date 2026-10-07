@@ -45,7 +45,8 @@
     }
   }
 
-  const how = (i: Ignore) => (i.kind === "bot" ? `by Mizira, during ${i.by}'s message` : i.kind === "flood" ? "flood" : `by ${i.by}`);
+  const how = (i: Ignore) => (i.kind === "bot" ? `by Mizira, during ${i.by}'s message` : i.kind === "flood" ? "flood"
+    : i.kind === "screening" ? "repeated harassment" : `by ${i.by}`);
   const tone = (s: Score, at: number) => (s.score >= at ? "bad" : s.score >= at / 2 ? "busy" : "plain");
   const has = (list: string[], nick: string) => list.some((n) => n.toLowerCase() === nick);
   let screened = $derived(p ? [...new Set([...p.screened.in, ...p.screened.out].map((n) => n.toLowerCase()))] : []);
