@@ -63,8 +63,9 @@ export class MzApi extends Api {
 
   safety = (days: number, kind = "", who = "") => this.call<Safety>("GET", `safety?${q({ days: String(days), kind, who })}`);
 
-  selfNotes = (network: string, status: "" | SelfNote["status"]) =>
-    this.call<{ notes: SelfNote[] }>("GET", `selfnotes?${q({ network, status })}`).then((r) => r.notes);
+  selfNotes = (network: string, status: "" | "decided" | SelfNote["status"], query = "", offset = 0, limit = 50) =>
+    this.call<{ notes: SelfNote[]; more: boolean }>("GET",
+      `selfnotes?${q({ network, status, q: query, offset: String(offset), limit: String(limit) })}`);
   approveSelfNote = (network: string, id: number, text: string) =>
     this.call<{ id: number; memoryId: number; merged: boolean }>("POST", `selfnotes/${id}/approve?${q({ network })}`, { text });
   denySelfNote = (network: string, id: number) => this.call<{ id: number }>("POST", `selfnotes/${id}/deny?${q({ network })}`, {});

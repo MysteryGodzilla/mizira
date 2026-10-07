@@ -220,12 +220,7 @@ func (c console) Suspicion() ([]admin.ScoreView, float64) {
 }
 
 func (c console) ClearSuspicion(network, key, by string) bool {
-	if core.Suspicions().Score(network, key) == 0 {
-		return false
-	}
-	core.Suspicions().Clear(network, key)
-	core.GetLogger().Info("suspicion_cleared", "network", network, "key", key, "by", by)
-	return true
+	return commands.ClearSuspicion(network, key, by, core.GetLogger())
 }
 
 // refusal words a shared command's refusal for the page.
@@ -411,14 +406,14 @@ func memoryErr(err error) error {
 	return err
 }
 
-func (c console) SelfNotes(network, status string) ([]admin.SelfNoteView, error) {
+func (c console) SelfNotes(network, status, query string, offset, limit int) ([]admin.SelfNoteView, bool, error) {
 	store, err := core.Memories()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	notes, err := store.SelfNotes(network, status, 200)
+	notes, more, err := store.SelfNotesPage(network, status, query, offset, limit)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	out := []admin.SelfNoteView{}
 	for _, n := range notes {
@@ -431,9 +426,12 @@ func (c console) SelfNotes(network, status string) ([]admin.SelfNoteView, error)
 		if !n.DecidedAt.IsZero() {
 			v.DecidedAt = n.DecidedAt.Unix()
 		}
+		if why, order := irc.LooksLikeInstruction(subject, n.Text); order {
+			v.Order = why
+		}
 		out = append(out, v)
 	}
-	return out, nil
+	return out, more, nil
 }
 
 func (c console) ApproveSelfNote(network string, id int64, text, by string) (int64, bool, error) {
@@ -484,7 +482,7 @@ func (c console) SafetyEvents(days, limit int) ([]admin.SafetyEventView, error) 
 	}
 	for _, e := range events {
 		out = append(out, admin.SafetyEventView{Time: e.Time.Unix(), Kind: e.Kind, Event: e.Event, Who: e.Who,
-			Channel: e.Channel, Detail: e.Detail, Suspicion: e.Suspicion})
+			Channel: e.Channel, Detail: e.Detail, Suspicion: e.Suspicion, Message: e.Message})
 	}
 	return out, nil
 }

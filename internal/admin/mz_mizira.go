@@ -73,7 +73,7 @@ type Mizira interface {
 	CompactApply(network, subject string, basedOn []int64, facts []string, by string) (stored int, err error)
 
 	// Self-notes, as ~selfnotes does. A note already decided returns ErrNotPending.
-	SelfNotes(network, status string) ([]SelfNoteView, error)
+	SelfNotes(network, status, query string, offset, limit int) ([]SelfNoteView, bool, error)
 	ApproveSelfNote(network string, id int64, text, by string) (memoryID int64, merged bool, err error)
 	DenySelfNote(network string, id int64, by string) error
 

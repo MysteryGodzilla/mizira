@@ -52,13 +52,13 @@ export interface Memory { id: number; subject: string; fact: string; author: str
 // Mirrors internal/admin/mz_selfnotes.go.
 
 export interface SelfNote {
-  id: number; subject: string; text: string; why: string; status: "pending" | "approved" | "denied"; created: number;
-  decidedBy: string; decidedAt: number; memoryId: number;
+  id: number; subject: string; text: string; why: string; status: "pending" | "approved" | "denied" | "expired"; created: number;
+  decidedBy: string; decidedAt: number; memoryId: number; order?: string;
 }
 
 // Mirrors internal/admin/mz_safety.go.
 
-export interface SafetyEvent { time: number; kind: string; event: string; who: string; channel: string; detail: string; suspicion?: string }
+export interface SafetyEvent { time: number; kind: string; event: string; who: string; channel: string; detail: string; suspicion?: string; message?: string }
 
 export interface PersonCount { who: string; total: number; byKind: Record<string, number> }
 

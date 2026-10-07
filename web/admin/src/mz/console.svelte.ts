@@ -59,7 +59,7 @@ export class MzConsole {
         this.api.features(), this.api.runState(), this.api.settingsAndLists(), this.api.tools(),
       ]);
       const networks = this.board.status?.networks.map((n) => n.name) ?? [];
-      const pendingNotes = (await Promise.all(networks.map((n) => this.api.selfNotes(n, "pending")))).flat();
+      const pendingNotes = (await Promise.all(networks.map((n) => this.api.selfNotes(n, "pending", "", 0, 200).then((r) => r.notes)))).flat();
       Object.assign(this, { features, runState, settings, lists, tools, pendingNotes });
     } catch { /* upstream's refresh reports errors; don't say it twice */ }
   }

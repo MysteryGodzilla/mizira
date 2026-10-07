@@ -203,7 +203,7 @@ Commands start with the command prefix, `+` by default (`commandprefix: "!"` to 
 | `+schedule in <30m\|2h\|1d> <what to do>` | quota for non-admins | run something once, later |
 | `+schedule every <2h> <...>` / `+schedule daily <HH:MM> <...>` | admin | run something on repeat (at most every 15 minutes; times are UTC); `+schedule cancel <id>` stops it |
 | `+recap` / `+recap clear` / `+recap fold` | admin | post this channel's recap as a paste (inline if no paste tool is loaded), delete it, or fold the older conversation into it now (keeps the last 6 turns) |
-| `+suspicion` / `+suspicion <nick>` | anyone | show the decaying per-speaker suspicion scores on this network, highest first, or one nick's score |
+| `+suspicion` / `+suspicion <nick>` / `+suspicion clear <nick>` | anyone; clear is admin | show the decaying per-speaker suspicion scores on this network, highest first, or one nick's score; clear one now |
 | `+np` | anyone | say what the web radio is playing (reads `RADIO_API_URL` / `RADIO_PAGE_URL`) |
 | `+skip` | anyone | skip the web radio's current track; one skip per 20 seconds across everyone (reads `RADIO_API_URL` / `RADIO_TOKEN`) |
 | `+prompt <text>` | yes | set a custom persona for this channel; it disables every tool until `+reset`. No argument shows the current state |

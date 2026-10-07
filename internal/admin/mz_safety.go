@@ -21,6 +21,7 @@ type SafetyEventView struct {
 	Who       string `json:"who"`
 	Channel   string `json:"channel"`
 	Detail    string `json:"detail"`
+	Message   string `json:"message,omitempty"` // the screened text, shown behind a click
 	Suspicion string `json:"suspicion,omitempty"`
 }
 

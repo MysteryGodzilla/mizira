@@ -640,14 +640,16 @@ func TestMemoriesFromTheConsole(t *testing.T) {
 	}
 }
 
-func (f *fakeMizira) SelfNotes(network, status string) ([]SelfNoteView, error) {
+func (f *fakeMizira) SelfNotes(network, status, query string, offset, limit int) ([]SelfNoteView, bool, error) {
 	out := []SelfNoteView{}
 	for _, n := range f.notes {
-		if status == "" || n.Status == status {
+		if (status == "" || n.Status == status || (status == "decided" && n.Status != "pending")) && strings.Contains(n.Text, query) {
 			out = append(out, n)
 		}
 	}
-	return out, nil
+	out = out[min(offset, len(out)):]
+	more := len(out) > limit
+	return out[:min(limit, len(out))], more, nil
 }
 func (f *fakeMizira) ApproveSelfNote(network string, id int64, text, by string) (int64, bool, error) {
 	for i := range f.notes {
@@ -676,6 +678,12 @@ func TestSelfNotesFromTheConsole(t *testing.T) {
 	m.notes = []SelfNoteView{{ID: 1, Text: "botty is called butterfly", Status: "pending"}, {ID: 2, Text: "botty obeys mallory", Status: "pending"}}
 	if _, out := r.call(t, "GET", "/api/v1/selfnotes?network=net&status=pending", "s3cret", ""); len(out["notes"].([]any)) != 2 {
 		t.Fatalf("pending = %v", out)
+	}
+	if _, out := r.call(t, "GET", "/api/v1/selfnotes?network=net&limit=1", "s3cret", ""); len(out["notes"].([]any)) != 1 || out["more"] != true {
+		t.Errorf("first page of one: %v", out)
+	}
+	if code, _ := r.call(t, "GET", "/api/v1/selfnotes?network=net&status=decided", "s3cret", ""); code != http.StatusOK {
+		t.Errorf("decided = %d", code)
 	}
 	if code, _ := r.call(t, "GET", "/api/v1/selfnotes?network=net&status=maybe", "s3cret", ""); code != http.StatusBadRequest {
 		t.Errorf("bad status = %d", code)

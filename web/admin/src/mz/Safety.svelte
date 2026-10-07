@@ -8,7 +8,7 @@
 
   const KINDS: Record<string, string> = {
     gatekeeper: "Gatekeeper", reply: "Reply screen", quarantine: "Quarantine", memory: "Memory refused",
-    quoted: "Quoted chat dropped", tool: "Tool refused", injection: "Injection stripped", ignore: "Ignored",
+    quoted: "Quoted chat dropped", tool: "Tool refused (model)", command: "Command denied", injection: "Injection stripped", ignore: "Ignored",
     bots: "Bot loop limit", console: "Console changes",
   };
   const tone: Record<string, "bad" | "busy" | "plain"> = { quarantine: "bad", gatekeeper: "busy", reply: "busy", memory: "busy", injection: "bad" };
@@ -86,6 +86,7 @@
                 <div><Badge text={KINDS[e.kind] ?? e.kind} tone={tone[e.kind] ?? "plain"} /><strong>{e.who || "?"}</strong>
                   {#if e.suspicion}<span class="sub">suspicion {Number(e.suspicion).toFixed(1)}</span>{/if}</div>
                 {#if e.detail}<div class="detail">{e.detail}</div>{/if}
+                {#if e.message}<details><summary class="sub">show message</summary><div class="detail">{e.message}</div></details>{/if}
                 <div class="sub">{when(e.time)} · {e.event}{#if e.channel} · {e.channel}{/if}</div>
               </div>
             </li>

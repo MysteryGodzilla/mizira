@@ -8,6 +8,8 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strconv"
+	"strings"
 )
 
 // Self-notes: what the bot proposed about itself from folded chat, for the operator to approve
@@ -23,6 +25,9 @@ type SelfNoteView struct {
 	DecidedBy string `json:"decidedBy"`
 	DecidedAt int64  `json:"decidedAt"`
 	MemoryID  int64  `json:"memoryId"`
+	// Order says why the note reads like an order rather than a fact, if it does: a memory save
+	// would refuse it.
+	Order string `json:"order,omitempty"`
 }
 
 // ErrNotPending is a self-note already decided.
@@ -40,16 +45,21 @@ func (s *Server) selfNotes(w http.ResponseWriter, r *http.Request) {
 	if !s.knownNetwork(w, n) {
 		return
 	}
-	if !slices.Contains([]string{"", "pending", "approved", "denied"}, status) {
-		fail(w, http.StatusBadRequest, "status is pending, approved or denied")
+	if !slices.Contains([]string{"", "pending", "decided", "approved", "denied", "expired"}, status) {
+		fail(w, http.StatusBadRequest, "status is pending, decided, approved, denied or expired")
 		return
 	}
-	list, err := s.mz.SelfNotes(n, status)
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	list, more, err := s.mz.SelfNotes(n, status, strings.TrimSpace(q.Get("q")), max(0, offset), limit)
 	if err != nil {
 		fail(w, http.StatusInternalServerError, "memory is unavailable")
 		return
 	}
-	respond(w, http.StatusOK, map[string]any{"notes": list})
+	respond(w, http.StatusOK, map[string]any{"notes": list, "more": more})
 }
 
 func (s *Server) approveSelfNote(w http.ResponseWriter, r *http.Request) {
