@@ -5,6 +5,7 @@
 package bot
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -232,4 +233,43 @@ func (c console) RestrictTool(spec string, adminOnly bool, by string) error {
 		return nil
 	}
 	return fmt.Errorf("%s isn't one of the bot's tools", spec)
+}
+
+func (c console) Models(ctx context.Context) (string, []admin.ModelView, error) {
+	list, err := commands.ListModels(ctx, c.cfg)
+	if err != nil {
+		core.GetLogger().Warn("models_probe_failed", "error", err.Error())
+		return "", nil, err
+	}
+	out := []admin.ModelView{}
+	for _, m := range list {
+		out = append(out, admin.ModelView{ID: m.ID, Name: m.Name})
+	}
+	current := c.cfg.Model.Model
+	if _, name, ok := strings.Cut(current, "/"); ok {
+		current = name
+	}
+	return current, out, nil
+}
+
+func (c console) SwitchModel(ctx context.Context, model, by string) (string, error) {
+	list, err := commands.ListModels(ctx, c.cfg)
+	if err != nil {
+		return "", errors.New("couldn't get the model list from the model server")
+	}
+	switched, err := commands.SwitchModel(c.cfg, c.sys, list, model, by, core.GetLogger())
+	switch {
+	case errors.Is(err, commands.ErrNoSuchModel):
+		return "", admin.ErrNoSuchModel
+	case errors.Is(err, commands.ErrSameModel):
+		return "", admin.ErrSameModel
+	case err != nil && !errors.Is(err, commands.ErrLLMNotUpdated):
+		return "", err
+	}
+	for _, n := range c.nets {
+		if session, _, serr := c.channelSession(n); serr == nil {
+			session.Clear()
+		}
+	}
+	return switched, err
 }

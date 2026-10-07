@@ -4,6 +4,7 @@
   import { GROUPS, meta } from "./settings";
   import Badge from "../components/Badge.svelte";
   import Card from "../components/Card.svelte";
+  import Model from "./Model.svelte";
   let { mz }: { mz: MzConsole } = $props();
 
   // Edits in progress, by key; a key not here shows its live value.
@@ -46,6 +47,8 @@
     delete draft[s.key];
   }
 </script>
+
+<Model {mz} />
 
 <Card title="Settings">
   <p class="sub">Every <code>~set</code> setting. A change applies now and is kept across restarts until reset to

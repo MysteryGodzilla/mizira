@@ -5,6 +5,7 @@
 package admin
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -29,6 +30,10 @@ type Mizira interface {
 	Conversations() []ConversationView
 	ResetConversation(network, by string) (ResetView, error)
 	ClearRecap(network, by string) (bool, error)
+	// The model server's models, and switching between them (~models). A switch clears each
+	// channel conversation, as a new model shouldn't carry on from the old one's turns.
+	Models(ctx context.Context) (current string, models []ModelView, err error)
+	SwitchModel(ctx context.Context, model, by string) (string, error)
 	// The IRC command cheatsheet.
 	Commands() CheatsheetView
 	FoldConversation(network, by string) (FoldView, error)
@@ -97,6 +102,7 @@ func (s *Server) mzRoutes(api *http.ServeMux) {
 	api.HandleFunc("GET /mizira/state", s.mizState)
 	api.HandleFunc("PUT /mizira/state", s.setMizState)
 	s.mzPeopleRoutes(api)
+	s.mzModelRoutes(api)
 	s.mzSettingsRoutes(api)
 	s.mzMemoryRoutes(api)
 	s.mzSelfNoteRoutes(api)

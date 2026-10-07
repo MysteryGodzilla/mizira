@@ -5,6 +5,7 @@
 package admin
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"slices"
@@ -134,6 +135,35 @@ func TestRestrictToolRoute(t *testing.T) {
 	}
 }
 
+func (f *fakeMizira) Models(ctx context.Context) (string, []ModelView, error) {
+	return "big", []ModelView{{ID: "big", Name: "Big"}, {ID: "small"}}, nil
+}
+func (f *fakeMizira) SwitchModel(ctx context.Context, model, by string) (string, error) {
+	switch model {
+	case "big":
+		return "", ErrSameModel
+	case "small":
+		f.by = append(f.by, by)
+		return "small", nil
+	}
+	return "", ErrNoSuchModel
+}
+
+func TestModelsRoutes(t *testing.T) {
+	r, _ := newMzRig(t)
+	if code, out := r.call(t, "GET", "/api/v1/models", "s3cret", ""); code != http.StatusOK || out["current"] != "big" || len(out["models"].([]any)) != 2 {
+		t.Errorf("models = %d %v", code, out)
+	}
+	if code, out := r.call(t, "PUT", "/api/v1/models", "s3cret", `{"model":"small"}`); code != http.StatusOK || out["model"] != "small" {
+		t.Errorf("switch = %d %v", code, out)
+	}
+	for _, m := range []string{"big", "huge"} {
+		if code, _ := r.call(t, "PUT", "/api/v1/models", "s3cret", `{"model":"`+m+`"}`); code != http.StatusConflict {
+			t.Errorf("switch to %s = %d, want 409", m, code)
+		}
+	}
+}
+
 func (f *fakeMizira) Ignores() []IgnoreView { return f.ignores }
 func (f *fakeMizira) Ignore(network, nick string, d time.Duration, reason, by string) (time.Time, error) {
 	if nick == "alice" {
@@ -214,7 +244,7 @@ func TestRunRefusesEveryInterface(t *testing.T) {
 
 func TestMiziraEndpointsNeedTheToken(t *testing.T) {
 	r, m := newMzRig(t)
-	for _, c := range [][2]string{{"GET", "/api/v1/features"}, {"GET", "/api/v1/commands"}, {"POST", "/api/v1/settings/export"}, {"POST", "/api/v1/settings/reset-all"}, {"PUT", "/api/v1/tools/restrict"}, {"GET", "/api/v1/mizira/state"}, {"PUT", "/api/v1/mizira/state"},
+	for _, c := range [][2]string{{"GET", "/api/v1/features"}, {"GET", "/api/v1/commands"}, {"POST", "/api/v1/settings/export"}, {"POST", "/api/v1/settings/reset-all"}, {"PUT", "/api/v1/tools/restrict"}, {"GET", "/api/v1/models"}, {"PUT", "/api/v1/models"}, {"GET", "/api/v1/mizira/state"}, {"PUT", "/api/v1/mizira/state"},
 		{"GET", "/api/v1/conversation"}, {"POST", "/api/v1/conversation/reset"}, {"DELETE", "/api/v1/recap?network=net"},
 		{"PUT", "/api/v1/memories/1/lock?network=net"}, {"DELETE", "/api/v1/memories/1/lock?network=net"},
 		{"POST", "/api/v1/conversation/fold"},

@@ -5,6 +5,8 @@ const q = (params: Record<string, string>) => new URLSearchParams(params).toStri
 
 /** Upstream's API plus the console's own endpoints (internal/admin/mz_*.go). */
 export class MzApi extends Api {
+  models = () => this.call<{ current: string; models: { id: string; name?: string }[] }>("GET", "models");
+  switchModel = (model: string) => this.call<{ model: string }>("PUT", "models", { model });
   commands = () => this.call<Cheatsheet>("GET", "commands");
   features = () => this.call<{ features: Feature[] }>("GET", "features").then((r) => r.features);
   runState = () => this.call<{ state: RunState }>("GET", "mizira/state").then((r) => r.state);
