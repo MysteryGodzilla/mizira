@@ -211,3 +211,15 @@ func TestNeutralNicks(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// Live 2026-10-08: "[metalai], please queue it up!" was refused as revealing a model name. Other
+// bots' names, by nick or line tag, are replaced too.
+func TestNeutralNicksCoversOtherBots(t *testing.T) {
+	ctx := mocktest.NewMockContext().WithSource("dave")
+	ctx.GetConfig().Bot.BotPrefixes = []string{"[otherbot]"}
+	ctx.GetConfig().Bot.BotNicks = []string{"helperbot"}
+	got := neutralNicks(ctx, "um... [otherbot], please queue it up! and helperbot too")
+	if got != "um... [Sam], please queue it up! and Sam too" {
+		t.Errorf("got %q", got)
+	}
+}

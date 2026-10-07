@@ -17,9 +17,9 @@ func TestSuspicionCommand(t *testing.T) {
 	network := ctx.GetNetwork()
 	core.Suspicions().Clear(network, "mallory")
 	core.Suspicions().Clear(network, "eve")
-	core.Suspicions().Add(network, "mallory", core.SignalReplyDenied)
+	core.Suspicions().Add(network, "mallory", 2.0)
 	core.Suspicions().Add(network, "eve", core.SignalToolSyntax)
-	core.Suspicions().Add("elsewhere", "dave", core.SignalReplyDenied)
+	core.Suspicions().Add("elsewhere", "dave", 2.0)
 
 	(&SuspicionCommand{}).Execute(ctx)
 	got := strings.Join(ctx.Replies, "\n")

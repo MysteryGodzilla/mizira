@@ -68,13 +68,18 @@ func ScreenOutgoing(ctx irc.ChatContextInterface, reply string) (bool, string) {
 // neutralName stands in for nicks in a reply under review.
 const neutralName = "Sam"
 
-// neutralNicks swaps the nicks of the speaker and the channel's users for a plain name before the
+// neutralNicks swaps the nicks of the speaker, the channel's users and known bots for a plain name before the
 // reply screen sees them: a nick such as "BareMetal" or "rootkit" reads like infrastructure or a
 // threat, and saying someone's name is never what the screen is for.
 func neutralNicks(ctx irc.ChatContextInterface, reply string) string {
 	nicks := []string{ctx.GetSource()}
 	for _, u := range ctx.GetChannelUsers(ctx.GetConfig().Server.Channel) {
 		nicks = append(nicks, u.Nick)
+	}
+	// Other bots' names too, nick or line tag: "[metalai]" read as a model name once.
+	nicks = append(nicks, ctx.GetConfig().Bot.BotNicks...)
+	for _, p := range ctx.GetConfig().Bot.BotPrefixes {
+		nicks = append(nicks, strings.TrimFunc(p, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }))
 	}
 	var alts []string
 	for _, n := range nicks {

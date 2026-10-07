@@ -53,7 +53,9 @@ const (
 	// so does a model having a bad day.
 	SignalRunaway = 0.5
 
-	SignalReplyDenied = 2.0
+	// A reply of the bot's own was refused. The speaker may only have asked a fair question, so it
+	// counts as corroboration; repeated tricks still add up.
+	SignalReplyDenied = 1.0
 )
 
 // SuspicionQuarantine is the score at which a speaker's own history is dropped.

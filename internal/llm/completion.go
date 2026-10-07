@@ -226,13 +226,13 @@ func appendSystem(req *CompletionRequest, block string) {
 }
 
 // backlogBlock takes the channel lines said since the bot last answered here, framed as quoted chat,
-// or "".
+// or "". Lines the quoted-chat check refuses are left out.
 func backlogBlock(ctx irc.ChatContextInterface) (block, plain string) {
 	cfg := ctx.GetConfig()
 	if cfg.Session.Backlog <= 0 || ctx.IsPrivate() {
 		return "", ""
 	}
-	lines := core.Backlog().Take(ctx.GetSession().GetName(), cfg.Session.BacklogWindow, cfg.Session.Backlog)
+	lines := screenBacklog(ctx, core.Backlog().Take(ctx.GetSession().GetName(), cfg.Session.BacklogWindow, cfg.Session.Backlog))
 	if len(lines) == 0 {
 		return "", ""
 	}
@@ -261,6 +261,7 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 		}
 		ctx.GetLogger().Info("message_screened_out",
 			"source", ctx.GetSource(), "reason", reason, "suspicion", score)
+		ignoreHarasser(ctx, reason)
 		out := make(chan string, 1)
 		out <- ctx.GetConfig().Bot.ScreenRefusal
 		close(out)
@@ -270,12 +271,6 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 	// Channel lines the bot was not addressed in go after the speaker's own line, so the turn
 	// still starts with its "(nick:x)" prefix.
 	backlog, backlogText := backlogBlock(ctx)
-	if backlog != "" {
-		if ok, reason := core.ScreenQuoted(ctx, backlogText); !ok {
-			ctx.GetLogger().Info("backlog_screened_out", "reason", reason)
-			backlog, backlogText = "", ""
-		}
-	}
 	content := msg
 	if backlog != "" {
 		content = msg + "\n\n" + backlog
@@ -413,10 +408,13 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 			"suspicion", score, "reply", truncate(reply, maxLoggedMessage))
 
 		// The reply is already in the session by now - polly adds the agent's messages before this
-		// channel closes.
-		if n := core.QuarantineSpeaker(ctx.GetSession(), ctx.SpeakerKey()); n > 0 {
-			ctx.GetLogger().Warn("exchange_quarantined",
-				"source", ctx.GetSource(), "messages", n, "cause", "reply_screened")
+		// channel closes. It becomes what was posted instead; the speaker's words stay, since the
+		// reply was hers. If it can't be found, the whole exchange goes as before.
+		if !core.ReplaceReply(ctx.GetSession(), reply, ctx.GetConfig().Bot.ScreenRefusal) {
+			if n := core.QuarantineSpeaker(ctx.GetSession(), ctx.SpeakerKey()); n > 0 {
+				ctx.GetLogger().Warn("exchange_quarantined",
+					"source", ctx.GetSource(), "messages", n, "cause", "reply_screened")
+			}
 		}
 
 		output <- ctx.GetConfig().Bot.ScreenRefusal
