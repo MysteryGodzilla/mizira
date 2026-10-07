@@ -7,6 +7,7 @@ package core
 import (
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestSelfNoteLifecycle(t *testing.T) {
@@ -46,5 +47,43 @@ func TestSelfNoteLifecycle(t *testing.T) {
 	}
 	if pending, _ := m.SelfNotes("net", SelfNotePending, 10); len(pending) != 0 {
 		t.Errorf("still pending: %+v", pending)
+	}
+}
+
+// A note left pending past SelfNoteExpiry expires, stays listed among the decided ones, and can't be
+// approved; listings page and filter.
+func TestSelfNotesExpireAndPage(t *testing.T) {
+	m, err := OpenMemoryStore(filepath.Join(t.TempDir(), "memories.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { m.Close() })
+	old, _ := m.ProposeSelfNote("net", "carol", "carol is learning the cello", "cello")
+	_, _ = m.ProposeSelfNote("net", "dave", "dave built a canoe", "canoe")
+	_, _ = m.ProposeSelfNote("net", "dave", "dave likes otters", "otters")
+	_, _ = m.db.Exec(`UPDATE self_notes SET created = ? WHERE id = ?`, time.Now().Add(-SelfNoteExpiry-time.Hour).Unix(), old)
+
+	pending, _, _ := m.SelfNotesPage("net", SelfNotePending, "", 0, 10)
+	if len(pending) != 2 {
+		t.Errorf("pending: %+v", pending)
+	}
+	decided, _, _ := m.SelfNotesPage("net", SelfNoteDecided, "", 0, 10)
+	if len(decided) != 1 || decided[0].ID != old || decided[0].Status != SelfNoteExpired || decided[0].DecidedBy != "expiry" {
+		t.Errorf("decided: %+v", decided)
+	}
+	if ok, _ := m.DecideSelfNote("net", old, SelfNoteApproved, "x", "alice", 0); ok {
+		t.Error("approved an expired note")
+	}
+	if id, _ := m.ProposeSelfNote("net", "carol", "carol is learning the cello", "again"); id != 0 {
+		t.Error("an expired note was proposed again")
+	}
+
+	page, more, _ := m.SelfNotesPage("net", "", "", 0, 2)
+	rest, more2, _ := m.SelfNotesPage("net", "", "", 2, 2)
+	if len(page) != 2 || !more || len(rest) != 1 || more2 {
+		t.Errorf("pages: %d more %v, then %d more %v", len(page), more, len(rest), more2)
+	}
+	if found, _, _ := m.SelfNotesPage("net", "", "OTTER", 0, 10); len(found) != 1 || found[0].Subject != "dave" {
+		t.Errorf("search: %+v", found)
 	}
 }

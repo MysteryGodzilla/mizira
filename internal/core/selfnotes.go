@@ -19,7 +19,13 @@ const (
 	SelfNotePending  = "pending"
 	SelfNoteApproved = "approved"
 	SelfNoteDenied   = "denied"
+	SelfNoteExpired  = "expired" // pending too long; kept, so it isn't proposed again
+	// SelfNoteDecided lists every status but pending.
+	SelfNoteDecided = "decided"
 )
+
+// SelfNoteExpiry is how long a note waits for a decision before it expires.
+const SelfNoteExpiry = 14 * 24 * time.Hour
 
 // SelfNote is one proposal.
 type SelfNote struct {
@@ -64,15 +70,12 @@ func (m *MemoryStore) ProposeSelfNote(network, subject, text, why string) (int64
 	if _, known, err := m.Similar(network, subject, text); err != nil || known {
 		return 0, err
 	}
-	earlier, err := m.SelfNotes(network, "", 1000)
+	subject = normalizeSubject(subject)
+	earlier, err := m.selfNotesAbout(network, subject)
 	if err != nil {
 		return 0, err
 	}
-	subject = normalizeSubject(subject)
 	for _, n := range earlier {
-		if n.Subject != "" && n.Subject != subject {
-			continue
-		}
 		if n.Text == text || SameFact(subject, n.Text, text) {
 			return 0, nil
 		}
@@ -89,17 +92,61 @@ func (m *MemoryStore) ProposeSelfNote(network, subject, text, why string) (int64
 
 // SelfNotes lists proposals on a network, newest first; status "" is every status.
 func (m *MemoryStore) SelfNotes(network, status string, limit int) ([]SelfNote, error) {
+	notes, _, err := m.SelfNotesPage(network, status, "", 0, limit)
+	return notes, err
+}
+
+// SelfNotesPage lists one page of proposals, newest first: status "" is every status and
+// SelfNoteDecided every status but pending; query matches the text, subject or quote. more reports
+// whether a later page has any. Pending notes past SelfNoteExpiry expire first.
+func (m *MemoryStore) SelfNotesPage(network, status, query string, offset, limit int) (notes []SelfNote, more bool, err error) {
 	if limit <= 0 {
 		limit = 50
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.expireSelfNotes(network); err != nil {
+		return nil, false, err
+	}
+	like := "%" + strings.ToLower(strings.TrimSpace(query)) + "%"
 	rows, err := m.db.Query(`SELECT id, network, subject, text, why, status, created, decided_by, decided_at, memory_id
-		FROM self_notes WHERE network = ? AND (? = '' OR status = ?) ORDER BY id DESC LIMIT ?`,
-		network, status, status, limit)
+		FROM self_notes WHERE network = ?
+		AND (? = '' OR (? = 'decided' AND status != 'pending') OR status = ?)
+		AND (lower(text) LIKE ? OR lower(subject) LIKE ? OR lower(why) LIKE ?)
+		ORDER BY id DESC LIMIT ? OFFSET ?`,
+		network, status, status, status, like, like, like, limit+1, offset)
+	if err != nil {
+		return nil, false, err
+	}
+	notes, err = scanSelfNotes(rows)
+	if len(notes) > limit {
+		notes, more = notes[:limit], true
+	}
+	return notes, more, err
+}
+
+// selfNotesAbout is every proposal about subject, and the bot's notes from before subjects were kept.
+func (m *MemoryStore) selfNotesAbout(network, subject string) ([]SelfNote, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	rows, err := m.db.Query(`SELECT id, network, subject, text, why, status, created, decided_by, decided_at, memory_id
+		FROM self_notes WHERE network = ? AND (subject = ? OR subject = '')`, network, subject)
 	if err != nil {
 		return nil, err
 	}
+	return scanSelfNotes(rows)
+}
+
+// expireSelfNotes marks pending notes past SelfNoteExpiry expired. Callers hold m.mu.
+func (m *MemoryStore) expireSelfNotes(network string) error {
+	now := time.Now()
+	_, err := m.db.Exec(`UPDATE self_notes SET status = ?, decided_by = 'expiry', decided_at = ?
+		WHERE network = ? AND status = ? AND created < ?`,
+		SelfNoteExpired, now.Unix(), network, SelfNotePending, now.Add(-SelfNoteExpiry).Unix())
+	return err
+}
+
+func scanSelfNotes(rows *sql.Rows) ([]SelfNote, error) {
 	defer rows.Close()
 	var out []SelfNote
 	for rows.Next() {
@@ -119,16 +166,21 @@ func (m *MemoryStore) SelfNotes(network, status string, limit int) ([]SelfNote, 
 
 // SelfNote returns one proposal.
 func (m *MemoryStore) SelfNote(network string, id int64) (SelfNote, bool, error) {
-	notes, err := m.SelfNotes(network, "", 1000)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.expireSelfNotes(network); err != nil {
+		return SelfNote{}, false, err
+	}
+	rows, err := m.db.Query(`SELECT id, network, subject, text, why, status, created, decided_by, decided_at, memory_id
+		FROM self_notes WHERE network = ? AND id = ?`, network, id)
 	if err != nil {
 		return SelfNote{}, false, err
 	}
-	for _, n := range notes {
-		if n.ID == id {
-			return n, true, nil
-		}
+	notes, err := scanSelfNotes(rows)
+	if err != nil || len(notes) == 0 {
+		return SelfNote{}, false, err
 	}
-	return SelfNote{}, false, nil
+	return notes[0], true, nil
 }
 
 // DecideSelfNote marks a pending proposal approved or denied, with the (possibly edited) text it was
