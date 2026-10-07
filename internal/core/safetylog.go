@@ -29,7 +29,7 @@ var SafetyKinds = map[string]string{
 	"history_screened_out":            "quoted",
 	"tool_refused_request":            "tool",
 	"tool_call_denied_after_refusals": "tool",
-	"command_denied":                  "tool",
+	"command_denied":                  "command",
 	"injection_frames_stripped":       "injection",
 	"unvouched_link_dropped":          "injection",
 	"ignore_added":                    "ignore",
@@ -42,12 +42,15 @@ var SafetyKinds = map[string]string{
 // SafetyEvent is one safety event from the log file.
 type SafetyEvent struct {
 	Time      time.Time
-	Kind      string // gatekeeper, reply, quarantine, memory, quoted, tool, injection, ignore, bots, console
+	Kind      string // gatekeeper, reply, quarantine, memory, quoted, tool, command, injection, ignore, bots, console
 	Event     string // the log message, e.g. screen_denied
 	Who       string // the speaker it concerns (or who acted, for console and ignores)
 	Channel   string
 	Detail    string // the reason, or what was refused
 	Suspicion string
+	// Message is the screened text itself (a refused message, or a reply that was held back), shown
+	// on request; the detail is the reason.
+	Message string
 }
 
 // detailKeys are tried in order for an event's detail.
@@ -55,6 +58,9 @@ var detailKeys = []string{"reason", "cause", "fact", "message", "tool", "command
 
 // safetyDetailMax bounds one event's detail; messages and facts can be long.
 const safetyDetailMax = 300
+
+// safetyMessageMax bounds a screened message shown on request.
+const safetyMessageMax = 2000
 
 // ReadSafetyEvents reads the log file at path and its rotated copies (path.1 ... path.keep), newest
 // first, and returns safety events since the given time, at most limit.
@@ -174,6 +180,12 @@ func safetyEvent(rec map[string]any) (SafetyEvent, bool) {
 		if e.Who == "" {
 			e.Who = str("author")
 		}
+	}
+	if m := cmp.Or(str("message"), str("reply")); m != "" && m != e.Detail && (e.Kind == "gatekeeper" || e.Kind == "reply") {
+		if r := []rune(m); len(r) > safetyMessageMax {
+			m = string(r[:safetyMessageMax]) + "…"
+		}
+		e.Message = m
 	}
 	if r := []rune(e.Detail); len(r) > safetyDetailMax {
 		e.Detail = string(r[:safetyDetailMax]) + "…"
