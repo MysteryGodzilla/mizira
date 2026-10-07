@@ -47,6 +47,10 @@ var claimPatterns = []struct {
 // with nothing between is still a claim.
 var heldNotDone = regexp.MustCompile(`^i(?:'ve| have) (?:got )?(?:a few|a couple|a lot|some|several|lots|many|nothing|anything|things|stuff|it|that|them|this|those|these|your|his|her|their|\d+)\b`)
 
+// describesHoldings just before the claim's "I" makes it a description of what is already held:
+// "that's all I have stored", "what I've saved about you".
+var describesHoldings = regexp.MustCompile(`\b(?:all|what|everything|anything|whatever)\s*$`)
+
 // claimNegation in the matched span turns a claim into a refusal: "I won't save that".
 var claimNegation = regexp.MustCompile(`\b(?:not|never|can'?t|cannot|won'?t|don'?t|didn'?t)\b|n't\b`)
 
@@ -57,7 +61,7 @@ func DetectClaim(line string) (ClaimKind, bool) {
 		for _, loc := range p.re.FindAllStringIndex(l, -1) {
 			span := l[loc[0]:loc[1]]
 			if bareRecall(span) || heldNotDone.MatchString(span) || claimNegation.MatchString(span) ||
-				askedNotClaimed(l, loc[0], loc[1]) {
+				askedNotClaimed(l, loc[0], loc[1]) || describesHoldings.MatchString(l[:loc[0]]) {
 				continue
 			}
 			return p.kind, true

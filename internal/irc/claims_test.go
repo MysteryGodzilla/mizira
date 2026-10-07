@@ -49,6 +49,9 @@ func TestDetectClaimHeldIsNotDone(t *testing.T) {
 		"I've got some stuff noted about bob",
 		"i have nothing saved about that",
 		"Should I remember that for you?",
+		// Live 2026-10-07, after a recall.
+		"ええと (um)... I know that BareMetal has a large GPU... That's about all I have stored in my memory right now.",
+		"That's what I've saved about you so far",
 	} {
 		if kind, ok := DetectClaim(line); ok {
 			t.Errorf("DetectClaim(%q) = %v, want no claim", line, kind)
