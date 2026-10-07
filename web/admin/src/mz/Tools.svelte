@@ -24,6 +24,14 @@
     box.checked = mz.tools.find((x) => x.spec === t.spec)?.loaded ?? t.loaded;
   }
 
+  async function restrict(t: Tool, box: HTMLInputElement) {
+    const to = !t.adminOnly;
+    busy = t.spec;
+    await mz.act(() => mz.api.restrictTool(t.spec, to), `${t.spec} ${to ? "restricted to admins" : "open to everyone"}`);
+    busy = "";
+    box.checked = mz.tools.find((x) => x.spec === t.spec)?.adminOnly ?? t.adminOnly;
+  }
+
   function resetAll() {
     if (confirm("Put every tool back the way config.yml has it?")) void mz.act(() => mz.api.resetTools(), "tools back to config.yml");
   }
@@ -49,11 +57,16 @@
               <div><strong>{t.spec}</strong>
                 {#if t.switched}<Badge text={t.loaded ? "switched on" : "switched off"} tone="busy" />{/if}
                 {#if !t.switched && t.inConfig}<Badge text="config.yml" />{/if}
-                {#if t.adminOnly}<Badge text="admins only" />{/if}
               </div>
               {#if t.description}<div class="sub">{t.description}</div>{/if}
               {#if t.names.length > 1}<div class="sub">loads {t.names.join(", ")}</div>{/if}
             </div>
+            {#if t.loaded && t.kind !== "work"}
+              <label class="switch" title="Only admins can make her use it (~tools restrict)">
+                <input type="checkbox" checked={t.adminOnly} disabled={busy === t.spec} onchange={(e) => restrict(t, e.currentTarget)} />
+                admins only
+              </label>
+            {/if}
             <label class="switch">
               <input type="checkbox" checked={t.loaded} disabled={busy === t.spec} onchange={(e) => flip(t, e.currentTarget)} />
               {t.loaded ? "on" : "off"}

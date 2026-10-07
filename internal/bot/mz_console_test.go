@@ -9,6 +9,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/alexschlessinger/pollytool/messages"
+
 	"B4reMetal/metald/internal/admin"
 	"B4reMetal/metald/internal/commands"
 	"B4reMetal/metald/internal/config"
@@ -115,5 +117,48 @@ func TestAdminToolsStayRestrictedWhenSwitchedOn(t *testing.T) {
 	tool, _ := c.sys.GetToolRegistry().Get("irc__slap")
 	if !irc.IsAdminOnly(tool) {
 		t.Error("an admin tool switched on unrestricted")
+	}
+}
+
+// A fresh conversation is 0 messages: the system prompt isn't one, as the fold doesn't count it.
+func TestConversationCountLeavesOutThePrompt(t *testing.T) {
+	cfg := mocktest.DefaultTestConfig()
+	n := &config.ServerConfig{Name: "net", Channel: "#count"}
+	sys := mocktest.NewMockSystem()
+	c := console{cfg: cfg, sys: sys, nets: []*config.ServerConfig{n}}
+	s, _ := sys.GetSessionStore().Get("net/#count")
+	if v := c.Conversations()[0]; v.Messages != 0 || v.Tokens != 0 {
+		t.Errorf("fresh: %d messages, %d tokens", v.Messages, v.Tokens)
+	}
+	s.AddMessage(messages.ChatMessage{Role: messages.MessageRoleUser, Content: "(nick:bob) hi"})
+	if v := c.Conversations()[0]; v.Messages != 1 {
+		t.Errorf("after one line: %d messages", v.Messages)
+	}
+}
+
+// Restricting from the console is ~tools restrict: the loaded tool becomes admin-only, and stays so
+// after a restart; an unloaded one is refused.
+func TestRestrictToolFromTheConsole(t *testing.T) {
+	c := toolConsole(t, "irc__slap")
+	if err := c.RestrictTool("irc__slap", true, "console:token"); err != nil {
+		t.Fatal(err)
+	}
+	tool, _ := c.sys.GetToolRegistry().Get("irc__slap")
+	if !irc.IsAdminOnly(tool) || !slices.Contains(c.cfg.Bot.AdminTools, "irc__slap") {
+		t.Errorf("not restricted: admin tools %v", c.cfg.Bot.AdminTools)
+	}
+	fresh := mocktest.DefaultTestConfig()
+	commands.ApplyOverrides(fresh)
+	if !slices.Contains(fresh.Bot.AdminTools, "irc__slap") {
+		t.Errorf("not kept across a restart: %v", fresh.Bot.AdminTools)
+	}
+	if err := c.RestrictTool("irc__slap", false, "console:token"); err != nil {
+		t.Fatal(err)
+	}
+	if tool, _ := c.sys.GetToolRegistry().Get("irc__slap"); irc.IsAdminOnly(tool) {
+		t.Error("still admin-only after unrestricting")
+	}
+	if err := c.RestrictTool("history__search", true, "console:token"); err == nil {
+		t.Error("restricted a tool that isn't loaded")
 	}
 }

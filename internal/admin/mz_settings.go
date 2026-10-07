@@ -61,6 +61,7 @@ func (s *Server) mzSettingsRoutes(api *http.ServeMux) {
 	api.HandleFunc("GET /tools", s.tools)
 	api.HandleFunc("PUT /tools", s.switchTool)
 	api.HandleFunc("DELETE /tools/switches", s.resetTools)
+	api.HandleFunc("PUT /tools/restrict", s.restrictTool)
 }
 
 func (s *Server) bots(w http.ResponseWriter, _ *http.Request) {
@@ -212,6 +213,24 @@ func (s *Server) switchTool(w http.ResponseWriter, r *http.Request) {
 	}
 	s.log.Info("console_action", "action", "tool", "tool", in.Spec, "on", *in.On, "by", by)
 	respond(w, http.StatusOK, map[string]any{"spec": in.Spec, "on": *in.On})
+}
+
+func (s *Server) restrictTool(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Spec      string `json:"spec"`
+		AdminOnly *bool  `json:"adminOnly"`
+	}
+	if !decode(w, r, &in) || in.Spec == "" || in.AdminOnly == nil {
+		fail(w, http.StatusBadRequest, `send {"spec": "...", "adminOnly": true|false}`)
+		return
+	}
+	by := s.who(r)
+	if err := s.mz.RestrictTool(in.Spec, *in.AdminOnly, by); err != nil {
+		fail(w, http.StatusConflict, err.Error())
+		return
+	}
+	s.log.Info("console_action", "action", "tool_restrict", "tool", in.Spec, "to", *in.AdminOnly, "by", by)
+	respond(w, http.StatusOK, map[string]any{"spec": in.Spec, "adminOnly": *in.AdminOnly})
 }
 
 func (s *Server) resetTools(w http.ResponseWriter, r *http.Request) {

@@ -11,7 +11,8 @@ export class Dashboard {
   reminders = $state<Reminder[]>([]);
   gpu = $state<Gpu | null>(null);
   radio = $state<Radio | null>(null);
-  message = $state<{ text: string; bad: boolean } | null>(null);
+  /** poll: a failed refresh, cleared once polling works again; an action's refusal stays until dismissed. */
+  message = $state<{ text: string; bad: boolean; poll?: boolean } | null>(null);
   readonly api: Api;
   private timer: ReturnType<typeof setInterval> | undefined;
 
@@ -25,9 +26,9 @@ export class Dashboard {
         this.api.status(), this.api.tasks(), this.api.reminders(), this.api.gpu(), this.api.radio(),
       ]);
       Object.assign(this, { status, tasks, reminders, gpu, radio });
-      if (this.message?.bad) this.message = null;
+      if (this.message?.poll) this.message = null;
     } catch (e) {
-      this.fail(e);
+      this.fail(e, true);
     }
   }
 
@@ -42,9 +43,9 @@ export class Dashboard {
     }
   }
 
-  private fail(e: unknown) {
+  private fail(e: unknown, poll = false) {
     if (e instanceof Unauthorized) session.refused();
-    this.message = { text: e instanceof Error ? e.message : String(e), bad: true };
+    this.message = { text: e instanceof Error ? e.message : String(e), bad: true, poll };
   }
 
   /** Poll until the returned function is called; a hidden tab doesn't poll. */

@@ -113,6 +113,27 @@ func TestExportAndResetAll(t *testing.T) {
 	}
 }
 
+func (f *fakeMizira) RestrictTool(spec string, adminOnly bool, by string) error {
+	if spec != "irc__slap" {
+		return errors.New("switch it on first")
+	}
+	f.by = append(f.by, by)
+	return nil
+}
+
+func TestRestrictToolRoute(t *testing.T) {
+	r, _ := newMzRig(t)
+	if code, _ := r.call(t, "PUT", "/api/v1/tools/restrict", "s3cret", `{"spec":"irc__slap","adminOnly":true}`); code != http.StatusOK {
+		t.Errorf("restrict = %d", code)
+	}
+	if code, _ := r.call(t, "PUT", "/api/v1/tools/restrict", "s3cret", `{"spec":"irc__slap"}`); code != http.StatusBadRequest {
+		t.Errorf("restrict without adminOnly = %d", code)
+	}
+	if code, _ := r.call(t, "PUT", "/api/v1/tools/restrict", "s3cret", `{"spec":"nope","adminOnly":true}`); code != http.StatusConflict {
+		t.Errorf("restrict an unloaded tool = %d", code)
+	}
+}
+
 func (f *fakeMizira) Ignores() []IgnoreView { return f.ignores }
 func (f *fakeMizira) Ignore(network, nick string, d time.Duration, reason, by string) (time.Time, error) {
 	if nick == "alice" {
@@ -193,7 +214,7 @@ func TestRunRefusesEveryInterface(t *testing.T) {
 
 func TestMiziraEndpointsNeedTheToken(t *testing.T) {
 	r, m := newMzRig(t)
-	for _, c := range [][2]string{{"GET", "/api/v1/features"}, {"GET", "/api/v1/commands"}, {"POST", "/api/v1/settings/export"}, {"POST", "/api/v1/settings/reset-all"}, {"GET", "/api/v1/mizira/state"}, {"PUT", "/api/v1/mizira/state"},
+	for _, c := range [][2]string{{"GET", "/api/v1/features"}, {"GET", "/api/v1/commands"}, {"POST", "/api/v1/settings/export"}, {"POST", "/api/v1/settings/reset-all"}, {"PUT", "/api/v1/tools/restrict"}, {"GET", "/api/v1/mizira/state"}, {"PUT", "/api/v1/mizira/state"},
 		{"GET", "/api/v1/conversation"}, {"POST", "/api/v1/conversation/reset"}, {"DELETE", "/api/v1/recap?network=net"},
 		{"PUT", "/api/v1/memories/1/lock?network=net"}, {"DELETE", "/api/v1/memories/1/lock?network=net"},
 		{"POST", "/api/v1/conversation/fold"},

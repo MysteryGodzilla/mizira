@@ -38,6 +38,8 @@ export class MzApi extends Api {
   resetSetting = (key: string) => this.call<SettingChange>("DELETE", `settings/${encodeURIComponent(key)}`);
 
   tools = () => this.call<{ tools: Tool[] }>("GET", "tools").then((r) => r.tools);
+  restrictTool = (spec: string, adminOnly: boolean) =>
+    this.call<{ spec: string; adminOnly: boolean }>("PUT", "tools/restrict", { spec, adminOnly });
   switchTool = (spec: string, on: boolean) => this.call<{ spec: string; on: boolean }>("PUT", "tools", { spec, on });
   resetTools = () => this.call<{ reset: boolean }>("DELETE", "tools/switches");
 

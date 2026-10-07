@@ -103,10 +103,11 @@ func (c console) Conversations() []admin.ConversationView {
 			continue
 		}
 		history := session.GetHistory()
-		v := admin.ConversationView{Network: n.Name, Channel: n.Channel, Messages: len(history),
+		v := admin.ConversationView{Network: n.Name, Channel: n.Channel,
 			MaxContext: c.cfg.Session.MaxContext, LastUsed: session.GetLastUsed().Unix(), Recent: []admin.LineView{}}
 		for _, m := range history {
-			if m.Role != messages.MessageRoleSystem { // measured as the fold measures it
+			if m.Role != messages.MessageRoleSystem { // counted and measured as the fold measures them
+				v.Messages++
 				v.Tokens += core.EstimateTokens(m)
 			}
 		}

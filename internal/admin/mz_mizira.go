@@ -52,6 +52,8 @@ type Mizira interface {
 	ToolCatalog() []ToolView
 	SwitchTool(spec string, on bool, by string) error
 	ResetToolSwitches(by string) error
+	// RestrictTool makes a loaded tool admin-only, or open to everyone again (~tools restrict).
+	RestrictTool(spec string, adminOnly bool, by string) error
 	// Export writes config.yml with the overrides folded in, beside it (never over it); ResetAll
 	// drops every override. ListOverrides names list settings that differ from config.yml.
 	ExportConfig() (ExportView, error)

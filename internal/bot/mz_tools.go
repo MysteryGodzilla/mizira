@@ -215,3 +215,21 @@ func (c console) ResetAll(by string) (admin.ResetAllView, error) {
 func (c console) ListOverrides() []string {
 	return append([]string{}, commands.ListOverrides(config.Path())...)
 }
+
+func (c console) RestrictTool(spec string, adminOnly bool, by string) error {
+	for _, t := range c.ToolCatalog() {
+		if t.Spec != spec {
+			continue
+		}
+		if !t.Loaded || len(t.Names) == 0 {
+			return errors.New("switch it on first; only a loaded tool can be restricted")
+		}
+		for _, name := range t.Names {
+			if _, err := commands.RestrictTools(c.cfg, c.sys.GetToolRegistry(), name, adminOnly, by, core.GetLogger()); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return fmt.Errorf("%s isn't one of the bot's tools", spec)
+}

@@ -64,7 +64,8 @@
   {#if board}
     {#if mz}<Overrides {mz} />{/if}
     {#if board.message}
-      <p class="message" class:bad={board.message.bad} role="status">{board.message.text}</p>
+      <p class="message" class:bad={board.message.bad} role="status">{board.message.text}
+        {#if board.message.bad}<button class="dismiss" aria-label="Dismiss" onclick={() => (board.message = null)}>×</button>{/if}</p>
     {/if}
     {#if view === "conversation" && mz}
       <Conversation {mz} />
@@ -111,4 +112,5 @@
   .inactive { margin-left: auto; font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
   .message { min-height: 20px; font-size: 13px; color: var(--muted); margin: -8px 0 12px; }
   .message.bad { color: var(--bad); }
+  .dismiss { margin-left: 8px; padding: 0 6px; font-size: 13px; line-height: 1.2; }
 </style>
