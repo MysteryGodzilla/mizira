@@ -8,10 +8,11 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/alexschlessinger/pollytool/tools"
 )
 
 // ShellToolRequirements asks a shell tool for its schema and returns the
@@ -32,7 +33,7 @@ func ReadShellToolMeta(command string) (ShellToolMeta, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	var meta ShellToolMeta
-	out, err := exec.CommandContext(ctx, command, "--schema").Output()
+	out, err := tools.ScriptCommand(ctx, command, "--schema").Output()
 	if err != nil {
 		return meta, err
 	}
