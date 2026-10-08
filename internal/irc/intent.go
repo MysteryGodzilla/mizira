@@ -89,7 +89,8 @@ func ToolIntent(cfg *config.Configuration, botNick, msg string, inChannel func(n
 		return Intent{Tool: ClaimTool[ClaimIgnore], Args: map[string]any{"nick": target}}, true
 	case "slap":
 		target := strings.TrimRight(next, ",.:;!?")
-		if inChannel == nil || !inChannel(target) {
+		// "slap me" and "slap metalai" (a tagged bot) are resolved by the tool itself.
+		if !selfWord(target) && !isBotTagName(cfg, target) && (inChannel == nil || !inChannel(target)) {
 			return Intent{}, false
 		}
 		// "slap bob with his keyboard": the object is whatever follows "with"; none means the trout.
@@ -109,6 +110,9 @@ func ToolIntent(cfg *config.Configuration, botNick, msg string, inChannel func(n
 	}
 	return Intent{}, false
 }
+
+// selfWord is the speaker naming themselves.
+func selfWord(w string) bool { w = bareWord(w); return w == "me" || w == "myself" }
 
 // memoryID is a memory named by the id +memories shows: "6", "[6]", "#6", "memory 6".
 var memoryID = regexp.MustCompile(`(?i)^(?:memory\s+|number\s+)?[\[#(]?(\d{1,9})[\])]?[.!]?$`)

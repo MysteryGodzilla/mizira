@@ -94,6 +94,8 @@ func TrackLine(cfg *config.Configuration, e *girc.Event) (drop bool) {
 	switch ClassifyLine(cfg, nick, e.Last()) {
 	case OwnLine:
 		return true
+	case BotLine:
+		rememberBotOwner(cfg, nick, e.Last())
 	case HumanLine:
 		// Only a plain channel message counts as a person speaking. NOTICEs are often automated,
 		// and bots post unprefixed /me actions ("is thinking...") between replies; letting those

@@ -129,3 +129,16 @@ func TestToolIntentSkipsBotTag(t *testing.T) {
 		t.Errorf("got %+v, %v", got, ok)
 	}
 }
+
+// "slap me" and "slap [otherbot]" name no nick in the channel, but are still plain requests; the
+// tool works out who they mean.
+func TestToolIntentSlapMeAndTaggedBot(t *testing.T) {
+	cfg := &config.Configuration{Bot: &config.BotConfig{Trigger: "Mizira", BotPrefixes: []string{"[otherbot]"}}}
+	absent := func(string) bool { return false }
+	for _, msg := range []string{"(nick:alice) Mizira slap me", "(nick:alice) Mizira slap otherbot",
+		"(nick:alice) Mizira slap [otherbot] with a fish"} {
+		if got, ok := ToolIntent(cfg, "Mizira", msg, absent); !ok || got.Tool != "irc__slap" {
+			t.Errorf("%q: got %+v, %v", msg, got, ok)
+		}
+	}
+}

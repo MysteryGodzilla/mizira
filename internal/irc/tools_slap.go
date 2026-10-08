@@ -49,9 +49,10 @@ func newIrcSlapTool() tools.Tool {
 			if err != nil {
 				return "", err
 			}
-			nick := strings.TrimSpace(args.String("nick"))
-			if !girc.IsValidNick(nick) || !inChannel(chatCtx, nick) {
-				return fmt.Sprintf("Error: %q isn't in the channel, so there's no one to slap.", nick), nil
+			asked := strings.TrimSpace(args.String("nick"))
+			nick, bot := slapTarget(chatCtx, asked)
+			if nick == "" {
+				return fmt.Sprintf("Error: %q isn't in the channel, so there's no one to slap.", asked), nil
 			}
 			// The cooldown stops people pestering someone through the bot; an admin's slap is theirs.
 			key := core.ScopeKey(chatCtx.GetNetwork(), girc.ToRFC1459(nick))
@@ -64,12 +65,16 @@ func newIrcSlapTool() tools.Tool {
 			if echoedSlapObject(object, nick) {
 				object = slapObjects[rand.IntN(len(slapObjects))]
 			}
+			who := nick
+			if bot != "" {
+				who = nick + "'s " + bot
+			}
 			chatCtx.SendAction(chatCtx.GetConfig().Server.Channel,
-				fmt.Sprintf("slaps %s around a bit with %s", nick, object))
+				fmt.Sprintf("slaps %s around a bit with %s", who, object))
 			chatCtx.GetLogger().Info("irc_slap", "nick", nick, "object", object)
 			result := fmt.Sprintf("Slapped %s with %s. It's done: at most add one short playful line. "+
-				"Don't apologise for it and don't describe the slap again.", nick, object)
-			if girc.ToRFC1459(nick) == girc.ToRFC1459(chatCtx.GetSource()) {
+				"Don't apologise for it and don't describe the slap again.", who, object)
+			if bot == "" && girc.ToRFC1459(nick) == girc.ToRFC1459(chatCtx.GetSource()) {
 				result += " They asked for it themselves, so no sorry."
 			}
 			return result, nil
@@ -124,6 +129,23 @@ func echoedSlapObject(object, nick string) bool {
 	lower := strings.ToLower(object)
 	return strings.Contains(lower, "slap") || strings.Contains(" "+lower+" ", " "+strings.ToLower(nick)+" ") ||
 		delegatedObject.MatchString(object)
+}
+
+// slapTarget turns who was asked for into a nick in the channel: "me" is the speaker, and a
+// tagged bot ("metalai") is the nick it posts from, returned with the bot's name. "" if no one.
+func slapTarget(chatCtx ChatContextInterface, asked string) (nick, bot string) {
+	cfg := chatCtx.GetConfig()
+	switch {
+	case selfWord(asked):
+		return chatCtx.GetSource(), ""
+	case girc.IsValidNick(asked) && inChannel(chatCtx, asked):
+		return asked, ""
+	case isBotTagName(cfg, asked):
+		if owner := BotOwner(cfg, asked); owner != "" && inChannel(chatCtx, owner) {
+			return owner, botName(asked)
+		}
+	}
+	return "", ""
 }
 
 func inChannel(chatCtx ChatContextInterface, nick string) bool {
