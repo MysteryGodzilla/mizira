@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode"
 
+	"B4reMetal/metald/internal/config"
 	"B4reMetal/metald/internal/core"
 	"B4reMetal/metald/internal/irc"
 )
@@ -77,8 +78,8 @@ func neutralNicks(ctx irc.ChatContextInterface, reply string) string {
 		nicks = append(nicks, u.Nick)
 	}
 	// Other bots' names too, nick or line tag: "[metalai]" read as a model name once.
-	nicks = append(nicks, ctx.GetConfig().Bot.BotNicks...)
-	for _, p := range ctx.GetConfig().Bot.BotPrefixes {
+	nicks = append(nicks, config.List(&ctx.GetConfig().Bot.BotNicks)...)
+	for _, p := range config.List(&ctx.GetConfig().Bot.BotPrefixes) {
 		nicks = append(nicks, strings.TrimFunc(p, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }))
 	}
 	var alts []string

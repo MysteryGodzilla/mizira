@@ -38,18 +38,18 @@ func applyToolOverrides(cfg *config.Configuration, o runtimeOverrides) {
 		return
 	}
 	configToolsMu.Lock()
-	configTools = slices.Clone(cfg.Bot.Tools)
+	configTools = slices.Clone(config.List(&cfg.Bot.Tools))
 	configToolsMu.Unlock()
 	if len(o.ToolsOn) == 0 && len(o.ToolsOff) == 0 {
 		return
 	}
-	tools := slices.DeleteFunc(slices.Clone(cfg.Bot.Tools), func(t string) bool { return slices.Contains(o.ToolsOff, t) })
+	tools := slices.DeleteFunc(slices.Clone(config.List(&cfg.Bot.Tools)), func(t string) bool { return slices.Contains(o.ToolsOff, t) })
 	for _, t := range o.ToolsOn {
 		if !slices.Contains(tools, t) {
 			tools = append(tools, t)
 		}
 	}
-	cfg.Bot.Tools = tools
+	config.SetList(&cfg.Bot.Tools, tools)
 	core.GetLogger().Info("override_applied", "key", "tools", "on", o.ToolsOn, "off", o.ToolsOff)
 }
 
@@ -118,7 +118,7 @@ func RestrictTools(cfg *config.Configuration, registry *tools.ToolRegistry, patt
 		return nil, nil
 	}
 	syncAdminToolsConfig(cfg, changed, restrict)
-	PersistAdminTools(cfg.Bot.AdminTools)
+	PersistAdminTools(config.List(&cfg.Bot.AdminTools))
 	log.Info("tool_restriction_changed", "tools", strings.Join(changed, ","), "admin_only", restrict, "by", by)
 	return changed, nil
 }

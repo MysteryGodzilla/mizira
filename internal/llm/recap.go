@@ -293,7 +293,7 @@ func fold(cfg *config.Configuration, session sessions.Session, reason string, cu
 	old := append([]messages.ChatMessage(nil), convo[:n]...)
 
 	start := time.Now()
-	transcript := renderTranscript(old, cfg.Bot.ScreenNicks, []string{cfg.Bot.MemoryFrame, cfg.Bot.RelevantFrame})
+	transcript := renderTranscript(old, config.List(&cfg.Bot.ScreenNicks), []string{cfg.Bot.MemoryFrame, cfg.Bot.RelevantFrame})
 	var recap string
 	gateCtx, cancel := context.WithTimeout(context.Background(), recapTimeout)
 	if !core.WithModelGate(gateCtx, func() { recap, err = summarize(cfg, db.Recap(key), transcript) }) {

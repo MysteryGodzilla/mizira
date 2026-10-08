@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"B4reMetal/metald/internal/config"
 	"B4reMetal/metald/internal/irc"
 )
 
@@ -30,11 +31,11 @@ func (c *GetCommand) Execute(ctx irc.ChatContextInterface) {
 	// Handle special cases first
 	switch param {
 	case "admins":
-		if len(cfg.Bot.Admins) == 0 {
+		if len(config.List(&cfg.Bot.Admins)) == 0 {
 			ctx.Reply("empty admin list, all nicks are permitted to use admin commands")
 			return
 		}
-		ctx.Reply(fmt.Sprintf("%s: %s", param, strings.Join(cfg.Bot.Admins, ", ")))
+		ctx.Reply(fmt.Sprintf("%s: %s", param, strings.Join(config.List(&cfg.Bot.Admins), ", ")))
 		return
 
 	}

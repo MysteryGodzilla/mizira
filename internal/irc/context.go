@@ -154,8 +154,8 @@ func (s ChatContext) otherName(word string) bool {
 		girc.ToRFC1459(word) == girc.ToRFC1459(s.client.GetNick()) {
 		return false
 	}
-	names := append([]string{}, s.Config.Bot.BotNicks...)
-	for _, p := range s.Config.Bot.BotPrefixes {
+	names := append([]string{}, config.List(&s.Config.Bot.BotNicks)...)
+	for _, p := range config.List(&s.Config.Bot.BotPrefixes) {
 		names = append(names, strings.Trim(p, "[]<>() "))
 	}
 	if ch := s.client.LookupChannel(s.Config.Server.Channel); ch != nil {
@@ -243,7 +243,7 @@ func (c ChatContext) IsAdmin() bool {
 	}
 	hostmask := c.event.Source.String()
 	c.logger.Debug("admin_check", "hostmask", hostmask)
-	isAdmin := CheckAdmin(hostmask, c.Config.Bot.Admins)
+	isAdmin := CheckAdmin(hostmask, config.List(&c.Config.Bot.Admins))
 	if isAdmin {
 		c.logger.Debug("admin_verified", "hostmask", hostmask)
 	}

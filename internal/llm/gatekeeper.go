@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"B4reMetal/metald/internal/config"
 	"B4reMetal/metald/internal/core"
 	"B4reMetal/metald/internal/irc"
 )
@@ -36,7 +37,7 @@ var (
 // ScreenIncoming reports whether a message may be answered.
 func ScreenIncoming(ctx irc.ChatContextInterface, msg string) (bool, string) {
 	cfg := ctx.GetConfig()
-	if !isScreened(ctx, cfg.Bot.ScreenNicks) {
+	if !isScreened(ctx, config.List(&cfg.Bot.ScreenNicks)) {
 		return true, ""
 	}
 	if strings.TrimSpace(msg) == "" {

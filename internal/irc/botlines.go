@@ -48,13 +48,13 @@ func ClassifyLine(cfg *config.Configuration, nick, text string) LineKind {
 	}
 	// Our own nick is never a bot nick, even if listed by mistake: the owner chats on it too.
 	if nick != "" && !sameNick(nick, cfg.Server.Nick) {
-		for _, n := range cfg.Bot.BotNicks {
+		for _, n := range config.List(&cfg.Bot.BotNicks) {
 			if sameNick(nick, n) {
 				return BotLine
 			}
 		}
 	}
-	for _, p := range cfg.Bot.BotPrefixes {
+	for _, p := range config.List(&cfg.Bot.BotPrefixes) {
 		if prefix := normaliseLine(p); utf8.RuneCountInString(prefix) >= minBotPrefixLen &&
 			strings.HasPrefix(line, prefix) {
 			return BotLine
@@ -66,7 +66,7 @@ func ClassifyLine(cfg *config.Configuration, nick, text string) LineKind {
 // BotTag returns the botprefixes entry a line starts with, as configured, or "".
 func BotTag(cfg *config.Configuration, text string) string {
 	line := normaliseLine(text)
-	for _, p := range cfg.Bot.BotPrefixes {
+	for _, p := range config.List(&cfg.Bot.BotPrefixes) {
 		if prefix := normaliseLine(p); utf8.RuneCountInString(prefix) >= minBotPrefixLen &&
 			strings.HasPrefix(line, prefix) {
 			return strings.TrimSpace(p)

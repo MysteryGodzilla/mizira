@@ -6,6 +6,7 @@ package commands
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -152,4 +153,44 @@ func TestApplyCompaction(t *testing.T) {
 	if again, _ := store.Recall("compact-cmd", "dave", 10); len(again) != 1 || again[0].Author != "compaction:alice from dave, carol" {
 		t.Errorf("after a second compaction: %+v", again)
 	}
+}
+
+// Screening and bot changes made while chat requests read the same lists (run with -race).
+func TestListChangesWhileRequestsRead(t *testing.T) {
+	cfg := sharedCfg(t)
+	cfg.Server = &config.ServerConfig{Nick: "Mizira", Channel: "#test"}
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	for range 3 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				for _, list := range []*[]string{&cfg.Bot.ScreenNicks, &cfg.Bot.FilterNicks, &cfg.Bot.BotNicks} {
+					for _, nick := range config.List(list) {
+						if nick == "" {
+							t.Error("read a half-written list")
+						}
+					}
+				}
+			}
+		}()
+	}
+	for i := range 50 {
+		nick := fmt.Sprintf("mallory%d", i%5)
+		if _, err := ScreenNick(cfg, nil, "Mizira", nick, "console:token", quiet); err != nil {
+			UnscreenNick(cfg, nick, "console:token", quiet)
+		}
+		if _, err := ChangeBots(cfg, "Mizira", i%2 == 0, BotByNick, "helperbot", "console:token", quiet); err != nil &&
+			!errors.Is(err, ErrAlreadyListed) && !errors.Is(err, ErrNotListed) {
+			t.Fatal(err)
+		}
+	}
+	close(stop)
+	wg.Wait()
 }

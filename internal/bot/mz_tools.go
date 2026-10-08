@@ -49,7 +49,7 @@ func (c console) toolSpecs() []string {
 			}
 		}
 	}
-	for _, spec := range append(commands.ConfigTools(), c.cfg.Bot.Tools...) {
+	for _, spec := range append(commands.ConfigTools(), config.List(&c.cfg.Bot.Tools)...) {
 		if !slices.ContainsFunc(specs, func(s string) bool { return sameSpec(s, spec) }) {
 			specs = append(specs, spec)
 		}
@@ -154,7 +154,7 @@ func (c console) loadSpec(reg *tools.ToolRegistry, spec string) error {
 		}
 	}
 	adminTools := map[string]bool{}
-	for _, name := range c.cfg.Bot.AdminTools {
+	for _, name := range config.List(&c.cfg.Bot.AdminTools) {
 		adminTools[name] = true
 	}
 	for _, s := range withTaskToolset([]string{spec}) {

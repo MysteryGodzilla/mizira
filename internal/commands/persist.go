@@ -205,19 +205,19 @@ func ApplyOverrides(cfg *config.Configuration) []string {
 	}
 
 	if o.Admins != nil {
-		cfg.Bot.Admins = *o.Admins
+		config.SetList(&cfg.Bot.Admins, *o.Admins)
 		core.GetLogger().Info("override_applied", "key", "admins", "count", len(*o.Admins))
 	}
 	if o.ScreenNicks != nil {
-		cfg.Bot.ScreenNicks = *o.ScreenNicks
+		config.SetList(&cfg.Bot.ScreenNicks, *o.ScreenNicks)
 		core.GetLogger().Info("override_applied", "key", "screennicks", "count", len(*o.ScreenNicks))
 	}
 	if o.FilterNicks != nil {
-		cfg.Bot.FilterNicks = *o.FilterNicks
+		config.SetList(&cfg.Bot.FilterNicks, *o.FilterNicks)
 		core.GetLogger().Info("override_applied", "key", "filternicks", "count", len(*o.FilterNicks))
 	}
 	if o.BotPrefixes != nil {
-		cfg.Bot.BotPrefixes = *o.BotPrefixes
+		config.SetList(&cfg.Bot.BotPrefixes, *o.BotPrefixes)
 		core.GetLogger().Info("override_applied", "key", "botprefixes", "count", len(*o.BotPrefixes))
 	}
 	if o.RunState != "" {
@@ -231,11 +231,11 @@ func ApplyOverrides(cfg *config.Configuration) []string {
 	}
 	applyToolOverrides(cfg, o)
 	if o.BotNicks != nil {
-		cfg.Bot.BotNicks = *o.BotNicks
+		config.SetList(&cfg.Bot.BotNicks, *o.BotNicks)
 		core.GetLogger().Info("override_applied", "key", "botnicks", "count", len(*o.BotNicks))
 	}
 	if o.AdminTools != nil {
-		cfg.Bot.AdminTools = *o.AdminTools
+		config.SetList(&cfg.Bot.AdminTools, *o.AdminTools)
 		core.GetLogger().Info("override_applied", "key", "admintools", "count", len(*o.AdminTools))
 		return *o.AdminTools
 	}

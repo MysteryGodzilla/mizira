@@ -11,6 +11,7 @@ import (
 	"github.com/lrstanley/girc"
 
 	"B4reMetal/metald/internal/commands"
+	"B4reMetal/metald/internal/config"
 	"B4reMetal/metald/internal/core"
 	"B4reMetal/metald/internal/irc"
 	"B4reMetal/metald/internal/llm"
@@ -30,7 +31,7 @@ func ObserveLine(ctx irc.ChatContextInterface, event *girc.Event, cmds *commands
 	if nick == "" {
 		return
 	}
-	if core.Ignores().IsIgnored(ctx.GetNetwork(), nick) || llm.IsScreenedNick(cfg.Bot.ScreenNicks, nick) {
+	if core.Ignores().IsIgnored(ctx.GetNetwork(), nick) || llm.IsScreenedNick(config.List(&cfg.Bot.ScreenNicks), nick) {
 		return
 	}
 

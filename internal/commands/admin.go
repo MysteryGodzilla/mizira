@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"B4reMetal/metald/internal/config"
 	"B4reMetal/metald/internal/irc"
 )
 
@@ -44,16 +45,16 @@ func (c *AdminCommand) Execute(ctx irc.ChatContextInterface) {
 	}
 
 	cfg := ctx.GetConfig() // refresh after modification
-	ctx.GetLogger().Debug("admin_list_updated", "admins", cfg.Bot.Admins)
+	ctx.GetLogger().Debug("admin_list_updated", "admins", config.List(&cfg.Bot.Admins))
 }
 
 func (c *AdminCommand) listAdmins(ctx irc.ChatContextInterface) {
 	cfg := ctx.GetConfig()
-	if len(cfg.Bot.Admins) == 0 {
+	if len(config.List(&cfg.Bot.Admins)) == 0 {
 		ctx.Reply("No admins configured")
 		return
 	}
-	ctx.Reply("Admins: " + strings.Join(cfg.Bot.Admins, ", "))
+	ctx.Reply("Admins: " + strings.Join(config.List(&cfg.Bot.Admins), ", "))
 }
 
 func (c *AdminCommand) addAdmin(ctx irc.ChatContextInterface, hostmask string) {
@@ -72,13 +73,13 @@ func (c *AdminCommand) addAdmin(ctx irc.ChatContextInterface, hostmask string) {
 	cfg := ctx.GetConfig()
 
 	// Check if already exists
-	if slices.Contains(cfg.Bot.Admins, hostmask) {
+	if slices.Contains(config.List(&cfg.Bot.Admins), hostmask) {
 		ctx.Reply(fmt.Sprintf("Already an admin: %s", hostmask))
 		return
 	}
 
-	cfg.Bot.Admins = append(cfg.Bot.Admins, hostmask)
-	PersistAdmins(cfg.Bot.Admins)
+	config.SetList(&cfg.Bot.Admins, slices.Concat(config.List(&cfg.Bot.Admins), []string{hostmask}))
+	PersistAdmins(config.List(&cfg.Bot.Admins))
 	if warning := irc.AdminMaskWarning(hostmask); warning != "" {
 		ctx.Reply(fmt.Sprintf("Added admin: %s (note: %s)", hostmask, warning))
 	} else {
@@ -98,14 +99,14 @@ func (c *AdminCommand) removeAdmin(ctx irc.ChatContextInterface, hostmask string
 	cfg := ctx.GetConfig()
 
 	// Find and remove
-	idx := slices.Index(cfg.Bot.Admins, hostmask)
+	idx := slices.Index(config.List(&cfg.Bot.Admins), hostmask)
 	if idx == -1 {
 		ctx.Reply(fmt.Sprintf("Not an admin: %s", hostmask))
 		return
 	}
 
-	cfg.Bot.Admins = slices.Delete(cfg.Bot.Admins, idx, idx+1)
-	PersistAdmins(cfg.Bot.Admins)
+	config.SetList(&cfg.Bot.Admins, slices.Delete(slices.Clone(config.List(&cfg.Bot.Admins)), idx, idx+1))
+	PersistAdmins(config.List(&cfg.Bot.Admins))
 	ctx.Reply(fmt.Sprintf("Removed admin: %s", hostmask))
 	ctx.GetSession().Clear()
 }

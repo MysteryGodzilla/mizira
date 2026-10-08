@@ -59,7 +59,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	// Layer persisted runtime changes (+set, +admins, +tools) over config.yml. Must run
 	// before NewSystem, which reads them.
 	commands.ApplyOverrides(cfg)
-	checkAdminMasks(cfg.Bot.Admins)
+	checkAdminMasks(config.List(&cfg.Bot.Admins))
 	core.SetConcurrency(cfg.Bot.MaxConcurrent)
 	if lib := core.ExportPluginLib(cfg.Bot.PluginLib); lib != "" {
 		core.GetLogger().Info("plugin_lib_exported", "path", lib)

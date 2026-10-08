@@ -68,15 +68,15 @@ func NewSystem(c *config.Configuration) core.System {
 	s.Tools.RegisterNative("task__delegate", llm.NewDelegateTool)
 
 	// Load all tools from configuration (polly now handles native, shell, and MCP tools)
-	adminTools := make(map[string]bool, len(c.Bot.AdminTools))
-	for _, name := range c.Bot.AdminTools {
+	adminTools := make(map[string]bool, len(config.List(&c.Bot.AdminTools)))
+	for _, name := range config.List(&c.Bot.AdminTools) {
 		adminTools[name] = true
 	}
 
 	// Tools are optional, but an enabled tool must be loadable and have every
 	// credential it declares, or the bot stays off IRC (the console still starts and says why).
 	var unusable []string
-	for _, toolSpec := range withTaskToolset(c.Bot.Tools) {
+	for _, toolSpec := range withTaskToolset(config.List(&c.Bot.Tools)) {
 		if err := loadToolSpec(s.Tools, toolSpec, adminTools); err != nil {
 			unusable = append(unusable, filepath.Base(toolSpec)+": "+err.Error())
 		}

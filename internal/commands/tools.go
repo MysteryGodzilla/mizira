@@ -105,8 +105,8 @@ func (c *ToolsCommand) setRestriction(ctx irc.ChatContextInterface, pattern stri
 // syncAdminToolsConfig keeps cfg.Bot.AdminTools consistent with the live registry, so "+get
 // admintools" reflects reality.
 func syncAdminToolsConfig(cfg *config.Configuration, names []string, restrict bool) {
-	current := make(map[string]bool, len(cfg.Bot.AdminTools))
-	for _, n := range cfg.Bot.AdminTools {
+	current := make(map[string]bool, len(config.List(&cfg.Bot.AdminTools)))
+	for _, n := range config.List(&cfg.Bot.AdminTools) {
 		current[n] = true
 	}
 	for _, n := range names {
@@ -121,7 +121,7 @@ func syncAdminToolsConfig(cfg *config.Configuration, names []string, restrict bo
 		updated = append(updated, n)
 	}
 	sort.Strings(updated)
-	cfg.Bot.AdminTools = updated
+	config.SetList(&cfg.Bot.AdminTools, updated)
 }
 
 // matchToolNames resolves an exact name, a bare namespace, or a wildcard

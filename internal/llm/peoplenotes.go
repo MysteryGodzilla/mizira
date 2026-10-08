@@ -138,7 +138,7 @@ func speakers(cfg *config.Configuration, transcript, self string) []string {
 			continue
 		}
 		rest := strings.TrimSpace(line[strings.IndexByte(line, ')')+1:])
-		for _, p := range cfg.Bot.BotPrefixes {
+		for _, p := range config.List(&cfg.Bot.BotPrefixes) {
 			if p = strings.TrimSpace(p); p != "" && strings.HasPrefix(strings.ToLower(rest), strings.ToLower(p)) {
 				nick = strings.TrimFunc(p, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
 				break

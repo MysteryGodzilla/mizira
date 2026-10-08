@@ -222,7 +222,7 @@ func ChangeBots(cfg *config.Configuration, botNick string, add bool, kind BotKin
 	if !add && !removeNick(list, value) {
 		return value, ErrNotListed
 	}
-	PersistBots(bot.BotPrefixes, bot.BotNicks)
+	PersistBots(config.List(&bot.BotPrefixes), config.List(&bot.BotNicks))
 	action := "remove"
 	if add {
 		action = "add"

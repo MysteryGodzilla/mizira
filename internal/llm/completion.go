@@ -462,7 +462,7 @@ func logReplies(ctx irc.ChatContextInterface, msgs []messages.ChatMessage) {
 func outboundScreened(ctx irc.ChatContextInterface) bool {
 	// A custom persona is when the rules are most likely to bend (one talked the bot into romance
 	// live), so while one is active every reply is checked, whoever asked.
-	return core.Prompts().Active(ctx.GetLockKey()) || isScreened(ctx, ctx.GetConfig().Bot.FilterNicks)
+	return core.Prompts().Active(ctx.GetLockKey()) || isScreened(ctx, config.List(&ctx.GetConfig().Bot.FilterNicks))
 }
 
 // pending holds each in-flight request's own user message, and any tool call forced for it,

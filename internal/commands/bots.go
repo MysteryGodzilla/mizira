@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 
+	"B4reMetal/metald/internal/config"
 	"B4reMetal/metald/internal/irc"
 )
 
@@ -27,7 +28,7 @@ func (c *BotsCommand) Execute(ctx irc.ChatContextInterface) {
 	bot := ctx.GetConfig().Bot
 	if len(args) < 2 || args[1] == "list" {
 		ctx.Reply(fmt.Sprintf("Bot nicks: %s. Bot prefixes: %s. Replies to bots: %d in a row, reset by a human or %s quiet.",
-			joinOrNone(bot.BotNicks), joinOrNone(bot.BotPrefixes), bot.BotReplyLimit, bot.BotCooldown))
+			joinOrNone(config.List(&bot.BotNicks)), joinOrNone(config.List(&bot.BotPrefixes)), bot.BotReplyLimit, bot.BotCooldown))
 		return
 	}
 	if len(args) < 4 || (args[1] != "add" && args[1] != "remove") || (args[2] != "nick" && args[2] != "prefix") {

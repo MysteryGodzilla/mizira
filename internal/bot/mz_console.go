@@ -191,7 +191,7 @@ func (c console) Unignore(network, nick, by string) bool {
 }
 
 func (c console) Screened() admin.ScreenView {
-	return admin.ScreenView{In: append([]string{}, c.cfg.Bot.ScreenNicks...), Out: append([]string{}, c.cfg.Bot.FilterNicks...)}
+	return admin.ScreenView{In: append([]string{}, config.List(&c.cfg.Bot.ScreenNicks)...), Out: append([]string{}, config.List(&c.cfg.Bot.FilterNicks)...)}
 }
 
 func (c console) Screen(network, nick, by string) (int, error) {

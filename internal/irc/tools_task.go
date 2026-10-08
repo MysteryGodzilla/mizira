@@ -70,7 +70,7 @@ func StartWork(ctx ChatContextInterface, spec core.TaskSpec) (core.Task, error) 
 	if len(strings.Fields(spec.Objective)) < minObjectiveWords {
 		return core.Task{}, fmt.Errorf("%w: say what the work should do, in a few words", core.ErrTaskQuota)
 	}
-	if core.NickListed(cfg.Bot.ScreenNicks, ctx.GetSource()) {
+	if core.NickListed(config.List(&cfg.Bot.ScreenNicks), ctx.GetSource()) {
 		return core.Task{}, fmt.Errorf("%w: not available to %s", core.ErrTaskQuota, ctx.GetSource())
 	}
 	store, err := core.Tasks()

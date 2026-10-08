@@ -25,7 +25,7 @@ func rememberBotOwner(cfg *config.Configuration, nick, text string) {
 // "[metalai]"), or "" when that bot hasn't spoken since startup.
 func BotOwner(cfg *config.Configuration, name string) string {
 	name = strings.ToLower(botName(name))
-	for _, p := range cfg.Bot.BotPrefixes {
+	for _, p := range config.List(&cfg.Bot.BotPrefixes) {
 		if strings.ToLower(botName(p)) == name && name != "" {
 			if nick, ok := botOwners.Load(cfg.Server.Name + "/" + name); ok {
 				return nick.(string)
@@ -38,7 +38,7 @@ func BotOwner(cfg *config.Configuration, name string) string {
 // isBotTagName reports whether word names one of the botprefixes bots: "metalai", "[metalai]".
 func isBotTagName(cfg *config.Configuration, word string) bool {
 	name := strings.ToLower(botName(word))
-	for _, p := range cfg.Bot.BotPrefixes {
+	for _, p := range config.List(&cfg.Bot.BotPrefixes) {
 		if name != "" && strings.ToLower(botName(p)) == name {
 			return true
 		}

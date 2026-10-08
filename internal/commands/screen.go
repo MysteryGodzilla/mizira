@@ -7,8 +7,10 @@ package commands
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
+	"B4reMetal/metald/internal/config"
 	"B4reMetal/metald/internal/irc"
 )
 
@@ -77,12 +79,12 @@ func removeScreen(ctx irc.ChatContextInterface, nick string) {
 
 func listScreens(ctx irc.ChatContextInterface) {
 	bot := ctx.GetConfig().Bot
-	if len(bot.ScreenNicks) == 0 && len(bot.FilterNicks) == 0 {
+	if len(config.List(&bot.ScreenNicks)) == 0 && len(config.List(&bot.FilterNicks)) == 0 {
 		ctx.Reply("Nobody is screened. Usage: +screen <nick> | +screen remove <nick>")
 		return
 	}
 	ctx.Reply(fmt.Sprintf("Screening - inbound: %s; outbound: %s",
-		joinOrNone(bot.ScreenNicks), joinOrNone(bot.FilterNicks)))
+		joinOrNone(config.List(&bot.ScreenNicks)), joinOrNone(config.List(&bot.FilterNicks))))
 }
 
 func joinOrNone(list []string) string {
@@ -94,25 +96,26 @@ func joinOrNone(list []string) string {
 
 // addNick appends nick unless it is already listed (case-insensitive).
 func addNick(list *[]string, nick string) bool {
-	for _, have := range *list {
+	cur := config.List(list)
+	for _, have := range cur {
 		if strings.EqualFold(strings.TrimSpace(have), nick) {
 			return false
 		}
 	}
-	*list = append(*list, nick)
+	config.SetList(list, slices.Concat(cur, []string{nick}))
 	return true
 }
 
 func removeNick(list *[]string, nick string) bool {
-	kept := (*list)[:0:0]
+	kept := []string{} // not nil: an emptied list is saved as [], not dropped
 	removed := false
-	for _, have := range *list {
+	for _, have := range config.List(list) {
 		if strings.EqualFold(strings.TrimSpace(have), nick) {
 			removed = true
 			continue
 		}
 		kept = append(kept, have)
 	}
-	*list = kept
+	config.SetList(list, kept)
 	return removed
 }

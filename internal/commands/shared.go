@@ -29,7 +29,7 @@ var (
 // isAdmin reports whether nick belongs to a configured admin, by matching the nick portion of each
 // admin hostmask (nick!ident@host).
 func isAdmin(cfg *config.Configuration, nick string) bool {
-	for _, mask := range cfg.Bot.Admins {
+	for _, mask := range config.List(&cfg.Bot.Admins) {
 		adminNick, _, found := strings.Cut(mask, "!")
 		if !found {
 			adminNick = mask
@@ -82,7 +82,7 @@ func ScreenNick(cfg *config.Configuration, session sessions.Session, botNick, ni
 	addedIn := addNick(&bot.ScreenNicks, nick)
 	addedOut := addNick(&bot.FilterNicks, nick)
 	if addedIn || addedOut {
-		PersistScreening(bot.ScreenNicks, bot.FilterNicks)
+		PersistScreening(config.List(&bot.ScreenNicks), config.List(&bot.FilterNicks))
 	}
 	configMu.Unlock()
 	if !addedIn && !addedOut {
@@ -104,7 +104,7 @@ func UnscreenNick(cfg *config.Configuration, nick, by string, log *slog.Logger) 
 	removedIn := removeNick(&bot.ScreenNicks, nick)
 	removedOut := removeNick(&bot.FilterNicks, nick)
 	if removedIn || removedOut {
-		PersistScreening(bot.ScreenNicks, bot.FilterNicks)
+		PersistScreening(config.List(&bot.ScreenNicks), config.List(&bot.FilterNicks))
 	}
 	configMu.Unlock()
 	if !removedIn && !removedOut {

@@ -13,6 +13,7 @@ import (
 	"github.com/alexschlessinger/pollytool/schema"
 	"github.com/alexschlessinger/pollytool/tools"
 
+	"B4reMetal/metald/internal/config"
 	"B4reMetal/metald/internal/core"
 )
 
@@ -93,7 +94,7 @@ func newIrcIgnoreTool() tools.Tool {
 // isAdminNick reports whether nick belongs to a configured admin, matching
 // the nick portion of each admin hostmask (nick!ident@host).
 func isAdminNick(chatCtx ChatContextInterface, nick string) bool {
-	for _, mask := range chatCtx.GetConfig().Bot.Admins {
+	for _, mask := range config.List(&chatCtx.GetConfig().Bot.Admins) {
 		adminNick, _, found := strings.Cut(mask, "!")
 		if !found {
 			adminNick = mask
