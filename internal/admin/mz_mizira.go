@@ -21,6 +21,8 @@ type Mizira interface {
 	// SetRunState does what ~pause, ~stop or ~resume does. changed is false when it was a no-op
 	// (pausing a stopped bot, resuming a running one).
 	SetRunState(state, by string) (previous string, changed bool, cancelled int)
+	// Offline lists why she isn't on IRC this run (a console-only start, a tool that can't load).
+	Offline() []string
 	// Tools are the tools loaded right now.
 	Tools() []string
 	// Thinking reports whether the model is asked to reason before answering.
@@ -133,11 +135,12 @@ func (s *Server) features(w http.ResponseWriter, _ *http.Request) {
 }
 
 type mizState struct {
-	State string `json:"state"`
+	State   string   `json:"state"`
+	Offline []string `json:"offline,omitempty"`
 }
 
 func (s *Server) mizState(w http.ResponseWriter, _ *http.Request) {
-	respond(w, http.StatusOK, mizState{State: s.mz.RunState()})
+	respond(w, http.StatusOK, mizState{State: s.mz.RunState(), Offline: s.mz.Offline()})
 }
 
 // setMizState is ~pause, ~stop and ~resume from the console.

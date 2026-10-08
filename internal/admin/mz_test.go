@@ -15,10 +15,11 @@ import (
 )
 
 type fakeMizira struct {
-	state string
-	tools []string
-	think bool
-	by    []string
+	state   string
+	offline []string
+	tools   []string
+	think   bool
+	by      []string
 
 	persona   string
 	recap     bool
@@ -33,7 +34,8 @@ type fakeMizira struct {
 	compacted []string
 }
 
-func (f *fakeMizira) RunState() string { return f.state }
+func (f *fakeMizira) RunState() string  { return f.state }
+func (f *fakeMizira) Offline() []string { return f.offline }
 func (f *fakeMizira) SetRunState(state, by string) (string, bool, int) {
 	prev := f.state
 	if (state == "paused" && prev != "running") || (state == "running" && prev == "running") {
@@ -317,6 +319,19 @@ func TestPauseStopResumeFromTheConsole(t *testing.T) {
 	}
 	if len(m.by) == 0 || m.by[0] != "console:token" {
 		t.Errorf("changes recorded as by %v", m.by)
+	}
+}
+
+// Why she stayed off IRC reaches the console with the run state, so the page can say it plainly.
+func TestOfflineReasonsInTheState(t *testing.T) {
+	r, m := newMzRig(t)
+	if _, out := r.call(t, "GET", "/api/v1/mizira/state", "s3cret", ""); out["offline"] != nil {
+		t.Errorf("online state carries offline: %v", out)
+	}
+	m.offline = []string{"websearch.py: missing settings: EXA_API_KEY"}
+	_, out := r.call(t, "GET", "/api/v1/mizira/state", "s3cret", "")
+	if got, _ := out["offline"].([]any); len(got) != 1 || got[0] != m.offline[0] {
+		t.Errorf("offline = %v", out["offline"])
 	}
 }
 

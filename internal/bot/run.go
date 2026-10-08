@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/netip"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -99,7 +100,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	}
 
 	adoptUnscoped(nets)
-	startAdmin(ctx, cfg, nets, sys, cmdRegistry)
+	consoleUp := startAdmin(ctx, cfg, nets, sys, cmdRegistry)
 
 	// Memories written before this bot knew about networks carry no network of their own.
 	if len(nets) > 0 && nets[0].Name != "" {
@@ -113,6 +114,18 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 		if n := core.Reminders().AdoptUnscopedReminders(nets[0].Name); n > 0 {
 			slog.Info("reminders_assigned_to_network", "network", nets[0].Name, "count", n)
 		}
+	}
+
+	if cfg.Bot.ConsoleOnly {
+		core.KeepOffline("started console-only")
+	}
+	if reasons := core.OfflineReasons(); len(reasons) > 0 {
+		if !consoleUp {
+			return fmt.Errorf("not joining IRC, and the console is off: %s", strings.Join(reasons, "; "))
+		}
+		slog.Warn("irc_skipped", "reasons", strings.Join(reasons, "; "), "console", cfg.Bot.AdminListen)
+		<-ctx.Done()
+		return nil
 	}
 
 	if len(nets) == 1 {
@@ -306,18 +319,19 @@ func checkAdminMasks(admins []string) {
 	}
 }
 
-// startAdmin serves the operator page when it is configured; without a token it stays off.
-func startAdmin(ctx context.Context, cfg *config.Configuration, nets []*config.ServerConfig, sys core.System, cmds *commands.Registry) {
+// startAdmin serves the operator page when it is configured; without a token it stays off. It
+// reports whether the page is being served.
+func startAdmin(ctx context.Context, cfg *config.Configuration, nets []*config.ServerConfig, sys core.System, cmds *commands.Registry) bool {
 	if cfg.Bot.AdminListen == "" {
-		return
+		return false
 	}
 	if cfg.Bot.AdminToken == "" {
 		core.GetLogger().Warn("admin_disabled", "reason", "adminlisten is set but admintoken is empty")
-		return
+		return false
 	}
 	if err := admin.CheckListen(cfg.Bot.AdminListen); err != nil {
 		core.GetLogger().Error("admin_bind_refused", "error", err.Error())
-		return
+		return false
 	}
 	names := make([]string, 0, len(nets))
 	for _, n := range nets {
@@ -340,7 +354,7 @@ func startAdmin(ctx context.Context, cfg *config.Configuration, nets []*config.S
 		TrustedProxies: proxies, UserHeader: cfg.Bot.AdminUserHeader, Users: cfg.Bot.AdminUsers}, core.GetLogger())
 	if err != nil {
 		core.GetLogger().Error("admin_failed", "error", err.Error())
-		return
+		return false
 	}
 	srv.WithMizira(console{cfg: cfg, sys: sys, nets: nets, cmds: cmds})
 	go func() {
@@ -349,6 +363,7 @@ func startAdmin(ctx context.Context, cfg *config.Configuration, nets []*config.S
 			core.GetLogger().Error("admin_failed", "error", err.Error())
 		}
 	}()
+	return true
 }
 
 // newCommandRegistry registers every + command.

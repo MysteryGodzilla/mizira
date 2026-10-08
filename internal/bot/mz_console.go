@@ -53,6 +53,8 @@ const (
 
 func (c console) RunState() string { return core.State().String() }
 
+func (c console) Offline() []string { return core.OfflineReasons() }
+
 func (c console) SetRunState(state, by string) (string, bool, int) {
 	to, ok := core.ParseRunState(state)
 	if !ok {

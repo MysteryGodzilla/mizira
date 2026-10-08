@@ -9,7 +9,7 @@ export class MzApi extends Api {
   switchModel = (model: string) => this.call<{ model: string }>("PUT", "models", { model });
   commands = () => this.call<Cheatsheet>("GET", "commands");
   features = () => this.call<{ features: Feature[] }>("GET", "features").then((r) => r.features);
-  runState = () => this.call<{ state: RunState }>("GET", "mizira/state").then((r) => r.state);
+  runState = () => this.call<{ state: RunState; offline?: string[] }>("GET", "mizira/state");
   setRunState = (state: RunState) =>
     this.call<{ state: RunState; was: RunState; cancelled: number }>("PUT", "mizira/state", { state });
 

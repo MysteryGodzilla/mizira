@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -73,17 +74,18 @@ func NewSystem(c *config.Configuration) core.System {
 	}
 
 	// Tools are optional, but an enabled tool must be loadable and have every
-	// credential it declares, or the bot does not start.
-	unusable := 0
+	// credential it declares, or the bot stays off IRC (the console still starts and says why).
+	var unusable []string
 	for _, toolSpec := range withTaskToolset(c.Bot.Tools) {
-		if loadToolSpec(s.Tools, toolSpec, adminTools) != nil {
-			unusable++
+		if err := loadToolSpec(s.Tools, toolSpec, adminTools); err != nil {
+			unusable = append(unusable, filepath.Base(toolSpec)+": "+err.Error())
 		}
 	}
 
-	if unusable > 0 {
-		slog.Error("tools_unusable", "count", unusable, "hint", "fix the tool or remove it from the tool list")
-		os.Exit(1)
+	if len(unusable) > 0 {
+		slog.Error("tools_unusable", "count", len(unusable),
+			"hint", "she stays off IRC: fix the tool or remove it from the tool list, then restart")
+		core.KeepOffline(unusable...)
 	}
 
 	// Conversations are saved to the context database, so a restart resumes them.
@@ -118,15 +120,25 @@ func loadToolSpec(reg *tools.ToolRegistry, toolSpec string, adminTools map[strin
 		return err
 	}
 	if result.Type == "shell" {
+		// The console stays up when a tool can't be used, so don't leave it loaded.
+		unload := func() {
+			for _, server := range result.Servers {
+				for _, name := range server.ToolNames {
+					reg.Remove(name)
+				}
+			}
+		}
 		meta, err := core.ReadShellToolMeta(toolSpec)
 		req := meta.Requires
 		if err != nil {
 			slog.Error("tool_requirements_unreadable", "tool", toolSpec, "error", err)
+			unload()
 			return err
 		}
 		if missing := core.MissingEnv(req, nil); len(missing) > 0 {
 			slog.Error("tool_requirements_missing", "tool", toolSpec,
 				"keys", strings.Join(missing, ", "), "hint", "set them under env: in config.yml, or remove the tool")
+			unload()
 			return fmt.Errorf("missing settings: %s", strings.Join(missing, ", "))
 		}
 	}

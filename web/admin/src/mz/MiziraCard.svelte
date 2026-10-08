@@ -22,15 +22,19 @@
 
 <Card title="Mizira">
   {#snippet actions()}
-    {#if state === "running"}
+    {#if state === "running" && !mz.offline.length}
       <button onclick={() => mz.setRunState("paused", "paused Mizira")}>Pause</button>
-    {:else if state}
+    {:else if state && !mz.offline.length}
       <button onclick={() => mz.setRunState("running", "resumed Mizira")}>Resume</button>
     {/if}
-    {#if state && state !== "stopped"}<button class="danger" onclick={stop}>Stop</button>{/if}
+    {#if state && state !== "stopped" && !mz.offline.length}<button class="danger" onclick={stop}>Stop</button>{/if}
   {/snippet}
   {#if state}
-    <p><Badge text={state} tone={tone[state]} /><span class="sub">{about[state]}</span></p>
+    {#if mz.offline.length}
+      <p><Badge text="off IRC" tone="bad" /><span class="sub">Not on IRC this run: see the note at the top.</span></p>
+    {:else}
+      <p><Badge text={state} tone={tone[state]} /><span class="sub">{about[state]}</span></p>
+    {/if}
     {#if mz.pendingNotes.length}
       <p class="notes"><a href="#memories">{mz.pendingNotes.length} self-note{mz.pendingNotes.length === 1 ? "" : "s"} waiting for you</a></p>
     {/if}

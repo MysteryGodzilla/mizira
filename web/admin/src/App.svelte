@@ -22,6 +22,7 @@
   import Safety from "./mz/Safety.svelte";
   import Commands from "./mz/Commands.svelte";
   import Overrides from "./mz/Overrides.svelte";
+  import Offline from "./mz/Offline.svelte";
 
   // Signed in (by the auth proxy, or with a token) means a dashboard; signing out drops it and stops
   // its polling.
@@ -62,7 +63,7 @@
     {/if}
   </header>
   {#if board}
-    {#if mz}<Overrides {mz} />{/if}
+    {#if mz}<Offline {mz} /><Overrides {mz} />{/if}
     {#if board.message}
       <p class="message" class:bad={board.message.bad} role="status">{board.message.text}
         {#if board.message.bad}<button class="dismiss" aria-label="Dismiss" onclick={() => (board.message = null)}>×</button>{/if}</p>

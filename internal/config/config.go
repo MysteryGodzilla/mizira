@@ -64,6 +64,8 @@ type BotConfig struct {
 	URLWatcherSilent   bool
 	Sandbox            bool
 	IgnorePrivate      bool
+	// ConsoleOnly starts the console without joining IRC, to look things over with her offline.
+	ConsoleOnly bool
 	// PartUnlisted makes the bot leave channels other than Server.Channel. Off by default: on a
 	// server where the bot shares its owner's nick, a PART can pull the owner out too.
 	PartUnlisted bool
@@ -304,6 +306,7 @@ func GetFlags() []cli.Flag {
 		&cli.BoolFlag{Name: "urlwatcher", Usage: "enable passive URL watching and analysis", Sources: src("urlwatcher", "METALD_URLWATCHER")},
 		&cli.BoolFlag{Name: "urlwatchersilent", Usage: "run URL watcher without sending a reply in chat; response is discarded", Sources: src("urlwatchersilent", "METALD_URLWATCHERSILENT")},
 		&cli.BoolFlag{Name: "sandbox", Usage: "run shell/bash/MCP tools inside a platform sandbox (macOS sandbox-exec, Linux bubblewrap)", Sources: src("sandbox", "METALD_SANDBOX")},
+		&cli.BoolFlag{Name: "consoleonly", Usage: "start the console without joining IRC (maintenance)", Sources: src("consoleonly", "METALD_CONSOLEONLY")},
 		&cli.BoolFlag{Name: "ignoreprivate", Usage: "ignore direct/private messages entirely (no response, no commands)", Sources: src("ignoreprivate", "METALD_IGNOREPRIVATE")},
 		&cli.StringSliceFlag{Name: "botprefixes", Usage: "line prefixes that mark other bots' messages (e.g. '[metalai]')", Sources: src("botprefixes", "METALD_BOTPREFIXES")},
 		&cli.StringSliceFlag{Name: "botnicks", Usage: "nicks of bots that have their own account; all their lines count as bot lines", Sources: src("botnicks", "METALD_BOTNICKS")},
@@ -539,6 +542,7 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			URLWatcherSilent:    c.Bool("urlwatchersilent"),
 			Sandbox:             c.Bool("sandbox"),
 			IgnorePrivate:       c.Bool("ignoreprivate"),
+			ConsoleOnly:         c.Bool("consoleonly"),
 			PartUnlisted:        c.Bool("partunlisted"),
 			BotPrefixes:         c.StringSlice("botprefixes"),
 			BotNicks:            c.StringSlice("botnicks"),

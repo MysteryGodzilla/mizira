@@ -13,6 +13,8 @@ function storedFlag(key: string): boolean {
 export class MzConsole {
   features = $state<Feature[] | null>(null);
   runState = $state<RunState | null>(null);
+  /** Why she isn't on IRC this run (console-only start, a tool that can't load); empty when she is. */
+  offline = $state<string[]>([]);
   // For the "differs from config.yml" banner, and the Settings and Tools pages.
   settings = $state<Setting[]>([]);
   /** List settings (admins, screening, bots) changed at runtime; they show in config.yml only after an export. */
@@ -55,12 +57,12 @@ export class MzConsole {
 
   async refresh() {
     try {
-      const [features, runState, { settings, lists }, tools] = await Promise.all([
+      const [features, { state: runState, offline = [] }, { settings, lists }, tools] = await Promise.all([
         this.api.features(), this.api.runState(), this.api.settingsAndLists(), this.api.tools(),
       ]);
       const networks = this.board.status?.networks.map((n) => n.name) ?? [];
       const pendingNotes = (await Promise.all(networks.map((n) => this.api.selfNotes(n, "pending", "", 0, 200).then((r) => r.notes)))).flat();
-      Object.assign(this, { features, runState, settings, lists, tools, pendingNotes });
+      Object.assign(this, { features, runState, offline, settings, lists, tools, pendingNotes });
     } catch { /* upstream's refresh reports errors; don't say it twice */ }
   }
 
