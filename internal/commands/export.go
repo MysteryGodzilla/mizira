@@ -81,7 +81,7 @@ func ExportConfig(configPath string, now time.Time) (string, []ExportChange, err
 	}
 	if len(o.ToolsOn) > 0 || len(o.ToolsOff) > 0 {
 		var tools []string
-		for _, t := range normaliseList(before["tools"]) {
+		for _, t := range normaliseList(before["tool"]) {
 			if s := fmt.Sprint(t); !slices.Contains(o.ToolsOff, s) {
 				tools = append(tools, s)
 			}
@@ -91,9 +91,9 @@ func ExportConfig(configPath string, now time.Time) (string, []ExportChange, err
 				tools = append(tools, t)
 			}
 		}
-		if value := anyList(tools); !reflect.DeepEqual(value, normaliseList(before["tools"])) {
-			want["tools"] = value
-			changes = append(changes, change("tools", before["tools"], value))
+		if value := anyList(tools); !reflect.DeepEqual(value, normaliseList(before["tool"])) {
+			want["tool"] = value
+			changes = append(changes, change("tool", before["tool"], value))
 		}
 	}
 	if len(changes) == 0 {

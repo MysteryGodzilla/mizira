@@ -27,7 +27,7 @@ prompt: |
   You are botty.
   Be kind.
 
-tools:
+tool:
   - irc__slap
   - memory__remember
 `
@@ -76,7 +76,7 @@ func TestExportConfig(t *testing.T) {
 			"sessionduration: 15m\n",
 			"admins:                        # who runs her\n  - alice!*@*\n  - bob!*@*\n",
 			"prompt: |-\n  You are botty.\n  Be brave.\n",
-			"tools:\n  - memory__remember\n  - history__search\n",
+			"tool:\n  - memory__remember\n  - history__search\n",
 			"# Added by the console's export, 2026-10-07 14:30\nselfnotes: false\n",
 		} {
 			if !strings.Contains(got, want) {
@@ -94,7 +94,7 @@ func TestExportConfig(t *testing.T) {
 				t.Errorf("a secret shown: %+v", c)
 			}
 		}
-		if keys != "admins maxcontext openaikey prompt selfnotes tools " {
+		if keys != "admins maxcontext openaikey prompt selfnotes tool " {
 			t.Errorf("changes: %s", keys)
 		}
 		if again, _, _ := ExportConfig(path, now); again == out {

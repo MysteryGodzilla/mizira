@@ -40,6 +40,7 @@ func applyToolOverrides(cfg *config.Configuration, o runtimeOverrides) {
 	configToolsMu.Lock()
 	configTools = slices.Clone(config.List(&cfg.Bot.Tools))
 	configToolsMu.Unlock()
+	o.ToolsOn, o.ToolsOff = dropAgreedSwitches(config.List(&cfg.Bot.Tools))
 	if len(o.ToolsOn) == 0 && len(o.ToolsOff) == 0 {
 		return
 	}
@@ -77,6 +78,22 @@ func PersistToolSwitch(spec string, on bool) {
 		o.ToolsOff = append(o.ToolsOff, spec)
 	}
 	saveOverrides(o)
+}
+
+// dropAgreedSwitches forgets switches config.yml now agrees with (a switched-on tool since added to
+// its list, say by an export), so they stop showing as differences; it returns the ones left.
+func dropAgreedSwitches(inConfig []string) (on, off []string) {
+	overridesMu.Lock()
+	defer overridesMu.Unlock()
+	o := loadOverrides()
+	on = slices.DeleteFunc(slices.Clone(o.ToolsOn), func(t string) bool { return slices.Contains(inConfig, t) })
+	off = slices.DeleteFunc(slices.Clone(o.ToolsOff), func(t string) bool { return !slices.Contains(inConfig, t) })
+	if len(on) != len(o.ToolsOn) || len(off) != len(o.ToolsOff) {
+		o.ToolsOn, o.ToolsOff = on, off
+		saveOverrides(o)
+		core.GetLogger().Info("tool_switches_dropped", "reason", "config.yml already agrees")
+	}
+	return on, off
 }
 
 // ClearToolSwitches forgets every tool switch, so the next start uses config.yml's list.
