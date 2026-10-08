@@ -81,4 +81,4 @@ require (
 
 // Fork (branch mizira-sampling): top_p, presence_penalty and extra body fields, plus upstream's
 // reasoning_content patch, so third_party/pollytool is not used.
-replace github.com/alexschlessinger/pollytool => github.com/MysteryGodzilla/polly v0.0.0-20261008075622-39ecbf30da08
+replace github.com/alexschlessinger/pollytool => github.com/MysteryGodzilla/polly v0.0.0-20261008200826-3a7bca3f9ae8
