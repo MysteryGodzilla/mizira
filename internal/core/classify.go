@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 const classifyTimeout = 20 * time.Second
@@ -18,6 +20,10 @@ const classifyTimeout = 20 * time.Second
 // ClassifyUnavailable is the reason given when the classifier could not be reached. Whatever the
 // caller does with the content, it is no fault of the person who wrote it.
 const ClassifyUnavailable = "safety check unavailable"
+
+// ClassifyInconclusive is the reason given when the classifier answered without a verdict. Like
+// ClassifyUnavailable, the content is refused but its writer isn't blamed.
+const ClassifyInconclusive = "safety check inconclusive"
 
 func Classify(ctx ChatContextInterface, policy, label, content string, failOpen bool) (bool, string) {
 	cfg := ctx.GetConfig()
@@ -77,17 +83,17 @@ func Classify(ctx ChatContextInterface, policy, label, content string, failOpen 
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil || len(payload.Choices) == 0 {
 		ctx.GetLogger().Warn("classify_unparseable", "label", label, "http", resp.StatusCode)
-		return failOpen, "safety check inconclusive"
+		return failOpen, ClassifyInconclusive
 	}
 
 	verdict := strings.TrimSpace(payload.Choices[0].Message.Content)
 	if verdict == "" {
 		ctx.GetLogger().Warn("classify_empty_verdict", "label", label, "http", resp.StatusCode)
-		return failOpen, "safety check inconclusive"
+		return failOpen, ClassifyInconclusive
 	}
 
 	first := strings.ToUpper(strings.TrimSpace(strings.SplitN(verdict, "\n", 2)[0]))
-	if first == "ALLOW" || strings.HasPrefix(first, "ALLOW ") {
+	if VerdictAllows(first) {
 		return true, ""
 	}
 	if strings.HasPrefix(first, "DENY") {
@@ -102,7 +108,18 @@ func Classify(ctx ChatContextInterface, policy, label, content string, failOpen 
 	}
 
 	ctx.GetLogger().Warn("classify_indeterminate", "label", label, "verdict", truncate(verdict, 120))
-	return failOpen, "safety check inconclusive"
+	return failOpen, ClassifyInconclusive
+}
+
+// VerdictAllows reports an upper-cased verdict line that is ALLOW, alone or followed by a reason
+// ("ALLOW: ordinary chat", as smaller models write it), but not a longer word such as ALLOWED.
+func VerdictAllows(first string) bool {
+	rest, ok := strings.CutPrefix(first, "ALLOW")
+	if !ok {
+		return false
+	}
+	r, _ := utf8.DecodeRuneInString(rest)
+	return rest == "" || !unicode.IsLetter(r)
 }
 
 func truncate(s string, n int) string {

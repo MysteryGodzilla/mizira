@@ -133,7 +133,7 @@ func ScreenIncoming(ctx irc.ChatContextInterface, msg string) (bool, string) {
 	}
 
 	first := strings.ToUpper(strings.TrimSpace(strings.SplitN(verdict, "\n", 2)[0]))
-	if first == "ALLOW" || strings.HasPrefix(first, "ALLOW ") {
+	if core.VerdictAllows(first) {
 		return true, ""
 	}
 	if strings.HasPrefix(first, "DENY") {

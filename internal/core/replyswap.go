@@ -5,10 +5,15 @@
 package core
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/alexschlessinger/pollytool/messages"
 )
+
+// echoedLabel is the "(nick:x)" label a model sometimes copies onto its own answer; the posted
+// reply has it stripped, the history copy doesn't.
+var echoedLabel = regexp.MustCompile(`^\s*\(nick:[^)]*\)\s*`)
 
 // ReplaceReply swaps a refused reply in history for what was posted instead, so the conversation
 // shows what the channel saw and keeps the speaker's own words. It looks for the newest assistant
@@ -28,7 +33,7 @@ func ReplaceReply(session interface {
 	history := session.GetHistory()
 	for i := len(history) - 1; i >= 0; i-- {
 		m := history[i]
-		if m.Role != messages.MessageRoleAssistant || strings.Join(strings.Fields(m.Content), " ") != want {
+		if m.Role != messages.MessageRoleAssistant || strings.Join(strings.Fields(echoedLabel.ReplaceAllString(m.Content, "")), " ") != want {
 			continue
 		}
 		history[i].Content = posted

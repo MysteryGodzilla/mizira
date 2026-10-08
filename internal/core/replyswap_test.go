@@ -27,6 +27,12 @@ func TestReplaceReply(t *testing.T) {
 	if len(h) != 5 || h[0].Content != "prompt" || h[3].Content != "(nick:remy) bonito night" || h[4].Content != "I'd rather not" || h[2].Content != "hello bob" {
 		t.Errorf("history: %+v", h)
 	}
+	// Smaller models echo their own label; the posted reply has it stripped.
+	s.AddMessage(user("(nick:carol) hi"))
+	s.AddMessage(messages.ChatMessage{Role: messages.MessageRoleAssistant, Content: "(nick:botty) I'm okay."})
+	if !ReplaceReply(s, "I'm okay.", "I'd rather not") || s.GetHistory()[6].Content != "I'd rather not" {
+		t.Errorf("echoed label: %+v", s.GetHistory())
+	}
 	if ReplaceReply(s, "never said", "x") {
 		t.Error("replaced a reply that isn't there")
 	}

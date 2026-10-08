@@ -400,7 +400,7 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 
 		// Neither a failed check nor a custom persona's doing is the speaker's fault.
 		var score float64
-		if reason != core.ClassifyUnavailable && !core.Prompts().Active(ctx.GetLockKey()) {
+		if reason != core.ClassifyUnavailable && reason != core.ClassifyInconclusive && !core.Prompts().Active(ctx.GetLockKey()) {
 			score = core.Suspicions().Add(ctx.GetNetwork(), ctx.SpeakerKey(), core.SignalReplyDenied)
 		}
 		ctx.GetLogger().Warn("reply_screened_out",
