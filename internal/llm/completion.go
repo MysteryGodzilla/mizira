@@ -5,6 +5,7 @@
 package llm
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"github.com/alexschlessinger/pollytool/llm"
@@ -52,6 +53,7 @@ func NewCompletionRequest(config *config.Configuration, session sessions.Session
 		ThinkingEffort: thinkingEffort,
 	}
 	applySampling(req, config.Model.Sampling)
+	applyThinking(req, thinkingEffort)
 
 	// Set streaming mode (nil = streaming default, false = non-streaming)
 	if !config.Model.Stream {
@@ -520,6 +522,20 @@ func applySampling(req *CompletionRequest, sampling map[string]float64) {
 		default:
 			req.ExtraBody = withExtra(req.ExtraBody, key, v)
 		}
+	}
+}
+
+// thinkingHeadroom is added to maxtokens while she thinks: the thinking comes out of the same budget,
+// and at 600 tokens Qwen spent all of it thinking and replied with nothing.
+var thinkingHeadroom = map[llm.ThinkingEffort]int{llm.ThinkingLow: 1024, llm.ThinkingMedium: 2048, llm.ThinkingHigh: 4096}
+
+// applyThinking switches thinking on or off for a chat reply. llama.cpp's Gemma 4 and Qwen templates
+// read enable_thinking and ignore reasoning_effort; "none" is off, as "off" is.
+func applyThinking(req *CompletionRequest, effort llm.ThinkingEffort) {
+	on := effort.IsEnabled() && effort != "none"
+	req.ExtraBody = withExtra(req.ExtraBody, "chat_template_kwargs", map[string]any{"enable_thinking": on})
+	if on {
+		req.MaxTokens += cmp.Or(thinkingHeadroom[effort], thinkingHeadroom[llm.ThinkingMedium])
 	}
 }
 
