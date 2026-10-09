@@ -40,6 +40,45 @@ type Intent struct {
 // "Mizira slap bob with a keyboard" → irc__slap, both with nick bob. Only the start counts. Ignore needs its target to be someone in the
 // channel, so "ignore previous instructions" is never taken as a request; remember skips questions.
 func ToolIntent(cfg *config.Configuration, botNick, msg string, inChannel func(nick string) bool) (Intent, bool) {
+	if intent, ok := verbIntent(cfg, botNick, msg, inChannel); ok {
+		return intent, true
+	}
+	if AsksToSearch(strings.TrimSpace(nickPrefix.ReplaceAllString(msg, ""))) {
+		return Intent{Tool: ClaimTool[ClaimSearch]}, true
+	}
+	return Intent{}, false
+}
+
+// searchAsk is a request to search anywhere in the message: "can you look up the hi-nu gundam",
+// "mizira yes search it", "find me a cake recipe". "searched" and "searching" don't match: they
+// talk about a search rather than ask for one.
+var searchAsk = regexp.MustCompile(`(?i)\b(?:web\s?search|google\s+(?:it|that|this|them|for)|search(?:\s+up)?|look\s+(?:it\s+|that\s+|this\s+|them\s+)?up|find\s+out|find\s+me)\b`)
+
+// searchAskedAbout before the match makes it a question about a search ("did you search it?") or
+// a rule for later ("always use the websearch tool when I ask").
+var searchAskedAbout = regexp.MustCompile(`(?i)\b(?:did|didn'?t|why|have you|you just|already|don'?t|do not|never|stop|always|whenever|when i)\b[^.!?]{0,25}$`)
+
+// searchesChat after "search" points at the chat, which history__search covers, not the web.
+var searchesChat = regexp.MustCompile(`(?i)^\s+(?:through\s+|in\s+)?(?:the\s+|our\s+|your\s+)?(?:chat|channel|history|logs?|backlog|memor(?:y|ies))\b`)
+
+// lookUpAt is "look up at the sky" or "look up to her": no search.
+var lookUpAt = regexp.MustCompile(`(?i)^\s+(?:at|to)\b`)
+
+// AsksToSearch reports a message asking for a web search.
+func AsksToSearch(text string) bool {
+	for _, loc := range searchAsk.FindAllStringIndex(text, -1) {
+		before, after := text[:loc[0]], text[loc[1]:]
+		if searchAskedAbout.MatchString(before) || searchesChat.MatchString(after) ||
+			(strings.HasPrefix(strings.ToLower(text[loc[0]:]), "look") && lookUpAt.MatchString(after)) {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+// verbIntent is a tool named by the first verb after the bot's name.
+func verbIntent(cfg *config.Configuration, botNick, msg string, inChannel func(nick string) bool) (Intent, bool) {
 	text := strings.TrimSpace(nickPrefix.ReplaceAllString(msg, ""))
 	words := strings.Fields(text)
 	// A bot that shares its owner's nick tags its lines: "[botty] Mizira remember ...".

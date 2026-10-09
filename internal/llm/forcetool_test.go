@@ -163,3 +163,24 @@ func TestForcedCallSeesOnlyTheMessage(t *testing.T) {
 		t.Errorf("forced call saw more than the message: %s", raw)
 	}
 }
+
+// A search query is written with the recent chat in view, so "yes search it" knows what "it" is;
+// other tools see none of it.
+func TestRecentForSearch(t *testing.T) {
+	req := &CompletionRequest{}
+	req.Messages = []messages.ChatMessage{
+		{Role: messages.MessageRoleSystem, Content: "system prompt"},
+		{Role: messages.MessageRoleUser, Content: "(nick:bob) mizira unicorn gundam!"},
+		{Role: messages.MessageRoleAssistant, Content: "oh, the Unicorn Gundam?"},
+		{Role: messages.MessageRoleTool, Content: "tool output"},
+		{Role: messages.MessageRoleUser, Content: "(nick:alice) mizira yes search it"},
+	}
+	got := recentFor(true, req)
+	want := "them: (nick:bob) mizira unicorn gundam!\nyou: oh, the Unicorn Gundam?"
+	if got != want {
+		t.Errorf("recent = %q, want %q", got, want)
+	}
+	if recentFor(false, req) != "" {
+		t.Error("a non-search tool was given the chat")
+	}
+}

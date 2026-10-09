@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -50,6 +51,12 @@ func forceIntentTool(ctx irc.ChatContextInterface, req *CompletionRequest, msg s
 	if name == irc.ClaimTool[irc.ClaimIgnore] && !ctx.IsAdmin() {
 		return nil
 	}
+	// Each search costs: another bot's "look it up" is left to the model, so two bots can't run
+	// searches back and forth.
+	search := name == irc.ClaimTool[irc.ClaimSearch]
+	if search && ctx.IsBotLine() {
+		return nil
+	}
 	tool, ok := registry.Get(name)
 	if !ok {
 		return nil
@@ -61,7 +68,7 @@ func forceIntentTool(ctx irc.ChatContextInterface, req *CompletionRequest, msg s
 	if intent.Complete {
 		args, _ := json.Marshal(intent.Args)
 		call = messages.ChatMessageToolCall{ID: "forced-" + ctx.GetRequestID(), Name: name, Arguments: string(args)}
-	} else if call, err = requestToolCall(ctx, tool, msg); err != nil {
+	} else if call, err = requestToolCall(ctx, tool, msg, recentFor(search, req)); err != nil {
 		log.Warn("forced_tool_unavailable", "tool", name, "error", err.Error())
 		return nil
 	}
@@ -82,7 +89,11 @@ func forceIntentTool(ctx irc.ChatContextInterface, req *CompletionRequest, msg s
 	if ctx.GetConfig().Bot.ShowToolActions && !silentTools[name] {
 		ctx.ReplyAction("calling " + toolDisplayName(name))
 	}
-	log.Info("tool_started", "tool", name, "forced", true)
+	if search {
+		log.Info("tool_started", "tool", name, "forced", true, "args", call.Arguments)
+	} else {
+		log.Info("tool_started", "tool", name, "forced", true)
+	}
 	runCtx, cancel := context.WithTimeout(irc.InjectContext(ctx, ctx), ctx.GetConfig().API.Timeout)
 	defer cancel()
 	result, err := tool.Execute(runCtx, args)
@@ -103,10 +114,41 @@ func forceIntentTool(ctx irc.ChatContextInterface, req *CompletionRequest, msg s
 	}
 }
 
-// requestToolCall asks the model for the tool's arguments, seeing the system prompt and the new
-// message. It uses a JSON-schema response format rather than tool_choice: llama.cpp enforces the
-// schema as a grammar, while Gemma 4 there answered tool_choice "required" with plain text.
-func requestToolCall(ctx irc.ChatContextInterface, tool tools.Tool, msg string) (messages.ChatMessageToolCall, error) {
+// recentLines is how much of the chat a search query is written from.
+const recentLines = 6
+
+// recentFor is the recent chat a search query is written from, so "yes search it" knows what "it"
+// is; "" for every other tool, whose arguments must come from the person's own words.
+func recentFor(search bool, req *CompletionRequest) string {
+	if !search || req == nil {
+		return ""
+	}
+	var lines []string
+	// The newest message is the request itself, sent separately.
+	for i := len(req.Messages) - 2; i >= 0 && len(lines) < recentLines; i-- {
+		m := req.Messages[i]
+		if (m.Role != messages.MessageRoleUser && m.Role != messages.MessageRoleAssistant) || strings.TrimSpace(m.Content) == "" {
+			continue
+		}
+		who := "you"
+		if m.Role == messages.MessageRoleUser {
+			who = "them"
+		}
+		text := strings.Join(strings.Fields(m.Content), " ")
+		if r := []rune(text); len(r) > 300 {
+			text = string(r[:300]) + "…"
+		}
+		lines = append(lines, who+": "+text)
+	}
+	slices.Reverse(lines)
+	return strings.Join(lines, "\n")
+}
+
+// requestToolCall asks the model for the tool's arguments, seeing the tool and the new message (and
+// for a search, the recent chat). It uses a JSON-schema response format rather than tool_choice:
+// llama.cpp enforces the schema as a grammar, while Gemma 4 there answered tool_choice "required"
+// with plain text.
+func requestToolCall(ctx irc.ChatContextInterface, tool tools.Tool, msg, recent string) (messages.ChatMessageToolCall, error) {
 	cfg := ctx.GetConfig()
 	var call messages.ChatMessageToolCall
 	base := strings.TrimSuffix(cfg.API.OpenAIURL, "/")
@@ -117,8 +159,13 @@ func requestToolCall(ctx irc.ChatContextInterface, tool tools.Tool, msg string) 
 	// Only the person's own message and the tool: the arguments must come from what they said. With
 	// the system prompt (room memory, recap) and the turn's injected memories in view, the model
 	// once filled a remember with a room fact instead of the speaker's words.
+	system := tool.GetName() + ": " + tool.GetSchema().Description()
+	if recent != "" {
+		system += "\n\nWrite the search for what the newest message asks to look up. Recent chat, for what " +
+			"\"it\" or \"that\" refers to:\n" + recent
+	}
 	msgs := []map[string]string{
-		{"role": "system", "content": tool.GetName() + ": " + tool.GetSchema().Description()},
+		{"role": "system", "content": system},
 		{"role": "user", "content": msg},
 	}
 

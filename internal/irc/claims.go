@@ -14,6 +14,7 @@ const (
 	ClaimRemember ClaimKind = "remember"
 	ClaimIgnore   ClaimKind = "ignore"
 	ClaimForget   ClaimKind = "forget"
+	ClaimSearch   ClaimKind = "search"
 )
 
 // ClaimTool is the tool that has to run for a claim to be true.
@@ -21,6 +22,7 @@ var ClaimTool = map[ClaimKind]string{
 	ClaimRemember: "memory__remember",
 	ClaimIgnore:   "irc__ignore",
 	ClaimForget:   "memory__forget",
+	ClaimSearch:   "websearch__web_search",
 }
 
 // A claim is a first-person promise or report ("I'll remember", "i've stopped replying to bob"),
@@ -41,7 +43,14 @@ var claimPatterns = []struct {
 		`(?:forget|forgot|forgotten|erase|erased|delete|deleted)\b`)},
 	{ClaimIgnore, regexp.MustCompile(claimSubject + claimGap +
 		`(?:ignore|ignored|ignoring|mute|muted|block|blocked|stop(?:ped)? (?:responding|replying|talking) to)\b`)},
+	// A promise or "I'm searching": said without the call, the person waits for results that never
+	// come. "I searched" and "I was looking it up" report an earlier search, so they don't count.
+	{ClaimSearch, regexp.MustCompile(`\b(?:i'?ll|i will|i'?m|i am|let me)\b` + claimGap +
+		`(?:search|searching|look (?:it|that|this|them|those) up|looking (?:it|that|this|them|those) up|look up|looking up)\b`)},
 }
+
+// offerModal in a search claim makes it an offer, not a report: "i can look it up for you".
+var offerModal = regexp.MustCompile(`\b(?:can|could|might|may)\b`)
 
 // heldNotDone is "I have <something> saved": what is already stored, not a new save. "I've saved"
 // with nothing between is still a claim.
@@ -61,6 +70,7 @@ func DetectClaim(line string) (ClaimKind, bool) {
 		for _, loc := range p.re.FindAllStringIndex(l, -1) {
 			span := l[loc[0]:loc[1]]
 			if bareRecall(span) || heldNotDone.MatchString(span) || claimNegation.MatchString(span) ||
+				(p.kind == ClaimSearch && offerModal.MatchString(span)) ||
 				askedNotClaimed(l, loc[0], loc[1]) || describesHoldings.MatchString(l[:loc[0]]) {
 				continue
 			}
