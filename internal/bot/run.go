@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/netip"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -54,6 +55,11 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 		return fmt.Errorf("commandprefix %q: %w", cfg.Bot.CommandPrefix, err)
 	}
 	core.SetDataDir(cfg.Bot.DataDir)
+	// Plugins log failures and costs here, one log per bot, so the console's spend figures don't mix the
+	// testbed's searches with live ones. A tool log set in the real environment wins.
+	if os.Getenv("METALD_TOOL_LOG") == "" {
+		os.Setenv("METALD_TOOL_LOG", core.DataPath(filepath.Join("logs", "tools.log")))
+	}
 	commands.OverridesPath = core.DataPath("config-overrides.json")
 
 	// Layer persisted runtime changes (+set, +admins, +tools) over config.yml. Must run

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"B4reMetal/metald/internal/core"
 )
 
 type fakeMizira struct {
@@ -36,6 +38,9 @@ type fakeMizira struct {
 
 func (f *fakeMizira) RunState() string  { return f.state }
 func (f *fakeMizira) Offline() []string { return f.offline }
+func (f *fakeMizira) Services(context.Context) []ServiceView {
+	return []ServiceView{{ID: "model", Name: "Model server", Stats: []core.ServiceStat{{Label: "model", Value: "modelA (ready)"}}}}
+}
 func (f *fakeMizira) SetRunState(state, by string) (string, bool, int) {
 	prev := f.state
 	if (state == "paused" && prev != "running") || (state == "running" && prev == "running") {
@@ -246,7 +251,7 @@ func TestRunRefusesEveryInterface(t *testing.T) {
 
 func TestMiziraEndpointsNeedTheToken(t *testing.T) {
 	r, m := newMzRig(t)
-	for _, c := range [][2]string{{"GET", "/api/v1/features"}, {"GET", "/api/v1/commands"}, {"POST", "/api/v1/settings/export"}, {"POST", "/api/v1/settings/reset-all"}, {"PUT", "/api/v1/tools/restrict"}, {"GET", "/api/v1/models"}, {"PUT", "/api/v1/models"}, {"GET", "/api/v1/mizira/state"}, {"PUT", "/api/v1/mizira/state"},
+	for _, c := range [][2]string{{"GET", "/api/v1/features"}, {"GET", "/api/v1/commands"}, {"POST", "/api/v1/settings/export"}, {"POST", "/api/v1/settings/reset-all"}, {"PUT", "/api/v1/tools/restrict"}, {"GET", "/api/v1/models"}, {"PUT", "/api/v1/models"}, {"GET", "/api/v1/mizira/state"}, {"GET", "/api/v1/services"}, {"PUT", "/api/v1/mizira/state"},
 		{"GET", "/api/v1/conversation"}, {"POST", "/api/v1/conversation/reset"}, {"DELETE", "/api/v1/recap?network=net"},
 		{"PUT", "/api/v1/memories/1/lock?network=net"}, {"DELETE", "/api/v1/memories/1/lock?network=net"},
 		{"POST", "/api/v1/conversation/fold"},
@@ -332,6 +337,15 @@ func TestOfflineReasonsInTheState(t *testing.T) {
 	_, out := r.call(t, "GET", "/api/v1/mizira/state", "s3cret", "")
 	if got, _ := out["offline"].([]any); len(got) != 1 || got[0] != m.offline[0] {
 		t.Errorf("offline = %v", out["offline"])
+	}
+}
+
+func TestServicesListed(t *testing.T) {
+	r, _ := newMzRig(t)
+	code, out := r.call(t, "GET", "/api/v1/services", "s3cret", "")
+	list, _ := out["services"].([]any)
+	if code != http.StatusOK || len(list) != 1 || !strings.Contains(asJSON(list), "modelA (ready)") {
+		t.Errorf("services = %d %v", code, out)
 	}
 }
 

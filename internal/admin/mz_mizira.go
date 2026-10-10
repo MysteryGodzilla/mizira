@@ -23,6 +23,8 @@ type Mizira interface {
 	SetRunState(state, by string) (previous string, changed bool, cancelled int)
 	// Offline lists why she isn't on IRC this run (a console-only start, a tool that can't load).
 	Offline() []string
+	// Services are the outside services she uses (model server, web search), with their figures.
+	Services(ctx context.Context) []ServiceView
 	// Tools are the tools loaded right now.
 	Tools() []string
 	// Thinking reports whether the model is asked to reason before answering.
@@ -102,6 +104,7 @@ func (s *Server) mzRoutes(api *http.ServeMux) {
 	api.HandleFunc("GET /features", s.features)
 	api.HandleFunc("GET /commands", s.commands)
 	api.HandleFunc("GET /mizira/state", s.mizState)
+	api.HandleFunc("GET /services", s.services)
 	api.HandleFunc("PUT /mizira/state", s.setMizState)
 	s.mzPeopleRoutes(api)
 	s.mzModelRoutes(api)

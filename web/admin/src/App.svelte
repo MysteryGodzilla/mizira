@@ -12,6 +12,7 @@
   import Thinking from "./components/Thinking.svelte";
   import { MzConsole } from "./mz/console.svelte";
   import MiziraCard from "./mz/MiziraCard.svelte";
+  import Services from "./mz/Services.svelte";
   import Feature from "./mz/Feature.svelte";
   import Conversation from "./mz/Conversation.svelte";
   import People from "./mz/People.svelte";
@@ -89,7 +90,7 @@
     {:else if view === "thinking"}
       <Feature {mz} id="thinking"><Thinking {token} /></Feature>
     {:else}
-      {#if mz}<MiziraCard {mz} />{/if}
+      {#if mz}<MiziraCard {mz} /><Services {mz} />{/if}
       <Overview {board} />
       <Inflight {board} />
       <Feature {mz} id="gpu"><GpuQueue {board} /></Feature>

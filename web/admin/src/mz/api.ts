@@ -1,5 +1,5 @@
 import { Api } from "../lib/api";
-import type { Bots, Cheatsheet, ExportResult, Conversation, Feature, Fold, Memory, People, Reset, RunState, Safety, SelfNote, Setting, SettingChange, Subject, Tool } from "./types";
+import type { Bots, Cheatsheet, ExportResult, Conversation, Feature, Fold, Memory, People, Reset, RunState, Safety, SelfNote, Service, Setting, SettingChange, Subject, Tool } from "./types";
 
 const q = (params: Record<string, string>) => new URLSearchParams(params).toString();
 
@@ -9,6 +9,7 @@ export class MzApi extends Api {
   switchModel = (model: string) => this.call<{ model: string }>("PUT", "models", { model });
   commands = () => this.call<Cheatsheet>("GET", "commands");
   features = () => this.call<{ features: Feature[] }>("GET", "features").then((r) => r.features);
+  services = () => this.call<{ services: Service[] }>("GET", "services").then((r) => r.services);
   runState = () => this.call<{ state: RunState; offline?: string[] }>("GET", "mizira/state");
   setRunState = (state: RunState) =>
     this.call<{ state: RunState; was: RunState; cancelled: number }>("PUT", "mizira/state", { state });
