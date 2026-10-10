@@ -17,7 +17,19 @@ type ServiceView struct {
 	Name  string             `json:"name"`
 	Link  string             `json:"link,omitempty"`
 	Stats []core.ServiceStat `json:"stats"`
+	Meter *Meter             `json:"meter,omitempty"`
 	Error string             `json:"error,omitempty"`
+}
+
+// Meter is a spend bar: used against a limit, red once over it, and a warning when the pace runs out
+// before the period ends.
+type Meter struct {
+	Label   string  `json:"label"`
+	Used    float64 `json:"used"`
+	Limit   float64 `json:"limit"`
+	Over    bool    `json:"over"`
+	Note    string  `json:"note,omitempty"`
+	Warning string  `json:"warning,omitempty"`
 }
 
 func (s *Server) services(w http.ResponseWriter, r *http.Request) {

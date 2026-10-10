@@ -11,7 +11,10 @@ export interface Cheatsheet { name: string; needName: boolean; groups: string[];
 export interface Feature { id: string; label: string; active: boolean; how: string }
 
 /** An outside service on the dashboard: its figures and a link to its own page. */
-export interface Service { id: string; name: string; link?: string; stats: { label: string; value: string }[]; error?: string }
+export interface Service {
+  id: string; name: string; link?: string; stats: { label: string; value: string }[]; error?: string;
+  meter?: { label: string; used: number; limit: number; over: boolean; note?: string; warning?: string };
+}
 
 
 export interface Line { role: string; text: string; at?: number }

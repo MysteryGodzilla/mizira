@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strconv"
@@ -113,18 +114,22 @@ func LlamaSwapStats(ctx context.Context, base, key string) ([]ServiceStat, error
 	return stats, nil
 }
 
-// SearchSpend is what the web search and fetch plugins spent, from the costs they log.
+// SearchSpend is what the web search and fetch plugins spent, from the costs they log. Today is the
+// local day; the month is the credit month (CreditMonth), so it lines up with Exa's monthly reset.
 type SearchSpend struct {
 	TodayCalls, MonthCalls int
 	TodayCost, MonthCost   float64
+	// Since is the first call the log has, so a month that began before the log is shown as partial.
+	Since time.Time
 }
 
 // toolLogCost is a line the Exa plugins write after a call that worked:
-// "2026-10-10 09:07:11 [websearch] ok 'orange cake recipe' -> 5 results, cost=$0.007".
-var toolLogCost = regexp.MustCompile(`^(\d{4}-\d\d-\d\d) \d\d:\d\d:\d\d \[(?:websearch|webfetch)\] ok .*cost=\$([0-9.]+)\s*$`)
+// "2026-10-10 09:07:11 [websearch] ok 'orange cake recipe' -> 5 results, cost=$0.007". The time is
+// the machine's local time.
+var toolLogCost = regexp.MustCompile(`^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) \[(?:websearch|webfetch)\] ok .*cost=\$([0-9.]+)\s*$`)
 
-// ReadSearchSpend adds up the Exa calls in the tool log for today and this month (local time). A
-// log that doesn't exist yet means nothing was spent.
+// ReadSearchSpend adds up the Exa calls in the tool log for today and the credit month containing
+// now. A log that doesn't exist yet means nothing was spent.
 func ReadSearchSpend(path string, now time.Time) (SearchSpend, error) {
 	var s SearchSpend
 	f, err := os.Open(path)
@@ -135,20 +140,102 @@ func ReadSearchSpend(path string, now time.Time) (SearchSpend, error) {
 		return s, err
 	}
 	defer f.Close()
-	today, month := now.Format("2006-01-02"), now.Format("2006-01")
+	start, end := CreditMonth(now)
+	local := now.In(time.Local)
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		m := toolLogCost.FindStringSubmatch(sc.Text())
-		if m == nil || !strings.HasPrefix(m[1], month) {
+		if m == nil {
 			continue
 		}
+		at, err := time.ParseInLocation("2006-01-02 15:04:05", m[1], time.Local)
+		if err != nil {
+			continue
+		}
+		if s.Since.IsZero() {
+			s.Since = at
+		}
 		cost, _ := strconv.ParseFloat(m[2], 64)
-		s.MonthCalls++
-		s.MonthCost += cost
-		if m[1] == today {
+		if !at.Before(start) && at.Before(end) {
+			s.MonthCalls++
+			s.MonthCost += cost
+		}
+		if y, mo, d := at.Date(); y == local.Year() && mo == local.Month() && d == local.Day() {
 			s.TodayCalls++
 			s.TodayCost += cost
 		}
 	}
 	return s, sc.Err()
+}
+
+// CreditMonth is the calendar month in UTC holding now: Exa resets the free credit on the first of
+// each month, and its usage API speaks UTC.
+func CreditMonth(now time.Time) (start, end time.Time) {
+	u := now.UTC()
+	start = time.Date(u.Year(), u.Month(), 1, 0, 0, 0, 0, time.UTC)
+	return start, start.AddDate(0, 1, 0)
+}
+
+// ExaUsageURL is the Team Management API's per-key usage endpoint.
+var ExaUsageURL = "https://admin-api.exa.ai/team-management/api-keys/%s/usage"
+
+// ExaMonthUsage asks Exa what the API key spent this credit month. It needs a service key (Exa's
+// Team Management API, enabled on request) and the API key's id.
+func ExaMonthUsage(ctx context.Context, serviceKey, keyID string, now time.Time) (float64, error) {
+	start, _ := CreditMonth(now)
+	rctx, cancel := context.WithTimeout(ctx, serviceTimeout)
+	defer cancel()
+	u := fmt.Sprintf(ExaUsageURL, url.PathEscape(keyID)) + "?" + url.Values{
+		"start_date": {start.Format(time.RFC3339)},
+		"end_date":   {now.UTC().Format(time.RFC3339)},
+	}.Encode()
+	req, err := http.NewRequestWithContext(rctx, http.MethodGet, u, nil)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("x-api-key", serviceKey)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("exa usage: http %d", resp.StatusCode)
+	}
+	var out struct {
+		Total *float64 `json:"total_cost_usd"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return 0, err
+	}
+	if out.Total == nil {
+		return 0, errors.New("exa usage: no total_cost_usd")
+	}
+	return *out.Total, nil
+}
+
+// CreditOutlook is the month's spend against the free credit, and where the current pace ends up.
+type CreditOutlook struct {
+	Spent, Credit float64
+	Over          bool
+	// Projected is the spend at month end at this pace; zero until a day of the month has passed,
+	// since a few hours say little.
+	Projected float64
+	// RunsOut is when the credit is used up at this pace, if that's before the month ends.
+	RunsOut time.Time
+}
+
+// Outlook projects spent (so far this credit month) to the month's end.
+func Outlook(spent, credit float64, now time.Time) CreditOutlook {
+	o := CreditOutlook{Spent: spent, Credit: credit, Over: spent > credit}
+	start, end := CreditMonth(now)
+	elapsed := now.Sub(start)
+	if elapsed < 24*time.Hour || spent <= 0 {
+		return o
+	}
+	o.Projected = spent * float64(end.Sub(start)) / float64(elapsed)
+	if !o.Over && o.Projected > credit {
+		o.RunsOut = start.Add(time.Duration(float64(elapsed) * credit / spent))
+	}
+	return o
 }

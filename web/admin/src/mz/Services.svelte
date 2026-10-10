@@ -37,6 +37,18 @@
           <dl>
             {#each s.stats as st (st.label)}<div><dt>{st.label}</dt><dd>{st.value}</dd></div>{/each}
           </dl>
+          {#if s.meter}
+            {@const m = s.meter}
+            <div class="meter" class:over={m.over} class:warn={!m.over && !!m.warning}>
+              <div class="meter-label"><span>{m.label}</span><span>${m.used.toFixed(2)} / ${m.limit.toFixed(2)}</span></div>
+              <div class="track" role="meter" aria-label={m.label} aria-valuemin={0} aria-valuemax={m.limit}
+                aria-valuenow={Math.min(m.used, m.limit)}>
+                <div class="fill" style:width="{Math.min(100, (m.used / m.limit) * 100)}%"></div>
+              </div>
+              {#if m.warning}<p class="meter-warning">{m.warning}</p>{/if}
+              {#if m.note}<p class="meter-note">{m.note}</p>{/if}
+            </div>
+          {/if}
         {/if}
       </div>
     {/each}
@@ -56,4 +68,14 @@
   dl div { display: flex; gap: 6px; }
   dt { color: var(--muted); }
   dd { margin: 0; }
+  .meter { margin-top: 10px; font-size: 13px; }
+  .meter-label { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .meter-label span:first-child { color: var(--muted); }
+  .track { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; }
+  .fill { height: 100%; background: var(--ok); border-radius: 999px; }
+  .warn .fill { background: var(--accent); }
+  .over .fill { background: var(--bad); }
+  .meter-warning { margin: 6px 0 0; color: var(--accent); }
+  .over .meter-warning { color: var(--bad); }
+  .meter-note { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
 </style>

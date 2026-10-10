@@ -648,6 +648,12 @@ memorypersubject: 40                   # memories one person or thing may hold
 env:
   # web search and page fetch (websearch, webfetch)
   # EXA_API_KEY: ""
+  # The console's Services card shows the month's spend against Exa's free credit. It counts the costs
+  # the plugins log; with a Team Management service key (Exa enables that API on request) and the API
+  # key's id, it asks Exa instead.
+  # EXA_MONTHLY_CREDIT: "10"   # dollars of free credit a month (the credit month is UTC)
+  # EXA_SERVICE_KEY: ""
+  # EXA_API_KEY_ID: ""
 
   # code execution in a throwaway Fly.io machine (sandbox)
   # FLY_API_TOKEN: ""

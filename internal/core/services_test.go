@@ -71,11 +71,18 @@ func TestLlamaSwapStatsPartialAndDown(t *testing.T) {
 	}
 }
 
+// The log's times are local; the credit month is UTC. At UTC+11, 08:00 on the 1st is still the
+// previous month for Exa, and "today" is the local day.
 func TestReadSearchSpend(t *testing.T) {
+	saved := time.Local
+	time.Local = time.FixedZone("UTC+11", 11*3600)
+	t.Cleanup(func() { time.Local = saved })
+
 	path := filepath.Join(t.TempDir(), "tools.log")
 	log := strings.Join([]string{
 		"2026-09-30 23:59:00 [websearch] ok 'last month' -> 5 results, cost=$0.007",
-		"2026-10-01 08:00:00 [websearch] ok 'early' -> 5 results, cost=$0.007",
+		"2026-10-01 08:00:00 [websearch] ok 'still september in utc' -> 5 results, cost=$0.007",
+		"2026-10-01 12:00:00 [websearch] ok 'october in utc' -> 5 results, cost=$0.007",
 		"2026-10-09 12:00:00 [webfetch] ok 'https://example.com' -> 900 chars, cost=$0.001",
 		"2026-10-10 09:07:11 [websearch] ok 'orange cake recipe' -> 5 results, cost=$0.007",
 		"2026-10-10 09:08:00 [websearch] exa http 429: slow down",
@@ -94,7 +101,53 @@ func TestReadSearchSpend(t *testing.T) {
 		fmt.Sprintf("%.3f", s.MonthCost) != "0.022" {
 		t.Errorf("spend = %+v", s)
 	}
+	if want := time.Date(2026, 9, 30, 23, 59, 0, 0, time.Local); !s.Since.Equal(want) {
+		t.Errorf("since = %v, want %v", s.Since, want)
+	}
 	if s, err := ReadSearchSpend(filepath.Join(t.TempDir(), "none.log"), now); err != nil || s.MonthCalls != 0 {
 		t.Errorf("missing log: %+v %v", s, err)
+	}
+}
+
+func TestOutlook(t *testing.T) {
+	ten := time.Date(2026, 10, 11, 0, 0, 0, 0, time.UTC) // 10 of October's 31 days gone
+	o := Outlook(4, 10, ten)
+	if fmt.Sprintf("%.1f", o.Projected) != "12.4" || o.Over ||
+		!o.RunsOut.Equal(time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC)) {
+		t.Errorf("heavy pace: %+v", o)
+	}
+	if o := Outlook(2, 10, ten); o.Projected == 0 || !o.RunsOut.IsZero() {
+		t.Errorf("light pace: %+v", o)
+	}
+	if o := Outlook(11, 10, ten); !o.Over || !o.RunsOut.IsZero() {
+		t.Errorf("over: %+v", o)
+	}
+	if o := Outlook(3, 10, time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)); o.Projected != 0 {
+		t.Errorf("projected after 12 hours: %+v", o)
+	}
+}
+
+func TestExaMonthUsage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if r.Header.Get("x-api-key") != "svc" || r.URL.Path != "/key1/usage" ||
+			q.Get("start_date") != "2026-10-01T00:00:00Z" || q.Get("end_date") != "2026-10-10T09:00:00Z" {
+			t.Errorf("request %s %v key %q", r.URL.Path, q, r.Header.Get("x-api-key"))
+		}
+		w.Write([]byte(`{"total_cost_usd": 2.345, "cost_breakdown": []}`))
+	}))
+	defer srv.Close()
+	saved := ExaUsageURL
+	ExaUsageURL = srv.URL + "/%s/usage"
+	t.Cleanup(func() { ExaUsageURL = saved })
+
+	now := time.Date(2026, 10, 10, 20, 0, 0, 0, time.FixedZone("UTC+11", 11*3600))
+	got, err := ExaMonthUsage(context.Background(), "svc", "key1", now)
+	if err != nil || got != 2.345 {
+		t.Errorf("usage = %v, %v", got, err)
+	}
+	ExaUsageURL = "http://127.0.0.1:1/%s/usage"
+	if _, err := ExaMonthUsage(context.Background(), "svc", "key1", now); err == nil {
+		t.Error("an unreachable API gave no error")
 	}
 }
