@@ -49,10 +49,10 @@ func CheckAddressedAmong(message, trigger string, otherName func(word string) bo
 		(strings.ContainsAny(lastRune(before[0]), ":,") || otherName != nil && otherName(bareAddressWord(before[0]))) {
 		return false
 	}
-	// "bot is my sister" states something about it; "bot, is it raining?" and "bot is this right?"
-	// call on it.
+	// "bot is my sister" states something about it; "bot, is it raining?", "bot is this right?" and
+	// "bot is 437 prime? tell me" call on it.
 	if len(before) == 0 && len(after) > 0 && !strings.ContainsAny(lastRune(words[at+len(trig)-1]), ",:") &&
-		statementVerbs[bareAddressWord(after[0])] && !strings.HasSuffix(strings.TrimSpace(message), "?") {
+		statementVerbs[bareAddressWord(after[0])] && !strings.Contains(message, "?") {
 		return false
 	}
 	allFiller := true

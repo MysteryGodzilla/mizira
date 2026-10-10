@@ -42,6 +42,7 @@ func TestCheckAddressed(t *testing.T) {
 		{"statement about it", "bot is my little-sister fork", "bot", false},
 		{"statement after a tag", "[otherbot] Bot is Monica Everett", "bot", false},
 		{"question with is", "bot is this right?", "bot", true},
+		{"question mark mid-line", "bot is 437 a prime number? tell me", "bot", true},
 		{"comma then is", "bot, is it raining", "bot", true},
 		{"who's at the end", "who's bot", "bot", false},
 		{"embedded in longer word", "botter hello", "bot", false},
