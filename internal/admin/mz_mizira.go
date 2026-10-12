@@ -78,6 +78,8 @@ type Mizira interface {
 	LockMemory(network string, id int64, locked bool, by string) error
 	// SetMemoryMeta sets a memory's kind ("" for none) and the other people it is about.
 	SetMemoryMeta(network string, id int64, kind string, also []string, by string) error
+	// MemoryHistory lists a subject's earlier versions: memories another one replaced.
+	MemoryHistory(network, subject string) ([]EarlierView, error)
 
 	// Profiles: pronouns, avatar pronouns, other names, and who runs a bot.
 	Profiles(network string) ([]ProfileView, error)

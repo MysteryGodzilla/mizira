@@ -150,6 +150,8 @@ type BotConfig struct {
 	CompactPrompt      string // merges one subject's memories into a shorter list for the operator to review; {subject} is replaced
 	RoomMemoryLimit    int    // room facts (about the channel and about the bot) sent with each request
 	MemoryPerSubject   int    // memories one subject may hold; a save past it is refused
+	LoreFadeDays       int    // days a lore memory may go unused before it stops being sent unasked (0 = never)
+	LookMergePrompt    string // merges a new look into the one held; {subject} is replaced
 }
 
 type ModelConfig struct {
@@ -349,6 +351,8 @@ func GetFlags() []cli.Flag {
 		&cli.StringFlag{Name: "roommemoryframe", Usage: "text introducing room memory: facts about the channel and about the bot; {channel} is replaced (required)", Sources: src("roommemoryframe", "METALD_ROOMMEMORYFRAME")},
 		&cli.IntFlag{Name: "roommemorylimit", Value: 15, Usage: "room facts (about the channel and the bot, admin-written) sent with each request", Sources: src("roommemorylimit", "METALD_ROOMMEMORYLIMIT")},
 		&cli.IntFlag{Name: "memorypersubject", Value: 40, Usage: "memories one person or thing may hold; a save past it is refused (0 = no cap)", Sources: src("memorypersubject", "METALD_MEMORYPERSUBJECT")},
+		&cli.IntFlag{Name: "lorefadedays", Value: 45, Usage: "days a lore memory (jokes, events) may go unmentioned before she stops bringing it up unasked; it comes back when it is mentioned (0 = never fade)", Sources: src("lorefadedays", "METALD_LOREFADEDAYS")},
+		&cli.StringFlag{Name: "lookmergeprompt", Usage: "merges a newly saved avatar look into the one already held, so each person keeps one current look; {subject} is replaced (required)", Sources: src("lookmergeprompt", "METALD_LOOKMERGEPROMPT")},
 		&cli.StringFlag{Name: "memoryframe", Usage: "text introducing what the bot remembers about the speaker; {nick} is replaced (required)", Sources: src("memoryframe", "METALD_MEMORYFRAME")},
 		&cli.StringFlag{Name: "memorypolicy", Usage: "policy checked before a fact is written to memory (required)", Sources: src("memorypolicy", "METALD_MEMORYPOLICY")},
 		&cli.StringFlag{Name: "recapprompt", Usage: "instructions for folding older conversation into the channel recap (required)", Sources: src("recapprompt", "METALD_RECAPPROMPT")},
@@ -458,6 +462,7 @@ func (c *Configuration) PrintConfig() {
 		{"botcooldown", c.Bot.BotCooldown.String()},
 		{"commandsneedname", fmt.Sprintf("%t", c.Bot.CommandsNeedName)},
 		{"maxreplylines", fmt.Sprintf("%d", c.Bot.MaxReplyLines)},
+		{"lorefadedays", fmt.Sprintf("%d", c.Bot.LoreFadeDays)},
 		{"logfile", c.Bot.LogFile},
 		{"sessionduration", c.Session.TTL.String()},
 		{"channelbacklog", fmt.Sprintf("%d", c.Session.Backlog)},
@@ -584,6 +589,8 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			CompactPrompt:       c.String("compactprompt"),
 			RoomMemoryLimit:     int(c.Int("roommemorylimit")),
 			MemoryPerSubject:    int(c.Int("memorypersubject")),
+			LoreFadeDays:        int(c.Int("lorefadedays")),
+			LookMergePrompt:     c.String("lookmergeprompt"),
 			RecapPrompt:         c.String("recapprompt"),
 			RecapFrame:          c.String("recapframe"),
 			BacklogFrame:        c.String("backlogframe"),

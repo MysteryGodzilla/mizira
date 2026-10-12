@@ -138,6 +138,10 @@ func OpenMemoryStore(path string) (*MemoryStore, error) {
 		db.Close()
 		return nil, fmt.Errorf("create profiles table: %w", err)
 	}
+	if err := createMemoryHistory(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("create memory history table: %w", err)
+	}
 
 	return &MemoryStore{db: db}, nil
 }
@@ -147,6 +151,12 @@ func OpenMemoryStore(path string) (*MemoryStore, error) {
 // speaker, whose facts are injected separately, and the bot's own names, which appear in every
 // addressed message) neither count as a mention nor as a word.
 func (m *MemoryStore) Relevant(network, text string, exclude []string, limit int) ([]Memory, error) {
+	return m.RelevantFaded(network, text, exclude, limit, 0)
+}
+
+// RelevantFaded is Relevant with lore that hasn't come up for fadeDays left out when only its subject
+// is named. A fact the message's words match has come up, faded or not, and is marked used.
+func (m *MemoryStore) RelevantFaded(network, text string, exclude []string, limit, fadeDays int) ([]Memory, error) {
 	if limit <= 0 || strings.TrimSpace(text) == "" {
 		return nil, nil
 	}
@@ -188,7 +198,7 @@ func (m *MemoryStore) Relevant(network, text string, exclude []string, limit int
 	}
 	perSubject := min(3, limit)
 	for _, s := range mentioned {
-		ms, err := m.Recall(network, s, perSubject)
+		ms, _, err := m.RankedFor(network, s, fadeDays, perSubject, time.Now())
 		if err != nil {
 			return nil, err
 		}
@@ -221,12 +231,14 @@ func (m *MemoryStore) Relevant(network, text string, exclude []string, limit int
 		return nil, err
 	}
 	terms := strings.Fields(strings.NewReplacer(`"`, "", " OR ", " ").Replace(match))
+	var cameUp []int64
 	for _, mem := range candidates {
 		if relevantEnough(terms, mem.Subject+" "+mem.Fact) {
+			cameUp = append(cameUp, mem.ID)
 			add(mem)
 		}
 	}
-	return out, nil
+	return out, m.MarkUsed(cameUp, time.Now())
 }
 
 // Mentioned lists the subjects text names, by their nick or by another name in their profile, that

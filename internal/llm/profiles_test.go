@@ -42,3 +42,23 @@ func TestProfilesRideWithMemories(t *testing.T) {
 		t.Errorf("bot link missing: %q", got)
 	}
 }
+
+// A speaker's boundary goes first and fresh lore is sent (fading is tested in core).
+func TestSpeakerMemoriesByKind(t *testing.T) {
+	ctx := mocktest.NewMockContext().WithSource("dave")
+	net := ctx.GetNetwork()
+	mem, _ := core.Memories()
+	like, _ := mem.Remember(net, "dave", "dave likes sourdough", "dave", "#chat")
+	old, _ := mem.Remember(net, "dave", "dave once fell into the duck pond", "dave", "#chat")
+	ask, _ := mem.Remember(net, "dave", "dave doesn't want to be called davey", "dave", "#chat")
+	mem.SetKind(net, like, core.KindLikes)
+	mem.SetKind(net, old, core.KindLore)
+	mem.SetKind(net, ask, core.KindBoundary)
+	t.Cleanup(func() { mem.ForgetSubject(net, "dave") })
+	ctx.GetConfig().Bot.LoreFadeDays = 45
+
+	got := recallForSpeaker(ctx, func(string) bool { return false })
+	if !strings.Contains(got, "duck pond") || strings.Index(got, "davey") > strings.Index(got, "sourdough") {
+		t.Errorf("fresh lore missing or boundary not first:\n%s", got)
+	}
+}

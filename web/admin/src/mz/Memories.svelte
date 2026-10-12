@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Dashboard } from "../lib/dashboard.svelte";
   import type { MzConsole } from "./console.svelte";
-  import { kinds, type Memory, type Profile as ProfileT, type Subject } from "./types";
+  import { kinds, type Earlier, type Memory, type Profile as ProfileT, type Subject } from "./types";
   import { when } from "../lib/format";
   import Badge from "../components/Badge.svelte";
   import Card from "../components/Card.svelte";
@@ -20,6 +20,7 @@
   let query = $state("");
   let searched = $state("");
   let list = $state<Memory[] | null>(null);
+  let earlier = $state<Earlier[]>([]);
   let editing = $state<number | null>(null);
   let editText = $state("");
   let editKind = $state("");
@@ -46,6 +47,7 @@
   async function loadList() {
     if (net === null || (!selected && !searched)) { list = null; return; }
     list = await mz.api.memories(net, selected ? { subject: selected } : { q: searched });
+    earlier = selected ? await mz.api.memoryHistory(net, selected) : [];
   }
 
   $effect(() => { if (net !== null) void loadSubjects().catch(() => {}); });
@@ -188,8 +190,8 @@
                   </div>
                   <div class="row"><button onclick={() => save(m)}>Save</button><button onclick={() => (editing = null)}>Cancel</button></div>
                 {:else}
-                  <div>{#if m.kind}<Badge text={m.kind} tone="busy" />{/if}{m.fact}</div>
-                  <div class="sub">#{m.id}{#if !selected} · {m.subject}{/if} · by {m.author || "?"} ({sourceText(m)}) · {when(m.created)}{#if m.also?.length} · shared with {sharedWith(m)}{/if}{#if m.edited} · edited {when(m.edited)}{/if}
+                  <div>{#if m.kind}<Badge text={m.kind} tone="busy" />{/if}{#if m.faded}<Badge text="faded" />{/if}{m.fact}</div>
+                  <div class="sub">#{m.id}{#if !selected} · {m.subject}{/if} · by {m.author || "?"} ({sourceText(m)}) · {when(m.created)}{#if m.also?.length} · shared with {sharedWith(m)}{/if}{#if m.used} · came up {when(m.used)}{/if}{#if m.edited} · edited {when(m.edited)}{/if}
                     {#if m.locked}<Badge text="locked" tone="good" />{/if}
                     {#if m.sameAs}<Badge text={`same as #${m.sameAs}`} tone="busy" />{/if}</div>
                 {/if}
@@ -204,6 +206,20 @@
         </ul>
       {/if}
     </Card>
+
+    {#if selected && earlier.length}
+      <Card title={`Earlier versions (${earlier.length})`}>
+        <p class="sub">Wording a newer memory replaced: a look merged into the current one, a like that was contradicted, or facts compacted. Not sent to her.</p>
+        <ul class="rows">
+          {#each earlier as e (e.id)}
+            <li><div class="grow">
+              <div>{#if e.kind}<Badge text={e.kind} />{/if}{e.fact}</div>
+              <div class="sub">was #{e.memoryId} · by {e.author || "?"} · {when(e.created)} · {e.why} {when(e.replaced)}{#if e.replacedBy} into #{e.replacedBy}{/if}</div>
+            </div></li>
+          {/each}
+        </ul>
+      </Card>
+    {/if}
 
     <Card title="Remember">
       <form class="add" onsubmit={add}>

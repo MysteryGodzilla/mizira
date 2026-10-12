@@ -202,6 +202,17 @@ var configFields = map[string]configField{
 		},
 		getter: func(c *config.Configuration) string { return strconv.Itoa(c.Bot.MaxConcurrent) },
 	},
+	"lorefadedays": {
+		setter: func(c *config.Configuration, v string) error {
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 0 || n > 3650 {
+				return fmt.Errorf("invalid value for lorefadedays. Please provide a whole number of days from 0 (never fade) to 3650")
+			}
+			c.Bot.LoreFadeDays = n
+			return nil
+		},
+		getter: func(c *config.Configuration) string { return strconv.Itoa(c.Bot.LoreFadeDays) },
+	},
 	"maxreplylines": {
 		setter: func(c *config.Configuration, v string) error {
 			n, err := strconv.Atoi(v)

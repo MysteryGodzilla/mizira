@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/alexschlessinger/pollytool/schema"
 	"github.com/alexschlessinger/pollytool/tools"
@@ -96,6 +97,8 @@ func newMemoryRecallTool() tools.Tool {
 			"in which case say so rather than inventing something.",
 		Params: schema.Params{
 			"subject": schema.S("Who or what to look up - usually a nick"),
+			"kind": schema.Enum("Only one sort of fact, e.g. look for how their avatar looks; leave it out for everything",
+				core.Kinds...),
 		},
 		Required: []string{"subject"},
 		Run: func(ctx context.Context, args tools.Args) (string, error) {
@@ -117,16 +120,25 @@ func newMemoryRecallTool() tools.Tool {
 			if people, err := store.People(chatCtx.GetNetwork()); err == nil {
 				subject = people.Resolve(subject)
 			}
-			mems, err := store.Recall(chatCtx.GetNetwork(), subject, 20)
-			if err == nil && len(mems) == 0 {
-				mems, err = store.Search(chatCtx.GetNetwork(), subject, 20)
-			}
+			kind := strings.ToLower(strings.TrimSpace(args.String("kind")))
+			mems, err := recallKind(store, chatCtx.GetNetwork(), subject, kind)
 			if err != nil {
 				chatCtx.GetLogger().Error("memory_recall_failed", "error", err.Error())
 				return "Error: could not read memory", nil
 			}
 
-			chatCtx.GetLogger().Info("memory_recalled", "subject", subject, "hits", len(mems))
+			chatCtx.GetLogger().Info("memory_recalled", "subject", subject, "kind", kind, "hits", len(mems))
+			used := make([]int64, len(mems))
+			for i, m := range mems {
+				used[i] = m.ID
+			}
+			if err := store.MarkUsed(used, time.Now()); err != nil {
+				chatCtx.GetLogger().Warn("memory_mark_used_failed", "error", err.Error())
+			}
+			if len(mems) == 0 && core.ValidKind(kind) && kind != "" {
+				return fmt.Sprintf("Nothing of the kind %q remembered about %s. Say so plainly - do not invent "+
+					"a memory.", kind, subject), nil
+			}
 			if len(mems) == 0 {
 				if hasTool(chatCtx, "history__search") {
 					return fmt.Sprintf("Nothing remembered about %s. If they mean something said in the "+
@@ -367,3 +379,25 @@ func forgetByID(chatCtx ChatContextInterface, id int64) string {
 // OrdersTheBot reports text worded as standing orders for the bot ("from now on", "you must",
 // "ignore your rules"), the deterministic half of the instruction check.
 func OrdersTheBot(text string) bool { return botAddressed.MatchString(text) }
+
+// recallKind is what memory__recall finds: the subject's memories, or failing that the memories
+// that mention it, of one kind when kind is set. At most 20.
+func recallKind(store *core.MemoryStore, network, subject, kind string) ([]core.Memory, error) {
+	mems, err := store.Recall(network, subject, 200)
+	if err == nil && len(mems) == 0 {
+		mems, err = store.Search(network, subject, 200)
+	}
+	if err != nil || !core.ValidKind(kind) || kind == "" {
+		return mems[:min(len(mems), 20)], err
+	}
+	ids := make([]int64, len(mems))
+	for i, m := range mems {
+		ids[i] = m.ID
+	}
+	meta, err := store.Meta(network, ids)
+	if err != nil {
+		return nil, err
+	}
+	mems = core.OfKind(mems, meta, kind)
+	return mems[:min(len(mems), 20)], nil
+}

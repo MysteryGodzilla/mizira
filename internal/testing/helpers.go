@@ -46,6 +46,8 @@ func DefaultTestConfig() *config.Configuration {
 			SelfNotePrompt:     "propose notes about {name}",
 			PeopleNotePrompt:   "propose facts about the people {name} chats with",
 			CompactPrompt:      "merge the facts about {subject}",
+			LookMergePrompt:    "merge the looks of {subject}",
+			LoreFadeDays:       45,
 			RoomMemoryLimit:    15,
 			MemoryPerSubject:   40,
 			RecapPrompt:        "summarise the conversation",

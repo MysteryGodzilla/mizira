@@ -170,20 +170,29 @@ func (m *MemoryStore) ReplaceSubject(network, subject string, expected []int64, 
 	}
 	defer tx.Rollback()
 
-	rows, err := tx.Query(`SELECT id FROM memories WHERE network = ? AND subject = ? AND `+notLocked, network, subject)
+	rows, err := tx.Query(`SELECT m.id, m.fact, COALESCE(k.kind, '') FROM memories m
+		LEFT JOIN memory_meta k ON k.id = m.id
+		WHERE m.network = ? AND m.subject = ? AND m.`+notLocked, network, subject)
 	if err != nil {
 		return 0, err
 	}
 	var held []int64
+	var olds []oldFact
 	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
+		var o oldFact
+		if err := rows.Scan(&o.id, &o.fact, &o.kind); err != nil {
 			rows.Close()
 			return 0, err
 		}
-		held = append(held, id)
+		held = append(held, o.id)
+		olds = append(olds, o)
 	}
 	rows.Close()
+	for i := range olds {
+		if olds[i].also, err = alsoOf(tx, olds[i].id); err != nil {
+			return 0, err
+		}
+	}
 	slices.Sort(held)
 	want := slices.Clone(expected)
 	slices.Sort(want)
@@ -191,10 +200,18 @@ func (m *MemoryStore) ReplaceSubject(network, subject string, expected []int64, 
 		return 0, ErrMemoriesChanged
 	}
 
+	now := time.Now().Unix()
+	// The old wording stays as earlier versions.
+	if _, err := tx.Exec(`INSERT INTO memory_history
+		(network, memory_id, subject, fact, kind, author, created, replaced_by, replaced, why)
+		SELECT network, id, subject, fact, COALESCE((SELECT kind FROM memory_meta WHERE id = memories.id), ''),
+		  author, created, 0, ?, 'compacted' FROM memories WHERE network = ? AND subject = ? AND `+notLocked,
+		now, network, subject); err != nil {
+		return 0, err
+	}
 	if _, err := tx.Exec(`DELETE FROM memories WHERE network = ? AND subject = ? AND `+notLocked, network, subject); err != nil {
 		return 0, err
 	}
-	now := time.Now().Unix()
 	stored := 0
 	for _, f := range facts {
 		if f = strings.TrimSpace(f); f == "" {
@@ -208,7 +225,75 @@ func (m *MemoryStore) ReplaceSubject(network, subject string, expected []int64, 
 		}
 		if n, _ := res.RowsAffected(); n > 0 {
 			stored++
+			id, _ := res.LastInsertId()
+			if err := carryMeta(tx, network, subject, id, f, olds); err != nil {
+				return 0, err
+			}
 		}
 	}
 	return stored, tx.Commit()
+}
+
+// oldFact is a memory a compaction replaces, with what a new fact may inherit from it.
+type oldFact struct {
+	id   int64
+	fact string
+	kind string
+	also []string
+}
+
+func alsoOf(tx *sql.Tx, id int64) ([]string, error) {
+	rows, err := tx.Query(`SELECT subject FROM memory_also WHERE id = ?`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// carryMeta gives a compacted fact the kind and other people of the old fact sharing most of its
+// words, and the other people of every old fact it shares two words with, since merged facts
+// carry who each was about.
+func carryMeta(tx *sql.Tx, network, subject string, id int64, fact string, olds []oldFact) error {
+	words, _ := factWords(subject, fact)
+	best, bestShared := -1, 0
+	var also []string
+	for i, o := range olds {
+		ow, _ := factWords(subject, o.fact)
+		shared := 0
+		for w := range ow {
+			if words[w] {
+				shared++
+			}
+		}
+		if shared > bestShared {
+			best, bestShared = i, shared
+		}
+		if shared >= 2 {
+			for _, a := range o.also {
+				if !slices.Contains(also, a) {
+					also = append(also, a)
+				}
+			}
+		}
+	}
+	if best >= 0 && olds[best].kind != "" {
+		if _, err := tx.Exec(`INSERT INTO memory_meta (id, kind) VALUES (?, ?)`, id, olds[best].kind); err != nil {
+			return err
+		}
+	}
+	for _, a := range also {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO memory_also (id, network, subject) VALUES (?, ?, ?)`, id, network, a); err != nil {
+			return err
+		}
+	}
+	return nil
 }

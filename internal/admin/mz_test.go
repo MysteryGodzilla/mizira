@@ -263,7 +263,7 @@ func TestMiziraEndpointsNeedTheToken(t *testing.T) {
 		{"GET", "/api/v1/tools"}, {"PUT", "/api/v1/tools"}, {"DELETE", "/api/v1/tools/switches"},
 		{"GET", "/api/v1/memories/subjects?network=net"}, {"GET", "/api/v1/memories?network=net"}, {"POST", "/api/v1/memories"},
 		{"PUT", "/api/v1/memories/1?network=net"}, {"DELETE", "/api/v1/memories/1?network=net"},
-		{"PUT", "/api/v1/memories/1/meta?network=net"}, {"GET", "/api/v1/profiles?network=net"}, {"PUT", "/api/v1/profiles"}, {"DELETE", "/api/v1/profiles?network=net&subject=bob"},
+		{"PUT", "/api/v1/memories/1/meta?network=net"}, {"GET", "/api/v1/memories/history?network=net&subject=bob"}, {"GET", "/api/v1/memories/history?network=net&subject=bob"}, {"GET", "/api/v1/profiles?network=net"}, {"PUT", "/api/v1/profiles"}, {"DELETE", "/api/v1/profiles?network=net&subject=bob"},
 		{"GET", "/api/v1/selfnotes?network=net"}, {"POST", "/api/v1/selfnotes/1/approve?network=net"}, {"POST", "/api/v1/selfnotes/1/deny?network=net"},
 		{"POST", "/api/v1/memories/compact/preview"}, {"POST", "/api/v1/memories/compact/apply"},
 		{"GET", "/api/v1/safety"}} {
@@ -893,5 +893,24 @@ func TestMemoryKindsAndProfilesFromTheConsole(t *testing.T) {
 	}
 	if code, _ := r.call(t, "DELETE", "/api/v1/profiles?network=net&subject=botty", "s3cret", ""); code != http.StatusNotFound {
 		t.Errorf("delete again = %d, want 404", code)
+	}
+}
+func (f *fakeMizira) MemoryHistory(network, subject string) ([]EarlierView, error) {
+	if subject == "bob" {
+		return []EarlierView{{ID: 1, MemoryID: 3, Fact: "bob's avatar has blue hair", Why: "look merged", ReplacedBy: 4}}, nil
+	}
+	return nil, nil
+}
+
+func TestMemoryHistoryFromTheConsole(t *testing.T) {
+	r, _ := newMzRig(t)
+	if code, out := r.call(t, "GET", "/api/v1/memories/history?network=net&subject=bob", "s3cret", ""); code != http.StatusOK || len(out["earlier"].([]any)) != 1 {
+		t.Errorf("history = %d %v", code, out)
+	}
+	if _, out := r.call(t, "GET", "/api/v1/memories/history?network=net&subject=carol", "s3cret", ""); len(out["earlier"].([]any)) != 0 {
+		t.Errorf("empty history = %v", out)
+	}
+	if code, _ := r.call(t, "GET", "/api/v1/memories/history?network=net", "s3cret", ""); code != http.StatusBadRequest {
+		t.Errorf("no subject = %d, want 400", code)
 	}
 }

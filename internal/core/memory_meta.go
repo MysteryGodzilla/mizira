@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 )
 
 // A memory's kind, and the other people it is about besides its subject, kept in tables of their
@@ -54,6 +55,13 @@ func createMemoryMeta(db *sql.DB) error {
 		DELETE FROM memory_meta WHERE id = old.id;
 		DELETE FROM memory_also WHERE id = old.id;
 	END;`)
+	if err != nil {
+		return err
+	}
+	// When the memory last came up: mentioned in chat, recalled, or said again. 0 is never since saved.
+	if !hasColumn(db, "memory_meta", "used") {
+		_, err = db.Exec(`ALTER TABLE memory_meta ADD COLUMN used INTEGER NOT NULL DEFAULT 0`)
+	}
 	return err
 }
 
@@ -87,10 +95,11 @@ func AuthorNick(author string) string {
 	return nick
 }
 
-// MemoryMeta is a memory's kind and the other people it is about.
+// MemoryMeta is a memory's kind, the other people it is about, and when it last came up.
 type MemoryMeta struct {
 	Kind string
 	Also []string
+	Used time.Time // zero when it hasn't come up since it was saved
 }
 
 // Meta returns the kind and other subjects of each memory in ids that has any.
@@ -106,19 +115,22 @@ func (m *MemoryStore) Meta(network string, ids []int64) (map[int64]MemoryMeta, e
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	rows, err := m.db.Query(`SELECT id, kind FROM memory_meta WHERE id IN (`+in+`)`, args...)
+	rows, err := m.db.Query(`SELECT id, kind, used FROM memory_meta WHERE id IN (`+in+`)`, args...)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
-		var id int64
+		var id, used int64
 		var kind string
-		if err := rows.Scan(&id, &kind); err != nil {
+		if err := rows.Scan(&id, &kind, &used); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		meta := out[id]
 		meta.Kind = kind
+		if used > 0 {
+			meta.Used = time.Unix(used, 0)
+		}
 		out[id] = meta
 	}
 	rows.Close()
