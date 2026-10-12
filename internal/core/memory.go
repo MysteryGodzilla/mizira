@@ -7,6 +7,7 @@ package core
 import (
 	"database/sql"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -129,6 +130,14 @@ func OpenMemoryStore(path string) (*MemoryStore, error) {
 		db.Close()
 		return nil, fmt.Errorf("create self-notes table: %w", err)
 	}
+	if err := createMemoryMeta(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("create memory kinds table: %w", err)
+	}
+	if err := createProfiles(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("create profiles table: %w", err)
+	}
 
 	return &MemoryStore{db: db}, nil
 }
@@ -146,13 +155,6 @@ func (m *MemoryStore) Relevant(network, text string, exclude []string, limit int
 		if e = normalizeSubject(e); e != "" {
 			skip[e] = true
 		}
-	}
-
-	m.mu.Lock()
-	subjects, err := m.subjects(network)
-	m.mu.Unlock()
-	if err != nil {
-		return nil, err
 	}
 
 	words := map[string]bool{}
@@ -180,11 +182,12 @@ func (m *MemoryStore) Relevant(network, text string, exclude []string, limit int
 	}
 
 	// Named subjects first: a nick in the message is the strongest signal.
+	mentioned, err := m.mentioned(network, words, skip)
+	if err != nil {
+		return nil, err
+	}
 	perSubject := min(3, limit)
-	for _, s := range subjects {
-		if skip[s] || len(s) < 3 || !words[s] {
-			continue
-		}
+	for _, s := range mentioned {
 		ms, err := m.Recall(network, s, perSubject)
 		if err != nil {
 			return nil, err
@@ -226,6 +229,56 @@ func (m *MemoryStore) Relevant(network, text string, exclude []string, limit int
 	return out, nil
 }
 
+// Mentioned lists the subjects text names, by their nick or by another name in their profile, that
+// have memories or a profile. Names in exclude don't count.
+func (m *MemoryStore) Mentioned(network, text string, exclude []string) ([]string, error) {
+	skip := map[string]bool{}
+	for _, e := range exclude {
+		if e = normalizeSubject(e); e != "" {
+			skip[e] = true
+		}
+	}
+	words := map[string]bool{}
+	for _, w := range strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
+		return !(r == '_' || r == '-' || r == '|' || r == '`' || r == '^' || r == '[' || r == ']' ||
+			(r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || r > 127)
+	}) {
+		words[w] = true
+		words[strings.Trim(w, "_|`^-[]")] = true
+	}
+	return m.mentioned(network, words, skip)
+}
+
+// mentioned resolves the words that name a subject (three letters or more) to subjects, in a
+// stable order, leaving out those in skip.
+func (m *MemoryStore) mentioned(network string, words, skip map[string]bool) ([]string, error) {
+	m.mu.Lock()
+	subjects, err := m.subjects(network)
+	m.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	people, err := m.People(network)
+	if err != nil {
+		return nil, err
+	}
+	names := map[string]string{}
+	for _, s := range subjects {
+		names[s] = s
+	}
+	for name, s := range people.Names() {
+		names[name] = s
+	}
+	var out []string
+	for name, s := range names {
+		if len(name) >= 3 && words[name] && !skip[name] && !skip[s] && !slices.Contains(out, s) {
+			out = append(out, s)
+		}
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
 // relevantEnough reports whether a fact shares two of the message's words, or one of at least
 // seven letters. One short shared word ("now", "song") says nothing about what the message is about.
 func relevantEnough(terms []string, fact string) bool {
@@ -259,7 +312,8 @@ func stem(w string) string {
 
 // subjects lists every subject with a memory on a network. Callers hold m.mu.
 func (m *MemoryStore) subjects(network string) ([]string, error) {
-	rows, err := m.db.Query(`SELECT DISTINCT subject FROM memories WHERE network = ?`, network)
+	rows, err := m.db.Query(`SELECT subject FROM memories WHERE network = ?
+		UNION SELECT subject FROM memory_also WHERE network = ?`, network, network)
 	if err != nil {
 		return nil, err
 	}
@@ -339,7 +393,7 @@ func (m *MemoryStore) Remember(network, subject, fact, author, channel string) (
 	return id, nil
 }
 
-// Recall returns memories about a subject, newest first.
+// Recall returns memories about a subject, newest first, including those it shares with others.
 func (m *MemoryStore) Recall(network, subject string, limit int) ([]Memory, error) {
 	if limit <= 0 {
 		limit = 20
@@ -347,10 +401,13 @@ func (m *MemoryStore) Recall(network, subject string, limit int) ([]Memory, erro
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	subject = normalizeSubject(subject)
 	rows, err := m.db.Query(
 		`SELECT id, network, subject, fact, author, channel, created FROM memories
-		 WHERE network = ? AND subject = ? ORDER BY created DESC LIMIT ?`,
-		network, normalizeSubject(subject), limit)
+		 WHERE network = ? AND (subject = ? OR id IN
+		   (SELECT id FROM memory_also WHERE network = ? AND subject = ?))
+		 ORDER BY created DESC LIMIT ?`,
+		network, subject, network, subject, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -443,7 +500,14 @@ func (m *MemoryStore) ForgetSubject(network, subject string) (int64, error) {
 		return 0, err
 	}
 	n, _ := res.RowsAffected()
-	return n, nil
+	// Memories shared with others stay theirs, without this subject.
+	detached, err := m.db.Exec(`DELETE FROM memory_also WHERE network = ? AND subject = ? AND `+
+		`id NOT IN (SELECT id FROM memory_locks)`, network, normalizeSubject(subject))
+	if err != nil {
+		return n, err
+	}
+	d, _ := detached.RowsAffected()
+	return n + d, nil
 }
 
 // Clear deletes everything but locked memories, returning how many were removed.

@@ -32,7 +32,10 @@ type MemoryView struct {
 	// SameAs is the id of another memory about the subject that says the same thing, if any.
 	SameAs int64 `json:"sameAs,omitempty"`
 	// Locked memories survive every forget from IRC; the console forgets one only once unlocked.
-	Locked bool `json:"locked"`
+	Locked bool     `json:"locked"`
+	Kind   string   `json:"kind,omitempty"`
+	Also   []string `json:"also,omitempty"` // other people it is about
+	Source string   `json:"source"`         // said, told, operator or guessed
 }
 
 var (
@@ -50,6 +53,7 @@ func (s *Server) mzMemoryRoutes(api *http.ServeMux) {
 	api.HandleFunc("DELETE /memories/{id}", s.forgetMemory)
 	api.HandleFunc("PUT /memories/{id}/lock", s.lockMemory)
 	api.HandleFunc("DELETE /memories/{id}/lock", s.lockMemory)
+	api.HandleFunc("PUT /memories/{id}/meta", s.memoryMeta)
 	api.HandleFunc("POST /memories/compact/preview", s.compactPreview)
 	api.HandleFunc("POST /memories/compact/apply", s.compactApply)
 }
@@ -83,9 +87,11 @@ func (s *Server) memories(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) addMemory(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Network string `json:"network"`
-		Subject string `json:"subject"`
-		Fact    string `json:"fact"`
+		Network string   `json:"network"`
+		Subject string   `json:"subject"`
+		Fact    string   `json:"fact"`
+		Kind    string   `json:"kind"`
+		Also    []string `json:"also"`
 	}
 	if !decode(w, r, &in) || !s.knownNetwork(w, in.Network) {
 		return
@@ -95,6 +101,12 @@ func (s *Server) addMemory(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fail(w, http.StatusConflict, err.Error())
 		return
+	}
+	if in.Kind != "" || len(in.Also) > 0 {
+		if err := s.mz.SetMemoryMeta(in.Network, id, in.Kind, in.Also, by); err != nil {
+			fail(w, http.StatusBadRequest, "saved as #"+strconv.FormatInt(id, 10)+", but: "+err.Error())
+			return
+		}
 	}
 	s.log.Info("console_action", "action", "remember", "id", id, "subject", in.Subject, "merged", merged, "by", by)
 	respond(w, http.StatusOK, map[string]any{"id": id, "merged": merged})
@@ -164,6 +176,28 @@ func (s *Server) lockMemory(w http.ResponseWriter, r *http.Request) {
 	}
 	s.log.Info("console_action", "action", action, "id", id, "by", by)
 	respond(w, http.StatusOK, map[string]any{"id": id, "locked": locked})
+}
+
+func (s *Server) memoryMeta(w http.ResponseWriter, r *http.Request) {
+	n, id, ok := s.memoryID(w, r)
+	if !ok {
+		return
+	}
+	var in struct {
+		Kind string   `json:"kind"`
+		Also []string `json:"also"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	by := s.who(r)
+	if err := s.mz.SetMemoryMeta(n, id, in.Kind, in.Also, by); err != nil {
+		s.memoryFail(w, err)
+		return
+	}
+	s.log.Info("console_action", "action", "memory_meta", "id", id, "kind", in.Kind,
+		"also", strings.Join(in.Also, ","), "by", by)
+	respond(w, http.StatusOK, map[string]any{"id": id})
 }
 
 func (s *Server) memoryFail(w http.ResponseWriter, err error) {

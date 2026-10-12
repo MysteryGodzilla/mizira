@@ -34,6 +34,7 @@ type fakeMizira struct {
 	mems      []MemoryView
 	notes     []SelfNoteView
 	compacted []string
+	profiles  []ProfileView
 }
 
 func (f *fakeMizira) RunState() string  { return f.state }
@@ -262,6 +263,7 @@ func TestMiziraEndpointsNeedTheToken(t *testing.T) {
 		{"GET", "/api/v1/tools"}, {"PUT", "/api/v1/tools"}, {"DELETE", "/api/v1/tools/switches"},
 		{"GET", "/api/v1/memories/subjects?network=net"}, {"GET", "/api/v1/memories?network=net"}, {"POST", "/api/v1/memories"},
 		{"PUT", "/api/v1/memories/1?network=net"}, {"DELETE", "/api/v1/memories/1?network=net"},
+		{"PUT", "/api/v1/memories/1/meta?network=net"}, {"GET", "/api/v1/profiles?network=net"}, {"PUT", "/api/v1/profiles"}, {"DELETE", "/api/v1/profiles?network=net&subject=bob"},
 		{"GET", "/api/v1/selfnotes?network=net"}, {"POST", "/api/v1/selfnotes/1/approve?network=net"}, {"POST", "/api/v1/selfnotes/1/deny?network=net"},
 		{"POST", "/api/v1/memories/compact/preview"}, {"POST", "/api/v1/memories/compact/apply"},
 		{"GET", "/api/v1/safety"}} {
@@ -825,5 +827,71 @@ func TestSafetyFromTheConsole(t *testing.T) {
 		if code, _ := r.call(t, "GET", "/api/v1/safety?days="+bad, "s3cret", ""); code != http.StatusBadRequest {
 			t.Errorf("days=%s = %d, want 400", bad, code)
 		}
+	}
+}
+
+func (f *fakeMizira) SetMemoryMeta(network string, id int64, kind string, also []string, by string) error {
+	for i := range f.mems {
+		if f.mems[i].ID == id {
+			if kind != "" && kind != "look" && kind != "lore" {
+				return errors.New("unknown kind")
+			}
+			f.mems[i].Kind, f.mems[i].Also = kind, also
+			return nil
+		}
+	}
+	return ErrNoSuchMemory
+}
+func (f *fakeMizira) Profiles(network string) ([]ProfileView, error) { return f.profiles, nil }
+func (f *fakeMizira) SetProfile(network string, p ProfileView, by string) error {
+	if p.Subject == "" {
+		return errors.New("a profile is for one nick or name")
+	}
+	f.profiles = append(slices.DeleteFunc(f.profiles, func(o ProfileView) bool { return o.Subject == p.Subject }), p)
+	return nil
+}
+func (f *fakeMizira) DeleteProfile(network, subject, by string) (bool, error) {
+	n := len(f.profiles)
+	f.profiles = slices.DeleteFunc(f.profiles, func(o ProfileView) bool { return o.Subject == subject })
+	return len(f.profiles) < n, nil
+}
+
+func TestMemoryKindsAndProfilesFromTheConsole(t *testing.T) {
+	r, m := newMzRig(t)
+	body := `{"network":"net","subject":"bob","fact":"bob and carol run the quiz","kind":"lore","also":["carol"]}`
+	if code, out := r.call(t, "POST", "/api/v1/memories", "s3cret", body); code != http.StatusOK {
+		t.Fatalf("add = %d %v", code, out)
+	}
+	if m.mems[0].Kind != "lore" || !slices.Equal(m.mems[0].Also, []string{"carol"}) {
+		t.Errorf("saved %+v", m.mems[0])
+	}
+	if code, _ := r.call(t, "PUT", "/api/v1/memories/1/meta?network=net", "s3cret", `{"kind":"look","also":[]}`); code != http.StatusOK || m.mems[0].Kind != "look" || len(m.mems[0].Also) != 0 {
+		t.Errorf("meta = %d %+v", code, m.mems[0])
+	}
+	if code, _ := r.call(t, "PUT", "/api/v1/memories/1/meta?network=net", "s3cret", `{"kind":"weather"}`); code != http.StatusBadRequest {
+		t.Errorf("unknown kind = %d, want 400", code)
+	}
+	if code, _ := r.call(t, "PUT", "/api/v1/memories/9/meta?network=net", "s3cret", `{"kind":"look"}`); code != http.StatusNotFound {
+		t.Errorf("missing memory = %d, want 404", code)
+	}
+
+	p := `{"network":"net","subject":"botty","runBy":"bob","pronouns":"she/her","aliases":["bot"]}`
+	if code, out := r.call(t, "PUT", "/api/v1/profiles", "s3cret", p); code != http.StatusOK {
+		t.Fatalf("set profile = %d %v", code, out)
+	}
+	if len(m.profiles) != 1 || m.profiles[0].RunBy != "bob" || m.profiles[0].Aliases[0] != "bot" {
+		t.Errorf("profiles = %+v", m.profiles)
+	}
+	if _, out := r.call(t, "GET", "/api/v1/profiles?network=net", "s3cret", ""); len(out["profiles"].([]any)) != 1 {
+		t.Errorf("list = %v", out)
+	}
+	if code, _ := r.call(t, "PUT", "/api/v1/profiles", "s3cret", `{"network":"net","subject":""}`); code != http.StatusBadRequest {
+		t.Errorf("no subject = %d, want 400", code)
+	}
+	if code, _ := r.call(t, "DELETE", "/api/v1/profiles?network=net&subject=botty", "s3cret", ""); code != http.StatusOK || len(m.profiles) != 0 {
+		t.Errorf("delete = %d", code)
+	}
+	if code, _ := r.call(t, "DELETE", "/api/v1/profiles?network=net&subject=botty", "s3cret", ""); code != http.StatusNotFound {
+		t.Errorf("delete again = %d, want 404", code)
 	}
 }

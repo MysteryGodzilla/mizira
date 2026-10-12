@@ -93,14 +93,23 @@ func recallForSpeaker(ctx irc.ChatContextInterface, known func(string) bool) str
 		return ""
 	}
 	mems = unseen(mems, known)
-	if len(mems) == 0 {
+	profile := ""
+	if people, err := store.People(ctx.GetNetwork()); err == nil {
+		if profile = irc.ProfileLine(people, source); known(profile) {
+			profile = ""
+		}
+	}
+	if len(mems) == 0 && profile == "" {
 		return ""
 	}
 
 	var b strings.Builder
 	b.WriteString(strings.ReplaceAll(strings.TrimSpace(ctx.GetConfig().Bot.MemoryFrame), "{nick}", source))
-	for _, m := range mems {
-		fmt.Fprintf(&b, "\n  - %s", m.Fact)
+	if profile != "" {
+		fmt.Fprintf(&b, "\n  - %s", profile)
+	}
+	for _, line := range irc.MemoryLines(ctx.GetNetwork(), mems) {
+		fmt.Fprintf(&b, "\n  - %s", line)
 	}
 
 	ctx.GetLogger().Debug("memories_injected", "source", source, "count", len(mems))
@@ -150,13 +159,27 @@ func relevantMemories(ctx irc.ChatContextInterface, text string, known func(stri
 		return ""
 	}
 	mems = unseen(mems, known)
-	if len(mems) == 0 {
+	// Who the people it names are: pronouns, avatars, and which bot is whose.
+	var profiles []string
+	if people, err := store.People(ctx.GetNetwork()); err == nil {
+		if named, err := store.Mentioned(ctx.GetNetwork(), text, exclude); err == nil {
+			for _, s := range named {
+				if line := irc.ProfileLine(people, s); line != "" && !known(line) {
+					profiles = append(profiles, line)
+				}
+			}
+		}
+	}
+	if len(mems) == 0 && len(profiles) == 0 {
 		return ""
 	}
 	var b strings.Builder
 	b.WriteString(strings.TrimSpace(ctx.GetConfig().Bot.RelevantFrame))
-	for _, m := range mems {
-		fmt.Fprintf(&b, "\n  - about %s: %s", m.Subject, m.Fact)
+	for _, p := range profiles {
+		fmt.Fprintf(&b, "\n  - %s", p)
+	}
+	for i, line := range irc.MemoryLines(ctx.GetNetwork(), mems) {
+		fmt.Fprintf(&b, "\n  - about %s: %s", mems[i].Subject, line)
 	}
 	ctx.GetLogger().Debug("relevant_memories_injected", "count", len(mems))
 	return b.String()
