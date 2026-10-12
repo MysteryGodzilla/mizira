@@ -34,8 +34,10 @@ type MemoryView struct {
 	// Locked memories survive every forget from IRC; the console forgets one only once unlocked.
 	Locked bool     `json:"locked"`
 	Kind   string   `json:"kind,omitempty"`
-	Also   []string `json:"also,omitempty"` // other people it is about
-	Source string   `json:"source"`         // said, told, operator or guessed
+	Also   []string `json:"also,omitempty"`  // other people it is about
+	Source string   `json:"source"`          // said, told, operator or guessed
+	Used   int64    `json:"used,omitempty"`  // when it last came up, if it has since it was saved
+	Faded  bool     `json:"faded,omitempty"` // lore not sent unasked any more; it comes back when mentioned
 }
 
 var (
@@ -54,6 +56,7 @@ func (s *Server) mzMemoryRoutes(api *http.ServeMux) {
 	api.HandleFunc("PUT /memories/{id}/lock", s.lockMemory)
 	api.HandleFunc("DELETE /memories/{id}/lock", s.lockMemory)
 	api.HandleFunc("PUT /memories/{id}/meta", s.memoryMeta)
+	api.HandleFunc("GET /memories/history", s.memoryHistory)
 	api.HandleFunc("POST /memories/compact/preview", s.compactPreview)
 	api.HandleFunc("POST /memories/compact/apply", s.compactApply)
 }
@@ -266,4 +269,39 @@ func (s *Server) compactApply(w http.ResponseWriter, r *http.Request) {
 	}
 	s.log.Info("console_action", "action", "compact", "subject", in.Subject, "before", len(in.BasedOn), "after", stored, "by", by)
 	respond(w, http.StatusOK, map[string]any{"stored": stored})
+}
+
+// EarlierView is a memory's wording before another one replaced it: a look merged into a newer one,
+// a like contradicted, or a fact compacted.
+type EarlierView struct {
+	ID         int64  `json:"id"`
+	MemoryID   int64  `json:"memoryId"`
+	Fact       string `json:"fact"`
+	Kind       string `json:"kind,omitempty"`
+	Author     string `json:"author"`
+	Created    int64  `json:"created"`
+	ReplacedBy int64  `json:"replacedBy,omitempty"`
+	Replaced   int64  `json:"replaced"`
+	Why        string `json:"why"`
+}
+
+func (s *Server) memoryHistory(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	n, subject := q.Get("network"), strings.TrimSpace(q.Get("subject"))
+	if !s.knownNetwork(w, n) {
+		return
+	}
+	if subject == "" {
+		fail(w, http.StatusBadRequest, "give a subject")
+		return
+	}
+	list, err := s.mz.MemoryHistory(n, subject)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, "memory is unavailable")
+		return
+	}
+	if list == nil {
+		list = []EarlierView{}
+	}
+	respond(w, http.StatusOK, map[string]any{"earlier": list})
 }

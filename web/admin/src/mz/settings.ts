@@ -24,6 +24,7 @@ export const META: Record<string, Meta> = {
 
   maxconcurrent: { group: "Limits", kind: "number", help: "Model requests at once, across networks (1-8)." },
   maxreplylines: { group: "Limits", kind: "number", help: "Lines per reply (0 = no limit, up to 20)." },
+  lorefadedays: { group: "Limits", kind: "number", help: "Days a lore memory (jokes, events) can go unmentioned before she stops bringing it up unasked (0 = never)." },
   botreplylimit: { group: "Limits", kind: "number", help: "Replies to other bots in a row (0-20)." },
   maxtokens: { group: "Limits", kind: "number", help: "Most tokens one reply may produce." },
   maxcontext: { group: "Limits", kind: "number", help: "History size before older turns fold into the recap." },

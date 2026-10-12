@@ -57,7 +57,12 @@ export const kinds = ["identity", "look", "likes", "lore", "boundary"] as const;
 
 export interface Memory {
   id: number; subject: string; fact: string; author: string; created: number; edited?: number; sameAs?: number; locked: boolean;
-  kind?: string; also?: string[]; source: "said" | "told" | "operator" | "guessed";
+  kind?: string; also?: string[]; source: "said" | "told" | "operator" | "guessed"; used?: number; faded?: boolean;
+}
+
+export interface Earlier {
+  id: number; memoryId: number; fact: string; kind?: string; author: string; created: number;
+  replacedBy?: number; replaced: number; why: string;
 }
 
 // Mirrors internal/admin/mz_profiles.go.

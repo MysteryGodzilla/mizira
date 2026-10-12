@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"B4reMetal/metald/internal/config"
 	"B4reMetal/metald/internal/core"
@@ -54,6 +55,12 @@ func RememberAs(chatCtx ChatContextInterface, subject, fact, kind string, also [
 	if err != nil {
 		return res
 	}
+	if saved, ok, err := store.Get(chatCtx.GetNetwork(), res.ID); err == nil && ok && core.ValidKind(kind) {
+		if checked := CheckKind(kind, saved.Fact); checked != kind {
+			chatCtx.GetLogger().Info("memory_kind_corrected", "id", res.ID, "from", kind, "to", checked)
+			kind = checked
+		}
+	}
 	if core.ValidKind(kind) && kind != "" {
 		if _, err := store.SetKind(chatCtx.GetNetwork(), res.ID, kind); err != nil {
 			chatCtx.GetLogger().Warn("memory_kind_failed", "id", res.ID, "error", err.Error())
@@ -84,7 +91,133 @@ func RememberAs(chatCtx ChatContextInterface, subject, fact, kind string, also [
 	if kind != "" || len(people) > 0 {
 		chatCtx.GetLogger().Info("memory_meta", "id", res.ID, "kind", kind, "also", strings.Join(people, ","))
 	}
+	switch {
+	case res.Merged:
+		// Said again: it has come up.
+		if err := store.MarkUsed([]int64{res.ID}, time.Now()); err != nil {
+			chatCtx.GetLogger().Warn("memory_mark_used_failed", "error", err.Error())
+		}
+	case kind == core.KindLikes:
+		replaceContradicted(chatCtx, store, res.ID)
+	case kind == core.KindLook:
+		mergeLooks(chatCtx, store, res.ID)
+	}
 	return res
+}
+
+// heldOfKind is the subject's own memories (not ones shared from others) of the given kinds, other
+// than the one just saved.
+func heldOfKind(chatCtx ChatContextInterface, store *core.MemoryStore, saved core.Memory, kinds ...string) ([]core.Memory, error) {
+	all, err := store.Recall(chatCtx.GetNetwork(), saved.Subject, 1000)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]int64, len(all))
+	for i, m := range all {
+		ids[i] = m.ID
+	}
+	meta, err := store.Meta(chatCtx.GetNetwork(), ids)
+	if err != nil {
+		return nil, err
+	}
+	var out []core.Memory
+	for _, m := range all {
+		if m.ID != saved.ID && m.Subject == saved.Subject && slices.Contains(kinds, meta[m.ID].Kind) {
+			out = append(out, m)
+		}
+	}
+	return out, nil
+}
+
+// replaceContradicted keeps a like that a new one negates ("likes tea", then "doesn't like tea")
+// only as an earlier version of the new one.
+func replaceContradicted(chatCtx ChatContextInterface, store *core.MemoryStore, id int64) {
+	saved, ok, err := store.Get(chatCtx.GetNetwork(), id)
+	if err != nil || !ok {
+		return
+	}
+	held, err := heldOfKind(chatCtx, store, saved, core.KindLikes, "")
+	if err != nil {
+		return
+	}
+	var old []int64
+	for _, m := range held {
+		if core.Contradicts(saved.Subject, m.Fact, saved.Fact) && !store.IsLocked(chatCtx.GetNetwork(), m.ID) {
+			old = append(old, m.ID)
+		}
+	}
+	if len(old) == 0 {
+		return
+	}
+	if err := store.Supersede(chatCtx.GetNetwork(), id, "", old, "contradicted"); err != nil {
+		chatCtx.GetLogger().Warn("memory_supersede_failed", "id", id, "error", err.Error())
+		return
+	}
+	chatCtx.GetLogger().Info("memory_contradicted", "id", id, "replaced", old)
+}
+
+// mergeLooks keeps one current look per person: the looks already held and the new one become one
+// description in the new memory, through lookmergeprompt and the memory policy, and the old ones are
+// kept as earlier versions. If the merge fails or is refused, or a held look is locked, both stay.
+func mergeLooks(chatCtx ChatContextInterface, store *core.MemoryStore, id int64) {
+	network := chatCtx.GetNetwork()
+	saved, ok, err := store.Get(network, id)
+	if err != nil || !ok {
+		return
+	}
+	held, err := heldOfKind(chatCtx, store, saved, core.KindLook)
+	if err != nil || len(held) == 0 {
+		return
+	}
+	var old []int64
+	var text []string
+	for _, m := range held {
+		if store.IsLocked(network, m.ID) {
+			chatCtx.GetLogger().Info("memory_look_kept", "id", id, "locked", m.ID)
+			return
+		}
+		old = append(old, m.ID)
+		text = append(text, m.Fact)
+	}
+	merged, err := core.MergeLook(chatCtx, saved.Subject, strings.Join(text, " "), saved.Fact)
+	if err != nil {
+		chatCtx.GetLogger().Warn("memory_look_merge_failed", "id", id, "error", err.Error())
+		return
+	}
+	note := chatCtx.IsAdmin() && IsRoomSubject(chatCtx.GetConfig(), chatCtx.GetBotNick(), saved.Subject)
+	if !note {
+		if ok, reason := core.Classify(chatCtx, chatCtx.GetConfig().Bot.MemoryPolicy, "FACT",
+			fmt.Sprintf("About: %s\nFact: %s", saved.Subject, merged), false); !ok {
+			chatCtx.GetLogger().Info("memory_look_merge_refused", "id", id, "reason", reason, "merged", merged)
+			return
+		}
+	}
+	if err := store.Supersede(network, id, merged, old, "look merged"); err != nil {
+		chatCtx.GetLogger().Warn("memory_supersede_failed", "id", id, "error", err.Error())
+		return
+	}
+	chatCtx.GetLogger().Info("memory_look_merged", "id", id, "replaced", old, "look", merged)
+}
+
+var (
+	avatarWord    = regexp.MustCompile(`(?i)\bavatars?\b`)
+	boundaryWords = regexp.MustCompile(`(?i)\b(doesn't|does not|don't|do not|rather not|asked not|wants? (you|me|her|him) to|prefers? not)\b.{0,40}\b(call|calling|called|tease|teasing|draw|drawn|ping|pinged)`)
+	identityWords = regexp.MustCompile(`(?i)\b(name|names|named|nick|nickname|called|goes by|go by|known as|pronouns?|he/him|she/her|they/them|he/they|she/they)\b`)
+)
+
+// CheckKind corrects the kind a model chose where the fact's own words say otherwise: a fact about
+// an avatar is a look, one about what to call or not do is a boundary, and identity is only names
+// and pronouns ("" when it names neither, rather than a wrong kind).
+func CheckKind(kind, fact string) string {
+	switch {
+	case boundaryWords.MatchString(fact):
+		return core.KindBoundary
+	case avatarWord.MatchString(fact) && kind != core.KindBoundary:
+		return core.KindLook
+	case kind == core.KindIdentity && !identityWords.MatchString(fact):
+		return ""
+	}
+	return kind
 }
 
 // SplitNames splits "bob, carol and dave" into nicks.

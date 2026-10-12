@@ -1,5 +1,5 @@
 import { Api } from "../lib/api";
-import type { Bots, Cheatsheet, ExportResult, Conversation, Feature, Fold, Memory, People, Profile, Reset, RunState, Safety, SelfNote, Service, Setting, SettingChange, Subject, Tool } from "./types";
+import type { Bots, Cheatsheet, ExportResult, Conversation, Earlier, Feature, Fold, Memory, People, Profile, Reset, RunState, Safety, SelfNote, Service, Setting, SettingChange, Subject, Tool } from "./types";
 
 const q = (params: Record<string, string>) => new URLSearchParams(params).toString();
 
@@ -55,6 +55,8 @@ export class MzApi extends Api {
     this.call<{ id: number; merged: boolean }>("POST", "memories", { network, subject, fact, kind, also });
   memoryMeta = (network: string, id: number, kind: string, also: string[]) =>
     this.call<{ id: number }>("PUT", `memories/${id}/meta?${q({ network })}`, { kind, also });
+  memoryHistory = (network: string, subject: string) =>
+    this.call<{ earlier: Earlier[] }>("GET", `memories/history?${q({ network, subject })}`).then((r) => r.earlier);
   profiles = (network: string) =>
     this.call<{ profiles: Profile[] }>("GET", `profiles?${q({ network })}`).then((r) => r.profiles);
   setProfile = (network: string, p: Profile) => this.call<{ subject: string }>("PUT", "profiles", { network, ...p });

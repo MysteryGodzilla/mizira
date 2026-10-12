@@ -87,7 +87,8 @@ func recallForSpeaker(ctx irc.ChatContextInterface, known func(string) bool) str
 		return ""
 	}
 
-	mems, err := store.Recall(ctx.GetNetwork(), source, maxInjectedMemories)
+	// By kind (boundaries first), without lore that hasn't come up for a while.
+	mems, _, err := store.RankedFor(ctx.GetNetwork(), source, ctx.GetConfig().Bot.LoreFadeDays, maxInjectedMemories, time.Now())
 	if err != nil {
 		ctx.GetLogger().Warn("memory_injection_failed", "error", err.Error())
 		return ""
@@ -153,7 +154,7 @@ func relevantMemories(ctx irc.ChatContextInterface, text string, known func(stri
 	} else {
 		exclude = append(exclude, ctx.GetBotNick())
 	}
-	mems, err := store.Relevant(ctx.GetNetwork(), text, exclude, maxRelevantMemories)
+	mems, err := store.RelevantFaded(ctx.GetNetwork(), text, exclude, maxRelevantMemories, ctx.GetConfig().Bot.LoreFadeDays)
 	if err != nil {
 		ctx.GetLogger().Warn("relevant_memories_failed", "error", err.Error())
 		return ""

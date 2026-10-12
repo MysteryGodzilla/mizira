@@ -46,10 +46,11 @@ func CompactPreview(cfg *config.Configuration, network, subject string) (facts [
 	if err != nil {
 		return nil, nil, err
 	}
-	// Locked facts stay as they are, so they aren't offered for rewording.
+	// Locked facts stay as they are, so they aren't offered for rewording, and memories shared from
+	// someone else's stay theirs.
 	var held []core.Memory
 	for _, m := range all {
-		if !locked[m.ID] {
+		if !locked[m.ID] && strings.EqualFold(m.Subject, strings.TrimSpace(subject)) {
 			held = append(held, m)
 		}
 	}

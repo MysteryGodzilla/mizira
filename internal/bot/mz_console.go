@@ -375,7 +375,11 @@ func (c console) Memories(network, subject, query string) ([]admin.MemoryView, e
 	for i, m := range list {
 		v := admin.MemoryView{ID: m.ID, Subject: m.Subject, Fact: m.Fact, Author: m.Author, Created: m.Created.Unix(),
 			Locked: locked[m.ID], Kind: meta[m.ID].Kind, Also: meta[m.ID].Also,
-			Source: core.MemorySource(m.Subject, m.Author)}
+			Source: core.MemorySource(m.Subject, m.Author),
+			Faded:  core.Faded(m, meta[m.ID], c.cfg.Bot.LoreFadeDays, time.Now())}
+		if !meta[m.ID].Used.IsZero() {
+			v.Used = meta[m.ID].Used.Unix()
+		}
 		if at, ok := edited[m.ID]; ok {
 			v.Edited = at.Unix()
 		}
@@ -435,6 +439,23 @@ func (c console) SetMemoryMeta(network string, id int64, kind string, also []str
 		return err
 	}
 	return nil
+}
+
+func (c console) MemoryHistory(network, subject string) ([]admin.EarlierView, error) {
+	store, err := core.Memories()
+	if err != nil {
+		return nil, err
+	}
+	list, err := store.History(network, subject, 50)
+	if err != nil {
+		return nil, err
+	}
+	var out []admin.EarlierView
+	for _, e := range list {
+		out = append(out, admin.EarlierView{ID: e.ID, MemoryID: e.MemoryID, Fact: e.Fact, Kind: e.Kind, Author: e.Author,
+			Created: e.Created.Unix(), ReplacedBy: e.ReplacedBy, Replaced: e.Replaced.Unix(), Why: e.Why})
+	}
+	return out, nil
 }
 
 func (c console) Profiles(network string) ([]admin.ProfileView, error) {

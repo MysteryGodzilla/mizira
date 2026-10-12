@@ -32,6 +32,7 @@ var PromptKeys = []string{
 	"selfnoteprompt",
 	"peoplenoteprompt",
 	"compactprompt",
+	"lookmergeprompt",
 }
 
 // MissingPrompts returns the prompt keys that are empty or whitespace.
@@ -64,6 +65,7 @@ func MissingPrompts(b *BotConfig) []string {
 		"selfnoteprompt":     b.SelfNotePrompt,
 		"peoplenoteprompt":   b.PeopleNotePrompt,
 		"compactprompt":      b.CompactPrompt,
+		"lookmergeprompt":    b.LookMergePrompt,
 	}
 	var missing []string
 	for _, k := range PromptKeys {
