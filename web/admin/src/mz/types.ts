@@ -53,7 +53,18 @@ export interface Tool {
 
 export interface Subject { subject: string; count: number; room: boolean }
 
-export interface Memory { id: number; subject: string; fact: string; author: string; created: number; edited?: number; sameAs?: number; locked: boolean }
+export const kinds = ["identity", "look", "likes", "lore", "boundary"] as const;
+
+export interface Memory {
+  id: number; subject: string; fact: string; author: string; created: number; edited?: number; sameAs?: number; locked: boolean;
+  kind?: string; also?: string[]; source: "said" | "told" | "operator" | "guessed";
+}
+
+// Mirrors internal/admin/mz_profiles.go.
+export interface Profile {
+  subject: string; bot: boolean; runBy: string; pronouns: string; avatarPronouns: string; aliases: string[] | null;
+  runs?: string[]; by?: string; updated?: number;
+}
 
 // Mirrors internal/admin/mz_selfnotes.go.
 

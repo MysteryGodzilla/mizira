@@ -1,12 +1,13 @@
 <script lang="ts">
   import type { Dashboard } from "../lib/dashboard.svelte";
   import type { MzConsole } from "./console.svelte";
-  import type { Memory, Subject } from "./types";
+  import { kinds, type Memory, type Profile as ProfileT, type Subject } from "./types";
   import { when } from "../lib/format";
   import Badge from "../components/Badge.svelte";
   import Card from "../components/Card.svelte";
   import SelfNotes from "./SelfNotes.svelte";
   import Compact from "./Compact.svelte";
+  import Profile from "./Profile.svelte";
   let { mz, board }: { mz: MzConsole; board: Dashboard } = $props();
 
   let networks = $derived(board.status?.networks.map((n) => n.name) ?? []);
@@ -21,6 +22,12 @@
   let list = $state<Memory[] | null>(null);
   let editing = $state<number | null>(null);
   let editText = $state("");
+  let editKind = $state("");
+  let editAlso = $state("");
+  let newKind = $state("");
+  let newAlso = $state("");
+  let profiles = $state<ProfileT[]>([]);
+  let openNick = $state("");
   let newSubject = $state("");
   let newFact = $state("");
   let compacting = $state(false);
@@ -33,6 +40,7 @@
     const r = await mz.api.memorySubjects(net);
     subjects = r.subjects;
     perSubject = r.perSubject;
+    profiles = await mz.api.profiles(net);
   }
 
   async function loadList() {
@@ -47,6 +55,14 @@
   const change = (run: () => Promise<unknown>, done: string) => mz.act(async () => { await run(); await reload(); }, done);
 
   function open(s: string) { selected = s; searched = ""; query = ""; newSubject = s; editing = null; compacting = false; }
+  function openOne(e: SubmitEvent) { e.preventDefault(); const s = openNick.trim().toLowerCase(); if (s) { open(s); openNick = ""; } }
+  const names = (s: string) => s.split(",").map((a) => a.trim()).filter(Boolean);
+  let profile = $derived(profiles.find((p) => p.subject === selected) ?? null);
+  let isRoom = $derived(subjects.some((s) => s.subject === selected && s.room));
+  const sharedWith = (m: Memory) => [m.subject, ...(m.also ?? [])].filter((s) => s !== selected).join(", ");
+  const sourceText = (m: Memory) =>
+    m.source === "told" ? `told by ${m.author.split(" ")[0]}` : m.source === "guessed" ? "guessed from chat" : m.source;
+
   function search(e: SubmitEvent) { e.preventDefault(); if (query.trim()) { searched = query.trim(); selected = ""; editing = null; } }
 
   function add(e: SubmitEvent) {
@@ -56,12 +72,13 @@
     const n = net;
     let merged = 0;
     void mz.act(async () => {
-      const r = await mz.api.remember(n, subject, fact);
+      const r = await mz.api.remember(n, subject, fact, newKind, names(newAlso));
       if (r.merged) merged = r.id;
       await reload();
     }, `saved about ${subject}`).then((ok) => {
       if (!ok) return;
       newFact = "";
+      newAlso = "";
       if (merged) mz.say(`Already had that as #${merged}; kept one copy with the longer wording.`);
     });
   }
@@ -69,7 +86,13 @@
   async function save(m: Memory) {
     if (net === null) return;
     const n = net;
-    if (await mz.act(async () => { await mz.api.editMemory(n, m.id, editText); await reload(); }, `#${m.id} edited`)) editing = null;
+    const also = names(editAlso);
+    const metaChanged = editKind !== (m.kind ?? "") || also.join(",") !== (m.also ?? []).join(",");
+    if (await mz.act(async () => {
+      if (editText.trim() !== m.fact) await mz.api.editMemory(n, m.id, editText);
+      if (metaChanged) await mz.api.memoryMeta(n, m.id, editKind, also);
+      await reload();
+    }, `#${m.id} saved`)) editing = null;
   }
 
   function forget(m: Memory) {
@@ -110,6 +133,18 @@
         <p class="empty">None yet.</p>
       {/each}
     </Card>
+    <Card title="Profiles">
+      {#each profiles as p (p.subject)}
+        <button class="subject" class:on={selected === p.subject} onclick={() => open(p.subject)}>
+          {p.subject} <span class="sub">{p.runBy ? `bot · ${p.runBy}` : p.bot ? "bot" : p.pronouns}</span></button>
+      {:else}
+        <p class="empty">None yet.</p>
+      {/each}
+      <form onsubmit={openOne}>
+        <input class="grow" bind:value={openNick} placeholder="open a nick" aria-label="Open a nick" maxlength="64" />
+        <button type="submit">Open</button>
+      </form>
+    </Card>
     <Card title={`People and things (${people.length})`}>
       {#each people as s (s.subject)}
         <button class="subject" class:on={selected === s.subject} onclick={() => open(s.subject)}>
@@ -122,6 +157,9 @@
 
   <div class="main">
     {#if net !== null}<SelfNotes {mz} network={net} onchange={() => void reload()} />{/if}
+    {#if selected && !isRoom && net !== null}
+      <Profile {mz} network={net} subject={selected} {profile} onchange={() => void reload()} />
+    {/if}
     {#if compacting && selected && net !== null && list}
       <Compact {mz} network={net} subject={selected} current={list} {perSubject}
         onclose={(applied) => { compacting = false; if (applied) void reload(); }} />
@@ -144,16 +182,20 @@
               <div class="grow">
                 {#if editing === m.id}
                   <textarea bind:value={editText} rows="2" maxlength="400" aria-label="Fact"></textarea>
+                  <div class="row">
+                    <select bind:value={editKind} aria-label="Kind"><option value="">no kind</option>{#each kinds as k (k)}<option value={k}>{k}</option>{/each}</select>
+                    <input class="grow" bind:value={editAlso} placeholder="also about (nicks, comma-separated)" aria-label="Also about" />
+                  </div>
                   <div class="row"><button onclick={() => save(m)}>Save</button><button onclick={() => (editing = null)}>Cancel</button></div>
                 {:else}
-                  <div>{m.fact}</div>
-                  <div class="sub">#{m.id}{#if !selected} · {m.subject}{/if} · by {m.author || "?"} · {when(m.created)}{#if m.edited} · edited {when(m.edited)}{/if}
+                  <div>{#if m.kind}<Badge text={m.kind} tone="busy" />{/if}{m.fact}</div>
+                  <div class="sub">#{m.id}{#if !selected} · {m.subject}{/if} · by {m.author || "?"} ({sourceText(m)}) · {when(m.created)}{#if m.also?.length} · shared with {sharedWith(m)}{/if}{#if m.edited} · edited {when(m.edited)}{/if}
                     {#if m.locked}<Badge text="locked" tone="good" />{/if}
                     {#if m.sameAs}<Badge text={`same as #${m.sameAs}`} tone="busy" />{/if}</div>
                 {/if}
               </div>
               {#if editing !== m.id}
-                <button onclick={() => { editing = m.id; editText = m.fact; }}>Edit</button>
+                <button onclick={() => { editing = m.id; editText = m.fact; editKind = m.kind ?? ""; editAlso = (m.also ?? []).join(", "); }}>Edit</button>
                 <button onclick={() => lock(m)} title={m.locked ? "Allow forgetting again" : "Keep it: nothing in IRC can forget it, and Forget here needs Unlock first"}>{m.locked ? "Unlock" : "Lock"}</button>
                 <button class="danger" onclick={() => forget(m)} disabled={m.locked} title={m.locked ? "Unlock it first" : ""}>Forget</button>
               {/if}
@@ -167,6 +209,10 @@
       <form class="add" onsubmit={add}>
         <input bind:value={newSubject} placeholder="about (a nick, or Mizira, or the channel)" aria-label="Subject" maxlength="64" />
         <textarea bind:value={newFact} rows="2" placeholder="the fact, naming who it's about" aria-label="Fact" maxlength="400"></textarea>
+        <div class="row">
+          <select bind:value={newKind} aria-label="Kind"><option value="">no kind</option>{#each kinds as k (k)}<option value={k}>{k}</option>{/each}</select>
+          <input class="grow" bind:value={newAlso} placeholder="also about (nicks, comma-separated)" aria-label="Also about" />
+        </div>
         <button type="submit">Remember</button>
       </form>
       <p class="sub">Your own words: saved without the memory policy check, but the per-person limit applies and a repeat
@@ -189,7 +235,8 @@
   .add button { align-self: flex-start; }
   textarea { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 7px;
     padding: 6px 10px; width: 100%; resize: vertical; }
-  .row { display: flex; gap: 6px; margin-top: 6px; }
+  .row { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .row .grow { flex: 1; min-width: 140px; }
   li { align-items: flex-start; }
   .sub { overflow-wrap: anywhere; }
   p.sub { margin: 0 0 8px; }

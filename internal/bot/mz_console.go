@@ -363,10 +363,19 @@ func (c console) Memories(network, subject, query string) ([]admin.MemoryView, e
 	if err != nil {
 		return nil, err
 	}
+	ids := make([]int64, len(list))
+	for i, m := range list {
+		ids[i] = m.ID
+	}
+	meta, err := store.Meta(network, ids)
+	if err != nil {
+		return nil, err
+	}
 	out := []admin.MemoryView{}
 	for i, m := range list {
 		v := admin.MemoryView{ID: m.ID, Subject: m.Subject, Fact: m.Fact, Author: m.Author, Created: m.Created.Unix(),
-			Locked: locked[m.ID]}
+			Locked: locked[m.ID], Kind: meta[m.ID].Kind, Also: meta[m.ID].Also,
+			Source: core.MemorySource(m.Subject, m.Author)}
 		if at, ok := edited[m.ID]; ok {
 			v.Edited = at.Unix()
 		}
@@ -396,6 +405,75 @@ func (c console) ForgetMemory(network string, id int64, by string) error {
 
 func (c console) LockMemory(network string, id int64, locked bool, by string) error {
 	return memoryErr(commands.LockMemory(network, id, locked, by, core.GetLogger()))
+}
+
+func (c console) SetMemoryMeta(network string, id int64, kind string, also []string, by string) error {
+	store, err := core.Memories()
+	if err != nil {
+		return err
+	}
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	if !core.ValidKind(kind) {
+		return fmt.Errorf("the kind is one of %s, or none", strings.Join(core.Kinds, ", "))
+	}
+	var people []string
+	for _, a := range also {
+		if a = strings.TrimSpace(a); a == "" {
+			continue
+		}
+		if irc.IsRoomSubject(c.cfg, c.botNick(network), a) {
+			return fmt.Errorf("%s is room memory; a memory about the room is filed under it", a)
+		}
+		people = append(people, a)
+	}
+	if ok, err := store.SetKind(network, id, kind); err != nil {
+		return err
+	} else if !ok {
+		return admin.ErrNoSuchMemory
+	}
+	if _, err := store.SetAlso(network, id, people); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c console) Profiles(network string) ([]admin.ProfileView, error) {
+	store, err := core.Memories()
+	if err != nil {
+		return nil, err
+	}
+	list, err := store.Profiles(network)
+	if err != nil {
+		return nil, err
+	}
+	people, err := store.People(network)
+	if err != nil {
+		return nil, err
+	}
+	var out []admin.ProfileView
+	for _, p := range list {
+		out = append(out, admin.ProfileView{Subject: p.Subject, Bot: p.Bot, RunBy: p.RunBy, Pronouns: p.Pronouns,
+			AvatarPronouns: p.AvatarPronouns, Aliases: p.Aliases, Runs: people.Bots(p.Subject), By: p.By,
+			Updated: p.Updated.Unix()})
+	}
+	return out, nil
+}
+
+func (c console) SetProfile(network string, p admin.ProfileView, by string) error {
+	store, err := core.Memories()
+	if err != nil {
+		return err
+	}
+	return store.SetProfile(network, core.Profile{Subject: p.Subject, Bot: p.Bot, RunBy: p.RunBy,
+		Pronouns: p.Pronouns, AvatarPronouns: p.AvatarPronouns, Aliases: p.Aliases, By: by})
+}
+
+func (c console) DeleteProfile(network, subject, _ string) (bool, error) {
+	store, err := core.Memories()
+	if err != nil {
+		return false, err
+	}
+	return store.DeleteProfile(network, subject)
 }
 
 func memoryErr(err error) error {

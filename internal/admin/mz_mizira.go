@@ -76,6 +76,13 @@ type Mizira interface {
 	EditMemory(network string, id int64, fact, by string) error
 	ForgetMemory(network string, id int64, by string) error // ErrMemoryLocked while locked
 	LockMemory(network string, id int64, locked bool, by string) error
+	// SetMemoryMeta sets a memory's kind ("" for none) and the other people it is about.
+	SetMemoryMeta(network string, id int64, kind string, also []string, by string) error
+
+	// Profiles: pronouns, avatar pronouns, other names, and who runs a bot.
+	Profiles(network string) ([]ProfileView, error)
+	SetProfile(network string, p ProfileView, by string) error
+	DeleteProfile(network, subject, by string) (bool, error)
 	// Compaction: a model-proposed shorter list (nothing changes), then the operator's reviewed list
 	// replaces the memories the preview was based on, or ErrMemoriesChanged.
 	CompactPreview(network, subject string) (facts []string, basedOn []int64, err error)
@@ -110,6 +117,7 @@ func (s *Server) mzRoutes(api *http.ServeMux) {
 	s.mzModelRoutes(api)
 	s.mzSettingsRoutes(api)
 	s.mzMemoryRoutes(api)
+	s.mzProfileRoutes(api)
 	s.mzSelfNoteRoutes(api)
 	s.mzSafetyRoutes(api)
 }

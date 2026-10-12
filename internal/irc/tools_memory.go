@@ -34,8 +34,15 @@ func newMemoryRememberTool() tools.Tool {
 		Params: schema.Params{
 			"subject": schema.S("Who or what this is about - usually a nick. When it is about you yourself (how you should behave, what you like), your own name"),
 			"fact":    schema.S("The single fact to remember, in plain words"),
+			"kind": schema.Enum("What sort of fact. likes: hobbies, tastes, opinions (\"loves sourdough\"). lore: "+
+				"something that happened, a joke or a story (\"got lost on a ghost train\"). look: how their avatar "+
+				"looks. identity: ONLY their name, nickname or pronouns (\"goes by Bee\", \"uses they/them\"). "+
+				"boundary: something they asked you to do or not do (\"doesn't want to be called Davey\")",
+				core.KindLikes, core.KindLore, core.KindLook, core.KindIdentity, core.KindBoundary),
+			"also_about": schema.S("Other people this fact is about too, by nick, comma-separated " +
+				"(\"bob, carol\"); leave empty when it is about one person"),
 		},
-		Required: []string{"subject", "fact"},
+		Required: []string{"subject", "fact", "kind"},
 		Run: func(ctx context.Context, args tools.Args) (string, error) {
 			chatCtx, err := validateContext(ctx)
 			if err != nil {
@@ -47,7 +54,8 @@ func newMemoryRememberTool() tools.Tool {
 				return "", fmt.Errorf("subject and fact are both required")
 			}
 
-			res := RememberChecked(chatCtx, subject, fact)
+			res := RememberAs(chatCtx, subject, fact, strings.ToLower(strings.TrimSpace(args.String("kind"))),
+				SplitNames(args.String("also_about")))
 			switch {
 			case res.Unavailable:
 				return "Error: " + res.Reason, nil
@@ -106,6 +114,9 @@ func newMemoryRecallTool() tools.Tool {
 				return "", fmt.Errorf("subject is required")
 			}
 
+			if people, err := store.People(chatCtx.GetNetwork()); err == nil {
+				subject = people.Resolve(subject)
+			}
 			mems, err := store.Recall(chatCtx.GetNetwork(), subject, 20)
 			if err == nil && len(mems) == 0 {
 				mems, err = store.Search(chatCtx.GetNetwork(), subject, 20)
@@ -126,9 +137,14 @@ func newMemoryRecallTool() tools.Tool {
 			}
 
 			var b strings.Builder
+			if people, err := store.People(chatCtx.GetNetwork()); err == nil {
+				if line := ProfileLine(people, people.Resolve(subject)); line != "" {
+					b.WriteString(line + "\n")
+				}
+			}
 			fmt.Fprintf(&b, "%d memory(ies) about %s:", len(mems), subject)
-			for _, m := range mems {
-				fmt.Fprintf(&b, "\n  [%d] %s", m.ID, m.Fact)
+			for i, line := range MemoryLines(chatCtx.GetNetwork(), mems) {
+				fmt.Fprintf(&b, "\n  [%d] %s", mems[i].ID, line)
 			}
 			return b.String(), nil
 		},

@@ -7,6 +7,7 @@ package irc
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"B4reMetal/metald/internal/config"
@@ -38,6 +39,71 @@ type RememberResult struct {
 // after a slap"), so they skip both checks: they are exactly the rules the checks keep others
 // from planting.
 func RememberChecked(chatCtx ChatContextInterface, subject, fact string) RememberResult {
+	return RememberAs(chatCtx, subject, fact, "", nil)
+}
+
+// RememberAs is RememberChecked with the memory's kind and the other people it is about. Neither
+// changes the checks; a kind the store doesn't know is dropped, and so are the channel and the
+// bot among the others, since a memory about them is room memory.
+func RememberAs(chatCtx ChatContextInterface, subject, fact, kind string, also []string) RememberResult {
+	res := rememberChecked(chatCtx, subject, fact)
+	if !res.Saved {
+		return res
+	}
+	store, err := core.Memories()
+	if err != nil {
+		return res
+	}
+	if core.ValidKind(kind) && kind != "" {
+		if _, err := store.SetKind(chatCtx.GetNetwork(), res.ID, kind); err != nil {
+			chatCtx.GetLogger().Warn("memory_kind_failed", "id", res.ID, "error", err.Error())
+		}
+	}
+	// People the fact names who are already known count too, whether or not the model listed them.
+	self := chatCtx.GetConfig().Bot.Trigger
+	if self == "" {
+		self = chatCtx.GetBotNick()
+	}
+	if named, err := store.Mentioned(chatCtx.GetNetwork(), fact,
+		[]string{subjectOf(subject), self, chatCtx.GetConfig().Server.Channel}); err == nil {
+		also = append(also, named...)
+	}
+	var people []string
+	for _, a := range also {
+		if a = subjectOf(strings.TrimSpace(a)); a != "" && !strings.EqualFold(a, subjectOf(subject)) &&
+			!slices.ContainsFunc(people, func(p string) bool { return strings.EqualFold(p, a) }) &&
+			!IsRoomSubject(chatCtx.GetConfig(), chatCtx.GetBotNick(), a) && len(people) < maxAlsoAbout {
+			people = append(people, a)
+		}
+	}
+	if len(people) > 0 {
+		if err := store.AddAlso(chatCtx.GetNetwork(), res.ID, people); err != nil {
+			chatCtx.GetLogger().Warn("memory_also_failed", "id", res.ID, "error", err.Error())
+		}
+	}
+	if kind != "" || len(people) > 0 {
+		chatCtx.GetLogger().Info("memory_meta", "id", res.ID, "kind", kind, "also", strings.Join(people, ","))
+	}
+	return res
+}
+
+// SplitNames splits "bob, carol and dave" into nicks.
+func SplitNames(s string) []string {
+	var out []string
+	for _, part := range strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ';' || r == '&' }) {
+		for _, name := range strings.Split(part, " and ") {
+			if name = strings.TrimSpace(name); name != "" {
+				out = append(out, name)
+			}
+		}
+	}
+	return out
+}
+
+// maxAlsoAbout bounds the others one save can name; a fact about more people is about the room.
+const maxAlsoAbout = 4
+
+func rememberChecked(chatCtx ChatContextInterface, subject, fact string) RememberResult {
 	subject = subjectOf(subject)
 	fact = nameTheSubject(subject, fact)
 	store, err := core.Memories()

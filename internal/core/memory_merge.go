@@ -132,12 +132,13 @@ type SubjectCount struct {
 	Count   int
 }
 
-// SubjectCounts lists every subject on a network with its count, most memories first.
+// SubjectCounts lists every subject on a network with its count, shared memories included, most first.
 func (m *MemoryStore) SubjectCounts(network string) ([]SubjectCount, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	rows, err := m.db.Query(`SELECT subject, COUNT(*) FROM memories WHERE network = ?
-		GROUP BY subject ORDER BY COUNT(*) DESC, subject`, network)
+	rows, err := m.db.Query(`SELECT subject, COUNT(*) FROM
+		(SELECT subject FROM memories WHERE network = ? UNION ALL SELECT subject FROM memory_also WHERE network = ?)
+		GROUP BY subject ORDER BY COUNT(*) DESC, subject`, network, network)
 	if err != nil {
 		return nil, err
 	}
