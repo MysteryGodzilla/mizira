@@ -80,6 +80,13 @@ type Mizira interface {
 	SetMemoryMeta(network string, id int64, kind string, also []string, by string) error
 	// MemoryHistory lists a subject's earlier versions: memories another one replaced.
 	MemoryHistory(network, subject string) ([]EarlierView, error)
+	// Sorting: the model suggests a kind, subject and others for unsorted memories (nothing changes);
+	// the operator's reviewed list is applied memory by memory.
+	SortPreview(network string) (suggestions []SortView, unsorted int, err error)
+	SortApply(network string, items []SortView, by string) (applied int, problems []string, err error)
+	UnsortedCount(network string) (int, error)
+	// ProfileHints suggests profile changes from a subject's own memories.
+	ProfileHints(network, subject string) ([]ProfileHintView, error)
 
 	// Profiles: pronouns, avatar pronouns, other names, and who runs a bot.
 	Profiles(network string) ([]ProfileView, error)
@@ -120,6 +127,7 @@ func (s *Server) mzRoutes(api *http.ServeMux) {
 	s.mzSettingsRoutes(api)
 	s.mzMemoryRoutes(api)
 	s.mzProfileRoutes(api)
+	s.mzSortRoutes(api)
 	s.mzSelfNoteRoutes(api)
 	s.mzSafetyRoutes(api)
 }

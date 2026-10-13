@@ -98,3 +98,26 @@ func TestMemorySource(t *testing.T) {
 		t.Error("author nick")
 	}
 }
+
+func TestUnsortedAndRefile(t *testing.T) {
+	s := testStore(t)
+	a, _ := s.Remember("net", "botty", "botty feels sad when dave is mean", "console:token", "#chat")
+	b, _ := s.Remember("net", "bob", "bob plays chess", "bob", "#chat")
+	s.SetKind("net", b, KindLikes)
+	s.SetAlso("net", a, []string{"dave"})
+	if list, n, _ := s.Unsorted("net", 10); n != 1 || len(list) != 1 || list[0].ID != a {
+		t.Errorf("unsorted = %d %+v", n, list)
+	}
+	if ok, err := s.Refile("net", a, "Dave"); !ok || err != nil {
+		t.Fatalf("refile = %v %v", ok, err)
+	}
+	if got, _ := s.Recall("net", "dave", 5); len(got) != 1 || got[0].Subject != "dave" {
+		t.Errorf("dave = %+v", got)
+	}
+	if meta, _ := s.Meta("net", []int64{a}); len(meta[a].Also) != 0 {
+		t.Errorf("dave is still one of its others: %+v", meta[a])
+	}
+	if ok, _ := s.Refile("other", a, "carol"); ok {
+		t.Error("refiled on another network")
+	}
+}

@@ -152,6 +152,7 @@ type BotConfig struct {
 	MemoryPerSubject   int    // memories one subject may hold; a save past it is refused
 	LoreFadeDays       int    // days a lore memory may go unused before it stops being sent unasked (0 = never)
 	LookMergePrompt    string // merges a new look into the one held; {subject} is replaced
+	SortPrompt         string // suggests a kind, subject and others for unsorted memories, for the operator to review
 }
 
 type ModelConfig struct {
@@ -353,6 +354,7 @@ func GetFlags() []cli.Flag {
 		&cli.IntFlag{Name: "memorypersubject", Value: 40, Usage: "memories one person or thing may hold; a save past it is refused (0 = no cap)", Sources: src("memorypersubject", "METALD_MEMORYPERSUBJECT")},
 		&cli.IntFlag{Name: "lorefadedays", Value: 45, Usage: "days a lore memory (jokes, events) may go unmentioned before she stops bringing it up unasked; it comes back when it is mentioned (0 = never fade)", Sources: src("lorefadedays", "METALD_LOREFADEDAYS")},
 		&cli.StringFlag{Name: "lookmergeprompt", Usage: "merges a newly saved avatar look into the one already held, so each person keeps one current look; {subject} is replaced (required)", Sources: src("lookmergeprompt", "METALD_LOOKMERGEPROMPT")},
+		&cli.StringFlag{Name: "sortprompt", Usage: "suggests a kind, the person and the others involved for memories saved without a kind; the operator reviews each suggestion before it is applied (required)", Sources: src("sortprompt", "METALD_SORTPROMPT")},
 		&cli.StringFlag{Name: "memoryframe", Usage: "text introducing what the bot remembers about the speaker; {nick} is replaced (required)", Sources: src("memoryframe", "METALD_MEMORYFRAME")},
 		&cli.StringFlag{Name: "memorypolicy", Usage: "policy checked before a fact is written to memory (required)", Sources: src("memorypolicy", "METALD_MEMORYPOLICY")},
 		&cli.StringFlag{Name: "recapprompt", Usage: "instructions for folding older conversation into the channel recap (required)", Sources: src("recapprompt", "METALD_RECAPPROMPT")},
@@ -591,6 +593,7 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			MemoryPerSubject:    int(c.Int("memorypersubject")),
 			LoreFadeDays:        int(c.Int("lorefadedays")),
 			LookMergePrompt:     c.String("lookmergeprompt"),
+			SortPrompt:          c.String("sortprompt"),
 			RecapPrompt:         c.String("recapprompt"),
 			RecapFrame:          c.String("recapframe"),
 			BacklogFrame:        c.String("backlogframe"),

@@ -60,6 +60,10 @@ export interface Memory {
   kind?: string; also?: string[]; source: "said" | "told" | "operator" | "guessed"; used?: number; faded?: boolean;
 }
 
+// Mirrors internal/admin/mz_sort.go.
+export interface SortItem { id: number; fact?: string; subject?: string; kind: string; about: string; others: string[] | null }
+export interface ProfileHint { field: "pronouns" | "avatarPronouns" | "alias" | "runBy"; value: string; memoryId: number; fact: string }
+
 export interface Earlier {
   id: number; memoryId: number; fact: string; kind?: string; author: string; created: number;
   replacedBy?: number; replaced: number; why: string;

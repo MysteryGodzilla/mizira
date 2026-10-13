@@ -263,7 +263,7 @@ func TestMiziraEndpointsNeedTheToken(t *testing.T) {
 		{"GET", "/api/v1/tools"}, {"PUT", "/api/v1/tools"}, {"DELETE", "/api/v1/tools/switches"},
 		{"GET", "/api/v1/memories/subjects?network=net"}, {"GET", "/api/v1/memories?network=net"}, {"POST", "/api/v1/memories"},
 		{"PUT", "/api/v1/memories/1?network=net"}, {"DELETE", "/api/v1/memories/1?network=net"},
-		{"PUT", "/api/v1/memories/1/meta?network=net"}, {"GET", "/api/v1/memories/history?network=net&subject=bob"}, {"GET", "/api/v1/memories/history?network=net&subject=bob"}, {"GET", "/api/v1/profiles?network=net"}, {"PUT", "/api/v1/profiles"}, {"DELETE", "/api/v1/profiles?network=net&subject=bob"},
+		{"PUT", "/api/v1/memories/1/meta?network=net"}, {"GET", "/api/v1/memories/history?network=net&subject=bob"}, {"GET", "/api/v1/memories/history?network=net&subject=bob"}, {"POST", "/api/v1/memories/sort/preview"}, {"POST", "/api/v1/memories/sort/apply"}, {"GET", "/api/v1/profiles/hints?network=net&subject=bob"}, {"GET", "/api/v1/profiles?network=net"}, {"PUT", "/api/v1/profiles"}, {"DELETE", "/api/v1/profiles?network=net&subject=bob"},
 		{"GET", "/api/v1/selfnotes?network=net"}, {"POST", "/api/v1/selfnotes/1/approve?network=net"}, {"POST", "/api/v1/selfnotes/1/deny?network=net"},
 		{"POST", "/api/v1/memories/compact/preview"}, {"POST", "/api/v1/memories/compact/apply"},
 		{"GET", "/api/v1/safety"}} {
@@ -912,5 +912,59 @@ func TestMemoryHistoryFromTheConsole(t *testing.T) {
 	}
 	if code, _ := r.call(t, "GET", "/api/v1/memories/history?network=net", "s3cret", ""); code != http.StatusBadRequest {
 		t.Errorf("no subject = %d, want 400", code)
+	}
+}
+
+func (f *fakeMizira) SortPreview(network string) ([]SortView, int, error) {
+	if len(f.mems) == 0 {
+		return nil, 0, errors.New("every memory already has a kind")
+	}
+	return []SortView{{ID: f.mems[0].ID, Fact: f.mems[0].Fact, Subject: f.mems[0].Subject, Kind: "lore", About: "carol"}}, len(f.mems), nil
+}
+func (f *fakeMizira) SortApply(network string, items []SortView, by string) (int, []string, error) {
+	applied := 0
+	var problems []string
+	for _, it := range items {
+		i := slices.IndexFunc(f.mems, func(m MemoryView) bool { return m.ID == it.ID })
+		if i < 0 {
+			problems = append(problems, "gone")
+			continue
+		}
+		f.mems[i].Subject, f.mems[i].Kind, f.mems[i].Also = it.About, it.Kind, it.Others
+		applied++
+	}
+	return applied, problems, nil
+}
+func (f *fakeMizira) UnsortedCount(network string) (int, error) { return len(f.mems), nil }
+func (f *fakeMizira) ProfileHints(network, subject string) ([]ProfileHintView, error) {
+	return []ProfileHintView{{Field: "pronouns", Value: "she/her", MemoryID: 1}}, nil
+}
+
+func TestSortFromTheConsole(t *testing.T) {
+	r, m := newMzRig(t)
+	if code, _ := r.call(t, "POST", "/api/v1/memories/sort/preview", "s3cret", `{"network":"net"}`); code != http.StatusConflict {
+		t.Errorf("nothing to sort = %d, want 409", code)
+	}
+	r.call(t, "POST", "/api/v1/memories", "s3cret", `{"network":"net","subject":"bob","fact":"bob and carol won the quiz"}`)
+	code, out := r.call(t, "POST", "/api/v1/memories/sort/preview", "s3cret", `{"network":"net"}`)
+	if code != http.StatusOK || out["unsorted"] != float64(1) || len(out["suggestions"].([]any)) != 1 {
+		t.Fatalf("preview = %d %v", code, out)
+	}
+	code, out = r.call(t, "POST", "/api/v1/memories/sort/apply", "s3cret",
+		`{"network":"net","items":[{"id":1,"kind":"lore","about":"carol","others":["bob"]},{"id":9,"kind":"lore","about":"x"}]}`)
+	if code != http.StatusOK || out["applied"] != float64(1) || len(out["problems"].([]any)) != 1 {
+		t.Errorf("apply = %d %v", code, out)
+	}
+	if m.mems[0].Subject != "carol" || m.mems[0].Kind != "lore" {
+		t.Errorf("applied = %+v", m.mems[0])
+	}
+	if code, _ := r.call(t, "POST", "/api/v1/memories/sort/apply", "s3cret", `{"network":"net","items":[]}`); code != http.StatusBadRequest {
+		t.Errorf("empty apply = %d, want 400", code)
+	}
+	if _, out := r.call(t, "GET", "/api/v1/memories/subjects?network=net", "s3cret", ""); out["unsorted"] != float64(1) {
+		t.Errorf("subjects = %v", out)
+	}
+	if code, out := r.call(t, "GET", "/api/v1/profiles/hints?network=net&subject=bob", "s3cret", ""); code != http.StatusOK || len(out["hints"].([]any)) != 1 {
+		t.Errorf("hints = %d %v", code, out)
 	}
 }

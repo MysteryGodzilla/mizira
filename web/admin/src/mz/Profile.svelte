@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { MzConsole } from "./console.svelte";
-  import type { Profile } from "./types";
+  import type { Profile, ProfileHint } from "./types";
   import Card from "../components/Card.svelte";
   let { mz, network, subject, profile, onchange }:
     { mz: MzConsole; network: string; subject: string; profile: Profile | null; onchange: () => void } = $props();
@@ -12,7 +12,25 @@
   let avatarPronouns = $state("");
   let aliases = $state("");
 
-  $effect(() => { void subject; editing = false; });
+  let hints = $state<ProfileHint[]>([]);
+  $effect(() => {
+    void subject; void profile; editing = false;
+    void mz.api.profileHints(network, subject).then((h) => (hints = h)).catch(() => (hints = []));
+  });
+
+  const hintText = (h: ProfileHint) =>
+    h.field === "pronouns" ? `pronouns ${h.value}` : h.field === "avatarPronouns" ? `avatar's pronouns ${h.value}`
+      : h.field === "alias" ? `also called ${h.value}` : `a bot run by ${h.value}`;
+
+  async function use(h: ProfileHint) {
+    const p: Profile = { subject, bot: profile?.bot ?? false, runBy: profile?.runBy ?? "", pronouns: profile?.pronouns ?? "",
+      avatarPronouns: profile?.avatarPronouns ?? "", aliases: [...(profile?.aliases ?? [])] };
+    if (h.field === "pronouns") p.pronouns = h.value;
+    else if (h.field === "avatarPronouns") p.avatarPronouns = h.value;
+    else if (h.field === "alias") p.aliases = [...(p.aliases ?? []), h.value];
+    else { p.runBy = h.value; p.bot = true; }
+    if (await mz.act(() => mz.api.setProfile(network, p), `${subject}: ${hintText(h)}`)) onchange();
+  }
 
   function edit() {
     bot = profile?.bot ?? false;
@@ -68,6 +86,15 @@
   {:else}
     <p class="empty">No profile: pronouns, an avatar that differs, other names, or who runs a bot.</p>
   {/if}
+  {#if hints.length && !editing}
+    <p class="sub">Suggested from her memories:</p>
+    <ul class="hints">
+      {#each hints as h (h.field + h.value)}
+        <li><span class="grow">{hintText(h)} <span class="sub">(#{h.memoryId}: {h.fact})</span></span>
+          <button onclick={() => use(h)}>Use</button></li>
+      {/each}
+    </ul>
+  {/if}
 </Card>
 
 <style>
@@ -76,4 +103,7 @@
   label.check { flex-direction: row; align-items: center; gap: 6px; font-size: 13px; color: var(--fg); }
   .row { display: flex; gap: 6px; grid-column: 1 / -1; }
   p { margin: 0 0 6px; }
+  .hints { list-style: none; padding: 0; margin: 0; }
+  .hints li { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
+  .hints .grow { flex: 1; }
 </style>

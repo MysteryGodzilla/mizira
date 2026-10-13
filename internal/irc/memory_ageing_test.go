@@ -122,3 +122,15 @@ func TestCheckKind(t *testing.T) {
 		}
 	}
 }
+
+// Live test: "I go by Ev now" was saved under the subject "user".
+func TestUserSubjectIsTheSpeaker(t *testing.T) {
+	srv := fakeModel(t, "")
+	mock := ageingMock(t, "user-subject", srv.URL)
+	store, _ := core.Memories()
+	res := RememberAs(mock, "user", "user's nickname is Bee", core.KindIdentity, nil)
+	m, ok, _ := store.Get("user-subject", res.ID)
+	if !ok || m.Subject != "bob" || m.Fact != "bob's nickname is Bee" {
+		t.Errorf("saved %+v", m)
+	}
+}
