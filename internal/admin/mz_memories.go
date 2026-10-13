@@ -71,7 +71,8 @@ func (s *Server) memorySubjects(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusInternalServerError, "memory is unavailable")
 		return
 	}
-	respond(w, http.StatusOK, map[string]any{"subjects": subjects, "perSubject": limit})
+	unsorted, _ := s.mz.UnsortedCount(n)
+	respond(w, http.StatusOK, map[string]any{"subjects": subjects, "perSubject": limit, "unsorted": unsorted})
 }
 
 func (s *Server) memories(w http.ResponseWriter, r *http.Request) {

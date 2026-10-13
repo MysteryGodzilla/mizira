@@ -8,6 +8,7 @@
   import SelfNotes from "./SelfNotes.svelte";
   import Compact from "./Compact.svelte";
   import Profile from "./Profile.svelte";
+  import Sort from "./Sort.svelte";
   let { mz, board }: { mz: MzConsole; board: Dashboard } = $props();
 
   let networks = $derived(board.status?.networks.map((n) => n.name) ?? []);
@@ -16,6 +17,8 @@
 
   let subjects = $state<Subject[]>([]);
   let perSubject = $state(0);
+  let unsorted = $state(0);
+  let sortingOpen = $state(false);
   let selected = $state(""); // a subject, or "" with a search
   let query = $state("");
   let searched = $state("");
@@ -41,6 +44,7 @@
     const r = await mz.api.memorySubjects(net);
     subjects = r.subjects;
     perSubject = r.perSubject;
+    unsorted = r.unsorted;
     profiles = await mz.api.profiles(net);
   }
 
@@ -126,6 +130,12 @@
         <button type="submit">Search</button>
       </form>
     </Card>
+    {#if unsorted}
+      <Card title="Sort">
+        <p class="sub">{unsorted} {unsorted === 1 ? "memory has" : "memories have"} no kind yet.</p>
+        <button onclick={() => (sortingOpen = true)} disabled={sortingOpen}>Suggest kinds and people</button>
+      </Card>
+    {/if}
     <Card title="Room memory">
       <p class="sub">About her and the channel; sent with every request.</p>
       {#each room as s (s.subject)}
@@ -159,6 +169,9 @@
 
   <div class="main">
     {#if net !== null}<SelfNotes {mz} network={net} onchange={() => void reload()} />{/if}
+    {#if sortingOpen && net !== null}
+      <Sort {mz} network={net} onclose={(applied) => { sortingOpen = false; if (applied) void reload(); }} />
+    {/if}
     {#if selected && !isRoom && net !== null}
       <Profile {mz} network={net} subject={selected} {profile} onchange={() => void reload()} />
     {/if}

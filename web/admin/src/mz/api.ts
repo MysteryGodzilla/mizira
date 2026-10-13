@@ -1,5 +1,5 @@
 import { Api } from "../lib/api";
-import type { Bots, Cheatsheet, ExportResult, Conversation, Earlier, Feature, Fold, Memory, People, Profile, Reset, RunState, Safety, SelfNote, Service, Setting, SettingChange, Subject, Tool } from "./types";
+import type { Bots, Cheatsheet, ExportResult, Conversation, Earlier, Feature, Fold, Memory, People, Profile, ProfileHint, Reset, RunState, Safety, SelfNote, Service, Setting, SettingChange, SortItem, Subject, Tool } from "./types";
 
 const q = (params: Record<string, string>) => new URLSearchParams(params).toString();
 
@@ -47,7 +47,7 @@ export class MzApi extends Api {
   resetTools = () => this.call<{ reset: boolean }>("DELETE", "tools/switches");
 
   memorySubjects = (network: string) =>
-    this.call<{ subjects: Subject[]; perSubject: number }>("GET", `memories/subjects?${q({ network })}`);
+    this.call<{ subjects: Subject[]; perSubject: number; unsorted: number }>("GET", `memories/subjects?${q({ network })}`);
   memories = (network: string, by: { subject?: string; q?: string }) =>
     this.call<{ memories: Memory[] }>("GET", `memories?${q({ network, subject: by.subject ?? "", q: by.q ?? "" })}`)
       .then((r) => r.memories);
@@ -57,6 +57,12 @@ export class MzApi extends Api {
     this.call<{ id: number }>("PUT", `memories/${id}/meta?${q({ network })}`, { kind, also });
   memoryHistory = (network: string, subject: string) =>
     this.call<{ earlier: Earlier[] }>("GET", `memories/history?${q({ network, subject })}`).then((r) => r.earlier);
+  sortPreview = (network: string) =>
+    this.call<{ suggestions: SortItem[]; unsorted: number }>("POST", "memories/sort/preview", { network });
+  sortApply = (network: string, items: SortItem[]) =>
+    this.call<{ applied: number; problems: string[] }>("POST", "memories/sort/apply", { network, items });
+  profileHints = (network: string, subject: string) =>
+    this.call<{ hints: ProfileHint[] }>("GET", `profiles/hints?${q({ network, subject })}`).then((r) => r.hints);
   profiles = (network: string) =>
     this.call<{ profiles: Profile[] }>("GET", `profiles?${q({ network })}`).then((r) => r.profiles);
   setProfile = (network: string, p: Profile) => this.call<{ subject: string }>("PUT", "profiles", { network, ...p });

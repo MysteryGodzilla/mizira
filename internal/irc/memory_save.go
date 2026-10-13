@@ -220,6 +220,10 @@ func CheckKind(kind, fact string) string {
 	return kind
 }
 
+// speakerWord is a subject that means whoever is speaking.
+var speakerWord = map[string]bool{"user": true, "the user": true, "speaker": true, "the speaker": true,
+	"me": true, "i": true, "myself": true}
+
 // SplitNames splits "bob, carol and dave" into nicks.
 func SplitNames(s string) []string {
 	var out []string
@@ -238,6 +242,10 @@ const maxAlsoAbout = 4
 
 func rememberChecked(chatCtx ChatContextInterface, subject, fact string) RememberResult {
 	subject = subjectOf(subject)
+	// The model sometimes files the speaker as "user": a memory under that name is no one's.
+	if speakerWord[strings.ToLower(strings.TrimSpace(subject))] && chatCtx.Speaker() != "" {
+		subject = chatCtx.Speaker()
+	}
 	fact = nameTheSubject(subject, fact)
 	store, err := core.Memories()
 	if err != nil {

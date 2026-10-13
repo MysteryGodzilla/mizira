@@ -227,3 +227,42 @@ func (m *MemoryStore) existsLocked(network string, id int64) bool {
 	var one int
 	return m.db.QueryRow(`SELECT 1 FROM memories WHERE id = ? AND network = ?`, id, network).Scan(&one) == nil
 }
+
+// Unsorted lists memories saved without a kind, newest first, at most limit, and how many there are.
+func (m *MemoryStore) Unsorted(network string, limit int) ([]Memory, int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	const where = `FROM memories WHERE network = ? AND id NOT IN (SELECT id FROM memory_meta WHERE kind != '')`
+	var total int
+	if err := m.db.QueryRow(`SELECT COUNT(*) `+where, network).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	rows, err := m.db.Query(`SELECT id, network, subject, fact, author, channel, created `+where+
+		` ORDER BY created DESC LIMIT ?`, network, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	mems, err := scanMemories(rows)
+	return mems, total, err
+}
+
+// Refile moves a memory to another subject, which stops being one of its others. False if there is
+// no such memory; an error if the new subject already holds the same fact.
+func (m *MemoryStore) Refile(network string, id int64, subject string) (bool, error) {
+	subject = normalizeSubject(subject)
+	if subject == "" {
+		return false, fmt.Errorf("give a subject")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	res, err := m.db.Exec(`UPDATE memories SET subject = ? WHERE id = ? AND network = ?`, subject, id, network)
+	if err != nil {
+		return false, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return false, nil
+	}
+	_, err = m.db.Exec(`DELETE FROM memory_also WHERE id = ? AND subject = ?`, id, subject)
+	return true, err
+}

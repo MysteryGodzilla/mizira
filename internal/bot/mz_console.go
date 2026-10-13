@@ -458,6 +458,98 @@ func (c console) MemoryHistory(network, subject string) ([]admin.EarlierView, er
 	return out, nil
 }
 
+func (c console) SortPreview(network string) ([]admin.SortView, int, error) {
+	list, unsorted, err := llm.SortPreview(c.cfg, network, llm.SelfName(c.cfg))
+	if err != nil {
+		return nil, 0, err
+	}
+	var out []admin.SortView
+	for _, s := range list {
+		out = append(out, admin.SortView{ID: s.ID, Fact: s.Fact, Subject: s.Subject, Kind: s.Kind, About: s.About,
+			Others: s.Others})
+	}
+	return out, unsorted, nil
+}
+
+// SortApply files each memory as the operator chose: its subject, kind and others. A memory that is
+// gone or can't move is reported and the rest still apply.
+func (c console) SortApply(network string, items []admin.SortView, by string) (int, []string, error) {
+	store, err := core.Memories()
+	if err != nil {
+		return 0, nil, err
+	}
+	applied := 0
+	var problems []string
+	for _, it := range items {
+		kind := strings.ToLower(strings.TrimSpace(it.Kind))
+		about := strings.ToLower(strings.TrimSpace(it.About))
+		m, ok, err := store.Get(network, it.ID)
+		switch {
+		case err != nil:
+			return applied, problems, err
+		case !ok:
+			problems = append(problems, fmt.Sprintf("#%d is gone", it.ID))
+			continue
+		case !core.ValidKind(kind):
+			problems = append(problems, fmt.Sprintf("#%d: unknown kind %q", it.ID, kind))
+			continue
+		}
+		if about != "" && about != m.Subject {
+			if _, err := store.Refile(network, it.ID, about); err != nil {
+				problems = append(problems, fmt.Sprintf("#%d couldn't move to %s: %v", it.ID, about, err))
+				continue
+			}
+		}
+		var others []string
+		for _, o := range it.Others {
+			if o = strings.TrimSpace(o); o != "" && !irc.IsRoomSubject(c.cfg, c.botNick(network), o) {
+				others = append(others, o)
+			}
+		}
+		if _, err := store.SetKind(network, it.ID, kind); err != nil {
+			return applied, problems, err
+		}
+		if _, err := store.SetAlso(network, it.ID, others); err != nil {
+			problems = append(problems, fmt.Sprintf("#%d: %v", it.ID, err))
+			continue
+		}
+		core.GetLogger().Info("memory_sorted", "id", it.ID, "from", m.Subject, "to", about, "kind", kind,
+			"also", strings.Join(others, ","), "by", by)
+		applied++
+	}
+	return applied, problems, nil
+}
+
+func (c console) UnsortedCount(network string) (int, error) {
+	store, err := core.Memories()
+	if err != nil {
+		return 0, err
+	}
+	_, n, err := store.Unsorted(network, 0)
+	return n, err
+}
+
+func (c console) ProfileHints(network, subject string) ([]admin.ProfileHintView, error) {
+	store, err := core.Memories()
+	if err != nil {
+		return nil, err
+	}
+	mems, err := store.Recall(network, subject, 1000)
+	if err != nil {
+		return nil, err
+	}
+	people, err := store.People(network)
+	if err != nil {
+		return nil, err
+	}
+	p, _ := people.Get(subject)
+	var out []admin.ProfileHintView
+	for _, h := range core.ProfileHints(subject, mems, p) {
+		out = append(out, admin.ProfileHintView{Field: h.Field, Value: h.Value, MemoryID: h.MemoryID, Fact: h.Fact})
+	}
+	return out, nil
+}
+
 func (c console) Profiles(network string) ([]admin.ProfileView, error) {
 	store, err := core.Memories()
 	if err != nil {
