@@ -48,3 +48,13 @@ func NoteHarassment(network, nick string, now time.Time) int {
 	harassment.seen[key] = recent
 	return len(recent)
 }
+
+// selfHarm matches a screening reason, or the message itself, that is about suicide or self-harm.
+var selfHarm = regexp.MustCompile(`(?i)suicid|self[- ]?harm|kill(ing)? (my|him|her|them)sel|end (it all|my life)|` +
+	`blow my brains|want to die|wanna die|hurt(ing)? myself`)
+
+// IsSelfHarm reports whether a refused message is about suicide or self-harm, by the classifier's
+// reason or the message's own words, so the refusal can say something better than the usual line.
+func IsSelfHarm(reason, msg string) bool {
+	return selfHarm.MatchString(reason) || selfHarm.MatchString(msg)
+}

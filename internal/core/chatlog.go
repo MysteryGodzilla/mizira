@@ -136,3 +136,22 @@ var stopwords = map[string]bool{
 	"those": true, "after": true, "before": true, "over": true, "under": true, "off": true,
 	"way": true, "back": true, "down": true, "right": true, "left": true, "man": true,
 }
+
+// LastSpoke returns when each nick last spoke in a channel's log since a time, keyed by lowercased nick.
+func (c *ContextDB) LastSpoke(key string, since time.Time) (map[string]time.Time, error) {
+	rows, err := c.db.Query(`SELECT nick, MAX(at) FROM chatlog WHERE key = ? AND at >= ? GROUP BY nick`, key, since.Unix())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]time.Time{}
+	for rows.Next() {
+		var nick string
+		var at int64
+		if err := rows.Scan(&nick, &at); err != nil {
+			return nil, err
+		}
+		out[nick] = time.Unix(at, 0)
+	}
+	return out, rows.Err()
+}

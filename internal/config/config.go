@@ -99,6 +99,8 @@ type BotConfig struct {
 	// message never enters the session.
 	ScreenNicks   []string
 	ScreenRefusal string
+	SelfHarmReply string // said instead of ScreenRefusal when a refused message speaks of self-harm; "" uses ScreenRefusal
+	IgnoreNotice  string // posted when screening ignores someone; {nick}, {minutes}, {reason}; "" posts nothing
 	// ScreenAll screens everyone but admins, in and out, as if each were in ScreenNicks and FilterNicks.
 	ScreenAll bool
 
@@ -153,6 +155,7 @@ type BotConfig struct {
 	LoreFadeDays       int    // days a lore memory may go unused before it stops being sent unasked (0 = never)
 	LookMergePrompt    string // merges a new look into the one held; {subject} is replaced
 	SortPrompt         string // suggests a kind, subject and others for unsorted memories, for the operator to review
+	PresenceFrame      string // heads the list of who is in the channel, sent when it changes
 }
 
 type ModelConfig struct {
@@ -325,6 +328,8 @@ func GetFlags() []cli.Flag {
 		&cli.BoolFlag{Name: "screenall", Usage: "screen every non-admin's messages and the replies to them, not just screennicks/filternicks", Sources: src("screenall", "METALD_SCREENALL")},
 		&cli.StringSliceFlag{Name: "screennicks", Usage: "nicks whose messages are screened by a classifier before answering (empty disables)", Sources: src("screennicks", "METALD_SCREENNICKS")},
 		&cli.StringFlag{Name: "screenrefusal", Value: "no.", Usage: "what to say when a screened message is refused", Sources: src("screenrefusal", "METALD_SCREENREFUSAL")},
+		&cli.StringFlag{Name: "selfharmreply", Usage: "said instead of screenrefusal when a refused message talks about suicide or self-harm (empty = screenrefusal)", Sources: src("selfharmreply", "METALD_SELFHARMREPLY")},
+		&cli.StringFlag{Name: "ignorenotice", Usage: "posted when screening ignores someone for harassment; {nick}, {minutes} and {reason} are filled in (empty = ignore quietly)", Sources: src("ignorenotice", "METALD_IGNORENOTICE")},
 		&cli.StringSliceFlag{Name: "filternicks", Usage: "nicks whose conversations also get the bot's OUTGOING replies screened before posting (empty disables)", Sources: src("filternicks", "METALD_FILTERNICKS")},
 		&cli.BoolFlag{Name: "promptfloor", Value: true, Usage: "prepend the operator's rules to any user-set +prompt persona (disable only for testing)", Sources: src("promptfloor", "METALD_PROMPTFLOOR")},
 		// No defaults: the shipped text is in examples/chatbot.yml and the bot
@@ -355,6 +360,7 @@ func GetFlags() []cli.Flag {
 		&cli.IntFlag{Name: "lorefadedays", Value: 45, Usage: "days a lore memory (jokes, events) may go unmentioned before she stops bringing it up unasked; it comes back when it is mentioned (0 = never fade)", Sources: src("lorefadedays", "METALD_LOREFADEDAYS")},
 		&cli.StringFlag{Name: "lookmergeprompt", Usage: "merges a newly saved avatar look into the one already held, so each person keeps one current look; {subject} is replaced (required)", Sources: src("lookmergeprompt", "METALD_LOOKMERGEPROMPT")},
 		&cli.StringFlag{Name: "sortprompt", Usage: "suggests a kind, the person and the others involved for memories saved without a kind; the operator reviews each suggestion before it is applied (required)", Sources: src("sortprompt", "METALD_SORTPROMPT")},
+		&cli.StringFlag{Name: "presenceframe", Usage: "heads the list of who is in the channel now, which goes with a message when it has changed (required)", Sources: src("presenceframe", "METALD_PRESENCEFRAME")},
 		&cli.StringFlag{Name: "memoryframe", Usage: "text introducing what the bot remembers about the speaker; {nick} is replaced (required)", Sources: src("memoryframe", "METALD_MEMORYFRAME")},
 		&cli.StringFlag{Name: "memorypolicy", Usage: "policy checked before a fact is written to memory (required)", Sources: src("memorypolicy", "METALD_MEMORYPOLICY")},
 		&cli.StringFlag{Name: "recapprompt", Usage: "instructions for folding older conversation into the channel recap (required)", Sources: src("recapprompt", "METALD_RECAPPROMPT")},
@@ -564,6 +570,8 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			ScreenNicks:         c.StringSlice("screennicks"),
 			ScreenAll:           c.Bool("screenall"),
 			ScreenRefusal:       c.String("screenrefusal"),
+			SelfHarmReply:       c.String("selfharmreply"),
+			IgnoreNotice:        c.String("ignorenotice"),
 			FilterNicks:         c.StringSlice("filternicks"),
 			PromptFloor:         c.Bool("promptfloor"),
 			DataDir:             c.String("datadir"),
@@ -594,6 +602,7 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			LoreFadeDays:        int(c.Int("lorefadedays")),
 			LookMergePrompt:     c.String("lookmergeprompt"),
 			SortPrompt:          c.String("sortprompt"),
+			PresenceFrame:       c.String("presenceframe"),
 			RecapPrompt:         c.String("recapprompt"),
 			RecapFrame:          c.String("recapframe"),
 			BacklogFrame:        c.String("backlogframe"),
