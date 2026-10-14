@@ -13,6 +13,7 @@ import (
 	"github.com/alexschlessinger/pollytool/sessions"
 	"github.com/alexschlessinger/pollytool/tools"
 	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -159,15 +160,30 @@ func relevantMemories(ctx irc.ChatContextInterface, text string, known func(stri
 		ctx.GetLogger().Warn("relevant_memories_failed", "error", err.Error())
 		return ""
 	}
+	named, err := store.Mentioned(ctx.GetNetwork(), text, exclude)
+	if err != nil {
+		named = nil
+	}
+	// Relevant leaves out the bot's own facts; one that is about a person named here goes too.
+	for _, s := range named {
+		linked, err := store.Recall(ctx.GetNetwork(), s, 50)
+		if err != nil {
+			break
+		}
+		for _, m := range linked {
+			if irc.IsRoomSubject(ctx.GetConfig(), ctx.GetBotNick(), m.Subject) &&
+				!slices.ContainsFunc(mems, func(o core.Memory) bool { return o.ID == m.ID }) && len(mems) < maxRelevantMemories {
+				mems = append(mems, m)
+			}
+		}
+	}
 	mems = unseen(mems, known)
 	// Who the people it names are: pronouns, avatars, and which bot is whose.
 	var profiles []string
 	if people, err := store.People(ctx.GetNetwork()); err == nil {
-		if named, err := store.Mentioned(ctx.GetNetwork(), text, exclude); err == nil {
-			for _, s := range named {
-				if line := irc.ProfileLine(people, s); line != "" && !known(line) {
-					profiles = append(profiles, line)
-				}
+		for _, s := range named {
+			if line := irc.ProfileLine(people, s); line != "" && !known(line) {
+				profiles = append(profiles, line)
 			}
 		}
 	}
@@ -220,12 +236,19 @@ func roomBlock(ctx irc.ChatContextInterface) string {
 	}
 	var mems []core.Memory
 	for _, subject := range []string{self, cfg.Server.Channel} {
-		ms, err := store.Recall(ctx.GetNetwork(), subject, limit)
+		ms, err := store.Recall(ctx.GetNetwork(), subject, 1000)
 		if err != nil {
 			ctx.GetLogger().Warn("room_memory_failed", "error", err.Error())
 			return ""
 		}
 		mems = append(mems, ms...)
+	}
+	// A room fact that names someone ("she feels uneasy around bob") goes out with bob's memories, not
+	// with every request: sent always, it had her bringing up people who weren't there.
+	mems, err = store.KeepRoom(ctx.GetNetwork(), mems, []string{self, cfg.Server.Channel})
+	if err != nil {
+		ctx.GetLogger().Warn("room_memory_failed", "error", err.Error())
+		return ""
 	}
 	if len(mems) == 0 {
 		return ""
