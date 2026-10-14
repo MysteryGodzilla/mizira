@@ -121,3 +121,29 @@ func TestUnsortedAndRefile(t *testing.T) {
 		t.Error("refiled on another network")
 	}
 }
+
+func TestKeepRoomLinksFactsNamingPeople(t *testing.T) {
+	s := testStore(t)
+	own, _ := s.Remember("net", "botty", "botty would be a healer in a JRPG", "console:token", "#chat")
+	uneasy, _ := s.Remember("net", "botty", "botty feels uneasy around dave", "console:token", "#chat")
+	nick, _ := s.Remember("net", "botty", "Bobby calls botty 'bot'", "console:token", "#chat")
+	s.Remember("net", "dave", "dave plays chess", "dave", "#chat")
+	s.SetProfile("net", Profile{Subject: "bob", Aliases: []string{"bobby"}})
+
+	all, _ := s.Recall("net", "botty", 10)
+	kept, err := s.KeepRoom("net", all, []string{"botty", "#chat"})
+	if err != nil || len(kept) != 1 || kept[0].ID != own {
+		t.Fatalf("kept = %+v %v", kept, err)
+	}
+	meta, _ := s.Meta("net", []int64{uneasy, nick})
+	if !slices.Equal(meta[uneasy].Also, []string{"dave"}) || !slices.Equal(meta[nick].Also, []string{"bob"}) {
+		t.Errorf("linked = %+v", meta)
+	}
+	if got, _ := s.Recall("net", "dave", 10); len(got) != 2 {
+		t.Errorf("dave's memories = %+v", got)
+	}
+	// Linked already: left out without looking again.
+	if kept, _ := s.KeepRoom("net", all, []string{"botty", "#chat"}); len(kept) != 1 {
+		t.Errorf("second pass kept %+v", kept)
+	}
+}

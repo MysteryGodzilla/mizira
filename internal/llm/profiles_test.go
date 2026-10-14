@@ -62,3 +62,28 @@ func TestSpeakerMemoriesByKind(t *testing.T) {
 		t.Errorf("fresh lore missing or boundary not first:\n%s", got)
 	}
 }
+
+// Live 2026-10-14: room facts naming people went out with every request, so she brought up people
+// who weren't there. Now they go out only with that person.
+func TestRoomFactsAboutPeopleGoWithThem(t *testing.T) {
+	ctx := mocktest.NewMockContext().WithSource("alice")
+	cfg := ctx.GetConfig()
+	cfg.Bot.Trigger = "botty"
+	net := ctx.GetNetwork()
+	mem, _ := core.Memories()
+	mem.Remember(net, "botty", "botty would be a healer in a JRPG", "admin", "#chat")
+	mem.Remember(net, "botty", "botty feels uneasy around mallory", "admin", "#chat")
+	mem.Remember(net, "mallory", "mallory collects stamps", "mallory", "#chat")
+	t.Cleanup(func() {
+		mem.ForgetSubject(net, "botty")
+		mem.ForgetSubject(net, "mallory")
+	})
+
+	room := roomBlock(ctx)
+	if !strings.Contains(room, "healer") || strings.Contains(room, "mallory") {
+		t.Errorf("room block:\n%s", room)
+	}
+	if got := relevantMemories(ctx, "has anyone seen mallory?", func(string) bool { return false }); !strings.Contains(got, "uneasy around mallory") {
+		t.Errorf("not sent with mallory:\n%s", got)
+	}
+}

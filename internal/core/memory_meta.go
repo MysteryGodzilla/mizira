@@ -266,3 +266,32 @@ func (m *MemoryStore) Refile(network string, id int64, subject string) (bool, er
 	_, err = m.db.Exec(`DELETE FROM memory_also WHERE id = ? AND subject = ?`, id, subject)
 	return true, err
 }
+
+// KeepRoom returns the room memories (about the bot or the channel) that are about the room alone.
+// One that names a known person, by nick or another name in their profile, is about that person
+// too: it is linked to them, if it isn't yet, and left out, so it goes out only when they speak or
+// are named. exclude holds the room's own names.
+func (m *MemoryStore) KeepRoom(network string, mems []Memory, exclude []string) ([]Memory, error) {
+	meta, err := m.Meta(network, ids(mems))
+	if err != nil {
+		return nil, err
+	}
+	var out []Memory
+	for _, mem := range mems {
+		if len(meta[mem.ID].Also) > 0 {
+			continue
+		}
+		named, err := m.Mentioned(network, mem.Fact, exclude)
+		if err != nil {
+			return nil, err
+		}
+		if len(named) == 0 {
+			out = append(out, mem)
+			continue
+		}
+		if _, err := m.SetAlso(network, mem.ID, named); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
