@@ -310,9 +310,16 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 		}
 		ctx.GetLogger().Info("message_screened_out",
 			"source", ctx.GetSource(), "reason", reason, "suspicion", score)
-		ignoreHarasser(ctx, reason)
 		out := make(chan string, 1)
-		out <- ctx.GetConfig().Bot.ScreenRefusal
+		if harassmentDue(ctx, reason) {
+			// Said before the ignore, which drops everything to them after.
+			for _, line := range strings.Split(screenedReply(ctx, reason, msg, true), "\n") {
+				ctx.Reply(line)
+			}
+			ignoreSpeaker(ctx, reason)
+		} else {
+			out <- screenedReply(ctx, reason, msg, false)
+		}
 		close(out)
 		return out, nil
 	}
@@ -338,6 +345,9 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 		}
 		if rel := relevantMemories(ctx, msg+"\n"+backlogText, inConversation); rel != "" {
 			known = append(known, rel)
+		}
+		if here := presenceBlock(ctx, inConversation); here != "" {
+			known = append(known, here)
 		}
 		if len(known) > 0 {
 			content += "\n\n" + strings.Join(known, "\n\n")
