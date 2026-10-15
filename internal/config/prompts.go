@@ -35,6 +35,7 @@ var PromptKeys = []string{
 	"lookmergeprompt",
 	"sortprompt",
 	"presenceframe",
+	"timeframe",
 }
 
 // MissingPrompts returns the prompt keys that are empty or whitespace.
@@ -70,6 +71,7 @@ func MissingPrompts(b *BotConfig) []string {
 		"lookmergeprompt":    b.LookMergePrompt,
 		"sortprompt":         b.SortPrompt,
 		"presenceframe":      b.PresenceFrame,
+		"timeframe":          b.TimeFrame,
 	}
 	var missing []string
 	for _, k := range PromptKeys {

@@ -17,6 +17,7 @@ type ProfileView struct {
 	Pronouns       string   `json:"pronouns"`
 	AvatarPronouns string   `json:"avatarPronouns"`
 	Aliases        []string `json:"aliases"`
+	Timezone       string   `json:"timezone"`
 	Runs           []string `json:"runs,omitempty"` // the bots whose profiles name this one as runner
 	By             string   `json:"by,omitempty"`
 	Updated        int64    `json:"updated,omitempty"`

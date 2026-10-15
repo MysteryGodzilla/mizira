@@ -11,6 +11,8 @@
   let pronouns = $state("");
   let avatarPronouns = $state("");
   let aliases = $state("");
+  let timezone = $state("");
+  const zones: string[] = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.("timeZone") ?? [];
 
   let hints = $state<ProfileHint[]>([]);
   $effect(() => {
@@ -24,7 +26,7 @@
 
   async function use(h: ProfileHint) {
     const p: Profile = { subject, bot: profile?.bot ?? false, runBy: profile?.runBy ?? "", pronouns: profile?.pronouns ?? "",
-      avatarPronouns: profile?.avatarPronouns ?? "", aliases: [...(profile?.aliases ?? [])] };
+      avatarPronouns: profile?.avatarPronouns ?? "", aliases: [...(profile?.aliases ?? [])], timezone: profile?.timezone ?? "" };
     if (h.field === "pronouns") p.pronouns = h.value;
     else if (h.field === "avatarPronouns") p.avatarPronouns = h.value;
     else if (h.field === "alias") p.aliases = [...(p.aliases ?? []), h.value];
@@ -38,13 +40,15 @@
     pronouns = profile?.pronouns ?? "";
     avatarPronouns = profile?.avatarPronouns ?? "";
     aliases = (profile?.aliases ?? []).join(", ");
+    timezone = profile?.timezone ?? "";
     editing = true;
   }
 
   async function save(e: SubmitEvent) {
     e.preventDefault();
     const p: Profile = { subject, bot: bot || runBy.trim() !== "", runBy: runBy.trim(), pronouns: pronouns.trim(),
-      avatarPronouns: avatarPronouns.trim(), aliases: aliases.split(",").map((a) => a.trim()).filter(Boolean) };
+      avatarPronouns: avatarPronouns.trim(), aliases: aliases.split(",").map((a) => a.trim()).filter(Boolean),
+      timezone: timezone.trim() };
     if (await mz.act(() => mz.api.setProfile(network, p), `profile saved for ${subject}`)) { editing = false; onchange(); }
   }
 
@@ -61,6 +65,7 @@
     if (profile.pronouns) out.push(profile.pronouns);
     if (profile.avatarPronouns) out.push(`avatar ${profile.avatarPronouns}`);
     if (profile.aliases?.length) out.push(`also called ${profile.aliases.join(", ")}`);
+    if (profile.timezone) out.push(`time zone ${profile.timezone}`);
     for (const b of profile.runs ?? []) out.push(`runs the bot ${b}`);
     return out;
   });
@@ -76,6 +81,8 @@
       <label>Pronouns <input bind:value={pronouns} maxlength="24" placeholder="she/her" /></label>
       <label>Avatar's pronouns <input bind:value={avatarPronouns} maxlength="24" placeholder="only if different" /></label>
       <label>Also called <input bind:value={aliases} placeholder="other names, comma-separated" /></label>
+      <label>Time zone <input bind:value={timezone} maxlength="48" placeholder="e.g. Australia/Brisbane" list="tz-names" /></label>
+      <datalist id="tz-names">{#each zones as z (z)}<option value={z}></option>{/each}</datalist>
       <label class="check"><input type="checkbox" bind:checked={bot} /> a bot</label>
       <label>Run by <input bind:value={runBy} maxlength="32" placeholder="the nick that runs it" /></label>
       <div class="row"><button type="submit">Save</button><button type="button" onclick={() => (editing = false)}>Cancel</button></div>

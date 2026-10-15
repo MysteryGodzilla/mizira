@@ -7,6 +7,8 @@ package irc
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,10 +37,13 @@ func newIrcRemindTool() tools.Tool {
 		),
 		Params: schema.Params{
 			"nick":    schema.S("The nickname to remind (who gets pinged when it fires)"),
-			"minutes": schema.Int("How many minutes from now to send it"),
-			"text":    schema.S("What to say to them when it fires"),
+			"minutes": schema.Int("For \"in 20 minutes\" or \"in 2 hours\": how many minutes from now. Leave out when a clock time is given"),
+			"at": schema.S("For a clock time like \"4pm\" or \"16:30\": the time exactly as the person said it, " +
+				"in THEIR time zone; the tool converts it. Leave out when minutes is given"),
+			"day":  schema.S("With at: \"today\", \"tomorrow\", a weekday, or YYYY-MM-DD. Leave out for the next time that clock time comes"),
+			"text": schema.S("What to say to them when it fires"),
 		},
-		Required: []string{"nick", "minutes", "text"},
+		Required: []string{"nick", "text"},
 		Run: func(ctx context.Context, args tools.Args) (string, error) {
 			chatCtx, err := validateContext(ctx)
 			if err != nil {
@@ -61,6 +66,22 @@ func newIrcRemindTool() tools.Tool {
 
 			minutes := args.Int("minutes", 0)
 			d := time.Duration(minutes) * time.Minute
+			local := ""
+			if at := strings.TrimSpace(args.String("at")); at != "" {
+				loc, tz, ok := askerZone(chatCtx)
+				if !ok {
+					return fmt.Sprintf("Not set: %s's time zone isn't known, so %q can't be worked out. Ask them "+
+						"where they are (a city is enough), save it with profile__timezone, then set the reminder.",
+						chatCtx.Speaker(), at), nil
+				}
+				due, err := clockTime(time.Now(), loc, at, strings.TrimSpace(args.String("day")))
+				if err != nil {
+					return "Not set: " + err.Error() + ". Ask them to say the time another way.", nil
+				}
+				d = time.Until(due)
+				minutes = int(d.Round(time.Minute).Minutes())
+				local = fmt.Sprintf(" (%s %s)", due.Format("Mon 2 Jan 15:04"), tz)
+			}
 
 			// Out-of-range is refused rather than clamped.
 			if d < core.MinReminderDelay {
@@ -88,9 +109,9 @@ func newIrcRemindTool() tools.Tool {
 				"due", r.Due.UTC(), "set_by", r.SetBy, "text", r.Text)
 
 			return fmt.Sprintf(
-				"Reminder %s set for %s in %d minute(s), at %s UTC. It will be posted in the channel. "+
+				"Reminder %s set for %s in %d minute(s), at %s UTC%s. It will be posted in the channel. "+
 					"Confirm it briefly in your own voice.",
-				r.ID, r.Nick, minutes, r.Due.UTC().Format("15:04")), nil
+				r.ID, r.Nick, minutes, r.Due.UTC().Format("15:04"), local), nil
 		},
 	}
 }
@@ -145,4 +166,86 @@ func newIrcRemindersTool() tools.Tool {
 			return b.String(), nil
 		},
 	}
+}
+
+// askerZone is the time zone of whoever asked, from their profile.
+func askerZone(chatCtx ChatContextInterface) (*time.Location, string, bool) {
+	store, err := core.Memories()
+	if err != nil {
+		return nil, "", false
+	}
+	people, err := store.People(chatCtx.GetNetwork())
+	if err != nil {
+		return nil, "", false
+	}
+	loc, ok := people.Location(chatCtx.Speaker())
+	if !ok {
+		return nil, "", false
+	}
+	return loc, loc.String(), true
+}
+
+var clockRe = regexp.MustCompile(`(?i)^(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?$`)
+
+// clockTime is when a clock time ("4pm", "16:30", "9.15 am") next comes in loc, on day if given
+// ("today", "tomorrow", a weekday, or YYYY-MM-DD). Without a day, a time already past today is
+// tomorrow.
+func clockTime(now time.Time, loc *time.Location, at, day string) (time.Time, error) {
+	m := clockRe.FindStringSubmatch(strings.TrimSpace(at))
+	if m == nil {
+		return time.Time{}, fmt.Errorf("%q isn't a clock time", at)
+	}
+	hour, _ := strconv.Atoi(m[1])
+	minute := 0
+	if m[2] != "" {
+		minute, _ = strconv.Atoi(m[2])
+	}
+	switch strings.ToLower(m[3]) {
+	case "am":
+		if hour == 12 {
+			hour = 0
+		}
+	case "pm":
+		if hour < 12 {
+			hour += 12
+		}
+	}
+	if said, _ := strconv.Atoi(m[1]); hour > 23 || minute > 59 || (m[3] != "" && (said < 1 || said > 12)) {
+		return time.Time{}, fmt.Errorf("%q isn't a clock time", at)
+	}
+	here := now.In(loc)
+	date := time.Date(here.Year(), here.Month(), here.Day(), hour, minute, 0, 0, loc)
+	switch d := strings.ToLower(strings.TrimSpace(day)); {
+	case d == "" || d == "today":
+		if d == "" && !date.After(here) {
+			date = date.AddDate(0, 0, 1)
+		}
+	case d == "tomorrow":
+		date = date.AddDate(0, 0, 1)
+	default:
+		if t, err := time.ParseInLocation("2006-01-02", d, loc); err == nil {
+			date = time.Date(t.Year(), t.Month(), t.Day(), hour, minute, 0, 0, loc)
+			break
+		}
+		wd, ok := weekdays[strings.TrimSuffix(d, "s")]
+		if !ok {
+			return time.Time{}, fmt.Errorf("%q isn't a day", day)
+		}
+		ahead := (int(wd) - int(here.Weekday()) + 7) % 7
+		date = date.AddDate(0, 0, ahead)
+		if !date.After(here) {
+			date = date.AddDate(0, 0, 7)
+		}
+	}
+	if !date.After(here) {
+		return time.Time{}, fmt.Errorf("%s %s has already passed", day, at)
+	}
+	return date, nil
+}
+
+var weekdays = map[string]time.Weekday{
+	"sunday": time.Sunday, "monday": time.Monday, "tuesday": time.Tuesday, "wednesday": time.Wednesday,
+	"thursday": time.Thursday, "friday": time.Friday, "saturday": time.Saturday,
+	"sun": time.Sunday, "mon": time.Monday, "tue": time.Tuesday, "wed": time.Wednesday,
+	"thu": time.Thursday, "fri": time.Friday, "sat": time.Saturday,
 }

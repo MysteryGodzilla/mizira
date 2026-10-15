@@ -18,6 +18,9 @@ import (
 	"os/signal"
 	"syscall"
 
+	// Time zone names (profiles, reminders) on Windows, which has no zoneinfo for Go to read.
+	_ "time/tzdata"
+
 	"github.com/urfave/cli/v3"
 
 	"B4reMetal/metald/internal/bot"
