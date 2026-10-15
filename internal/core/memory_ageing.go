@@ -228,3 +228,25 @@ func stemmedWords(subject, fact string) (map[string]bool, bool) {
 	}
 	return words, negated
 }
+
+// Correct rewords one memory, keeping its date, and keeps the old wording as an earlier version of
+// it. False if there is no such memory; ErrMemoryLocked if it is locked.
+func (m *MemoryStore) Correct(network string, id int64, fact string) (bool, error) {
+	if m.IsLocked(network, id) {
+		return false, ErrMemoryLocked
+	}
+	m.mu.Lock()
+	res, err := m.db.Exec(`INSERT INTO memory_history
+		(network, memory_id, subject, fact, kind, author, created, replaced_by, replaced, why)
+		SELECT network, id, subject, fact, COALESCE((SELECT kind FROM memory_meta WHERE id = memories.id), ''),
+		  author, created, id, ?, 'corrected' FROM memories WHERE id = ? AND network = ?`,
+		time.Now().Unix(), id, network)
+	m.mu.Unlock()
+	if err != nil {
+		return false, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return false, nil
+	}
+	return m.Reword(network, id, fact)
+}

@@ -154,3 +154,30 @@ func TestCleanLook(t *testing.T) {
 		t.Error("empty answer accepted")
 	}
 }
+
+func TestCorrectKeepsTheOldWording(t *testing.T) {
+	s := testStore(t)
+	id, _ := s.Remember("net", "bob", "bob's cat is called Mochi", "bob", "#chat")
+	s.SetKind("net", id, KindLikes)
+	before, _, _ := s.Get("net", id)
+	if ok, err := s.Correct("net", id, "bob's cat is called Miso"); !ok || err != nil {
+		t.Fatalf("correct = %v %v", ok, err)
+	}
+	after, _, _ := s.Get("net", id)
+	if after.Fact != "bob's cat is called Miso" || !after.Created.Equal(before.Created) {
+		t.Errorf("after = %+v", after)
+	}
+	if meta, _ := s.Meta("net", []int64{id}); meta[id].Kind != KindLikes {
+		t.Errorf("kind lost: %+v", meta[id])
+	}
+	if h, _ := s.History("net", "bob", 5); len(h) != 1 || h[0].Fact != "bob's cat is called Mochi" || h[0].Why != "corrected" || h[0].ReplacedBy != id {
+		t.Errorf("history = %+v", h)
+	}
+	s.Lock("net", id, "console:token")
+	if _, err := s.Correct("net", id, "bob's cat is called Mo"); err != ErrMemoryLocked {
+		t.Errorf("locked = %v", err)
+	}
+	if ok, _ := s.Correct("other", id, "x"); ok {
+		t.Error("corrected on another network")
+	}
+}
