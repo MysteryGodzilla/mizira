@@ -6,6 +6,7 @@ package irc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -400,4 +401,77 @@ func recallKind(store *core.MemoryStore, network, subject, kind string) ([]core.
 	}
 	mems = core.OfKind(mems, meta, kind)
 	return mems[:min(len(mems), 20)], nil
+}
+
+// newMemoryCorrectTool fixes one memory's wording in place, instead of forgetting it and saving a
+// new one: it keeps its date, kind and the people it is about, and the old wording is kept as an
+// earlier version. The new wording passes the same checks as a save.
+func newMemoryCorrectTool() tools.Tool {
+	return &tools.Func{
+		Name: "memory__correct",
+		Desc: "Fix a memory that is wrong or out of date, when someone corrects you (\"no, my cat is called " +
+			"Miso, not Mochi\", \"I moved to Perth\"). Name the memory by who it is about and words from it, and " +
+			"give the corrected fact in full. Anyone may correct memories about THEMSELVES; only operators may " +
+			"correct memories about other people.",
+		Params: schema.Params{
+			"subject":  schema.S("Who the memory is about, usually a nick; the person asking if it's about them"),
+			"fact":     schema.S("Words from the memory as it is now, e.g. \"cat is called Mochi\""),
+			"new_fact": schema.S("The corrected fact in full, naming who it's about, e.g. \"bob's cat is called Miso\""),
+		},
+		Required: []string{"fact", "new_fact"},
+		Run: func(ctx context.Context, args tools.Args) (string, error) {
+			chatCtx, err := validateContext(ctx)
+			if err != nil {
+				return "", err
+			}
+			subject := strings.TrimSpace(args.String("subject"))
+			if subject == "" || speakerWord[strings.ToLower(subject)] {
+				subject = chatCtx.Speaker()
+			}
+			subject = subjectOf(subject)
+			query := strings.TrimSpace(args.String("fact"))
+			if query == "" {
+				return "", fmt.Errorf("say which memory to correct, in its own words")
+			}
+			if !strings.EqualFold(subject, chatCtx.Speaker()) && !chatCtx.IsAdmin() {
+				chatCtx.GetLogger().Info("memory_correct_denied", "subject", subject, "requested_by", chatCtx.SpeakerKey())
+				return fmt.Sprintf("Refused: those memories are about %s, not about the person asking. Only they or an operator can correct them.", subject), nil
+			}
+			store, err := core.Memories()
+			if err != nil {
+				chatCtx.GetLogger().Error("memory_store_unavailable", "error", err.Error())
+				return "Error: memory is unavailable right now", nil
+			}
+			mems, err := store.Recall(chatCtx.GetNetwork(), subject, 50)
+			if err != nil {
+				return "Error: could not read memory", nil
+			}
+			match, candidates := bestMemoryMatch(mems, query)
+			if match == nil {
+				if len(candidates) == 0 {
+					return fmt.Sprintf("Nothing remembered about %s matches %q. If it's new, save it with memory__remember.", subject, query), nil
+				}
+				return fmt.Sprintf("More than one memory about %s could match %q: %s. Ask which one, or call again "+
+					"with more of its words.", subject, query, quoteFacts(candidates)), nil
+			}
+			fact := nameTheSubject(match.Subject, strings.TrimSpace(args.String("new_fact")))
+			if fact == "" {
+				return "", fmt.Errorf("give the corrected fact")
+			}
+			if res, ok := screenFact(chatCtx, match.Subject, fact); !ok {
+				return fmt.Sprintf("Not corrected: the new wording was refused (%s). Say so briefly; the old memory stays.", res.Reason), nil
+			}
+			ok, err := store.Correct(chatCtx.GetNetwork(), match.ID, fact)
+			switch {
+			case errors.Is(err, core.ErrMemoryLocked):
+				return fmt.Sprintf("Not corrected: the operator has locked the memory %q, so it can't be changed from chat. Tell them it's locked.", match.Fact), nil
+			case err != nil || !ok:
+				return "Error: could not correct that", nil
+			}
+			chatCtx.GetLogger().Info("memory_corrected", "id", match.ID, "subject", match.Subject,
+				"from", match.Fact, "to", fact, "by", chatCtx.SpeakerKey())
+			return fmt.Sprintf("Corrected memory %d about %s: %q (was %q). Say briefly that you've fixed it.",
+				match.ID, match.Subject, fact, match.Fact), nil
+		},
+	}
 }

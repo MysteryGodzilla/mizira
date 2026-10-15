@@ -150,6 +150,7 @@ var nativeFactories = map[string]func() tools.Tool{
 	"memory__remember":  newMemoryRememberTool,
 	"memory__recall":    newMemoryRecallTool,
 	"memory__forget":    newMemoryForgetTool,
+	"memory__correct":   newMemoryCorrectTool,
 	"history__search":   newHistorySearchTool,
 	"task__start":       newTaskStartTool,
 	"task__schedule":    newTaskScheduleTool,

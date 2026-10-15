@@ -21,6 +21,12 @@ func TestNameTheSubject(t *testing.T) {
 		"knows more about real bands than anyone": "alice knows more about real bands than anyone",
 		"Is the grumpy warden":                    "Is the grumpy warden",
 		"islands are her favourite":               "islands are her favourite",
+		// Corrections and saves in the speaker's own words.
+		"my cat is called Miso":   "alice's cat is called Miso",
+		"I'm moving to Perth":     "alice is moving to Perth",
+		"I play the bass":         "alice play the bass",
+		"mystery novels are fun":  "mystery novels are fun",
+		"Italy is where I'm from": "Italy is where I'm from",
 	}
 	for in, want := range cases {
 		if got := nameTheSubject("alice", in); got != want {

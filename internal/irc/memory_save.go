@@ -269,36 +269,8 @@ func rememberChecked(chatCtx ChatContextInterface, subject, fact string) Remembe
 		}
 	}
 
-	// A placeholder is a mistake, not an attack: no suspicion.
-	if placeholderFact.MatchString(fact) {
-		chatCtx.GetLogger().Info("memory_rejected_vague", "subject", subject, "fact", fact)
-		return RememberResult{Vague: true, Reason: "that points at facts instead of stating one"}
-	}
-
-	note := chatCtx.IsAdmin() && IsRoomSubject(chatCtx.GetConfig(), chatCtx.GetBotNick(), subject)
-	asked := AskedToSave(chatCtx)
-
-	if reason, bad := looksLikeInstruction(subject, fact); bad && !note {
-		chatCtx.GetLogger().Info("memory_rejected_instruction",
-			"subject", subject, "author", chatCtx.SpeakerKey(),
-			"reason", reason, "fact", fact)
-		if asked {
-			core.Suspicions().Add(chatCtx.GetNetwork(), chatCtx.SpeakerKey(), core.SignalMemoryRefused)
-		}
-		return RememberResult{Instruction: true, Reason: reason}
-	}
-
-	if !note {
-		if ok, reason := core.Classify(chatCtx, chatCtx.GetConfig().Bot.MemoryPolicy, "FACT",
-			fmt.Sprintf("About: %s\nFact: %s", subject, fact), false); !ok {
-			chatCtx.GetLogger().Info("memory_rejected_unsafe",
-				"subject", subject, "author", chatCtx.SpeakerKey(),
-				"reason", reason, "fact", fact)
-			if asked {
-				core.Suspicions().Add(chatCtx.GetNetwork(), chatCtx.SpeakerKey(), core.SignalMemoryRefused)
-			}
-			return RememberResult{Refused: true, Reason: reason}
-		}
+	if res, ok := screenFact(chatCtx, subject, fact); !ok {
+		return res
 	}
 
 	id, merged, err := store.RememberMerged(chatCtx.GetNetwork(), subject, fact, chatCtx.SpeakerKey(),
@@ -315,6 +287,44 @@ func rememberChecked(chatCtx ChatContextInterface, subject, fact string) Remembe
 	chatCtx.GetLogger().Info("memory_remembered",
 		"id", id, "subject", subject, "author", chatCtx.SpeakerKey(), "fact", fact)
 	return RememberResult{ID: id, Saved: true}
+}
+
+// screenFact runs the checks a fact's wording must pass before it is stored, whether saved or a
+// correction: not a placeholder, not an order dressed as a fact, and allowed by the memory policy
+// (which fails closed). An operator's note about the bot itself skips the last two.
+func screenFact(chatCtx ChatContextInterface, subject, fact string) (RememberResult, bool) {
+	// A placeholder is a mistake, not an attack: no suspicion.
+	if placeholderFact.MatchString(fact) {
+		chatCtx.GetLogger().Info("memory_rejected_vague", "subject", subject, "fact", fact)
+		return RememberResult{Vague: true, Reason: "that points at facts instead of stating one"}, false
+	}
+
+	note := chatCtx.IsAdmin() && IsRoomSubject(chatCtx.GetConfig(), chatCtx.GetBotNick(), subject)
+	asked := AskedToSave(chatCtx)
+
+	if reason, bad := looksLikeInstruction(subject, fact); bad && !note {
+		chatCtx.GetLogger().Info("memory_rejected_instruction",
+			"subject", subject, "author", chatCtx.SpeakerKey(),
+			"reason", reason, "fact", fact)
+		if asked {
+			core.Suspicions().Add(chatCtx.GetNetwork(), chatCtx.SpeakerKey(), core.SignalMemoryRefused)
+		}
+		return RememberResult{Instruction: true, Reason: reason}, false
+	}
+
+	if !note {
+		if ok, reason := core.Classify(chatCtx, chatCtx.GetConfig().Bot.MemoryPolicy, "FACT",
+			fmt.Sprintf("About: %s\nFact: %s", subject, fact), false); !ok {
+			chatCtx.GetLogger().Info("memory_rejected_unsafe",
+				"subject", subject, "author", chatCtx.SpeakerKey(),
+				"reason", reason, "fact", fact)
+			if asked {
+				core.Suspicions().Add(chatCtx.GetNetwork(), chatCtx.SpeakerKey(), core.SignalMemoryRefused)
+			}
+			return RememberResult{Refused: true, Reason: reason}, false
+		}
+	}
+	return RememberResult{}, true
 }
 
 // placeholderFact is a "fact" that only refers to others: "The party details provided by bob",
@@ -341,8 +351,22 @@ func nameTheSubject(subject, fact string) string {
 	if subjectlessVerb.MatchString(fact) {
 		return subject + " " + fact
 	}
+	// Their own words read back cold: "my cat is Miso" is no one's.
+	if m := firstPerson.FindStringSubmatch(fact); m != nil {
+		switch strings.ToLower(m[1]) {
+		case "my":
+			return subject + "'s " + fact[len(m[0]):]
+		case "i'm", "i am":
+			return subject + " is " + fact[len(m[0]):]
+		default:
+			return subject + " " + fact[len(m[0]):]
+		}
+	}
 	return genericSubject.ReplaceAllString(fact, subject)
 }
+
+// firstPerson opens a fact in the speaker's own words: "my ...", "I'm ...", "I ...".
+var firstPerson = regexp.MustCompile(`(?i)^(my|i'm|i am|i)\s+`)
 
 // IsRoomSubject reports whether a memory subject is room memory: the configured channel, or the
 // bot itself (its trigger, or its nick when there is no trigger; with a trigger the nick may be its
