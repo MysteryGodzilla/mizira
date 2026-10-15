@@ -49,6 +49,7 @@ func DefaultTestConfig() *config.Configuration {
 			LookMergePrompt:    "merge the looks of {subject}",
 			SortPrompt:         "sort the memories",
 			PresenceFrame:      "in the channel now:",
+			TimeFrame:          "the time now:",
 			LoreFadeDays:       45,
 			RoomMemoryLimit:    15,
 			MemoryPerSubject:   40,

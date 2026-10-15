@@ -83,3 +83,33 @@ func TestMentionedFindsAliasesAndProfiles(t *testing.T) {
 		t.Errorf("relevant by alias = %+v", mems)
 	}
 }
+
+func TestTimezones(t *testing.T) {
+	s := testStore(t)
+	for tz, ok := range map[string]bool{"Australia/Brisbane": true, "America/New_York": true, "UTC": true,
+		"": false, "Local": false, "Mars/Olympus": false, "brisbane": false} {
+		if ValidTimezone(tz) != ok {
+			t.Errorf("ValidTimezone(%q) = %v", tz, !ok)
+		}
+	}
+	s.SetProfile("net", Profile{Subject: "bob", Pronouns: "he/him"})
+	if err := s.SetTimezone("net", "bob", "Australia/Brisbane", "bob"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetTimezone("net", "carol", "America/New_York", "carol"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetTimezone("net", "dave", "Mars/Olympus", "dave"); err == nil {
+		t.Error("a made-up zone was saved")
+	}
+	people, _ := s.People("net")
+	if bob, _ := people.Get("bob"); bob.Pronouns != "he/him" || bob.Timezone != "Australia/Brisbane" {
+		t.Errorf("bob = %+v", bob)
+	}
+	if loc, ok := people.Location("carol"); !ok || loc.String() != "America/New_York" {
+		t.Errorf("carol's location = %v %v", loc, ok)
+	}
+	if _, ok := people.Location("dave"); ok {
+		t.Error("dave has a location")
+	}
+}

@@ -156,6 +156,7 @@ type BotConfig struct {
 	LookMergePrompt    string // merges a new look into the one held; {subject} is replaced
 	SortPrompt         string // suggests a kind, subject and others for unsorted memories, for the operator to review
 	PresenceFrame      string // heads the list of who is in the channel, sent when it changes
+	TimeFrame          string // heads the current time, sent with each message
 }
 
 type ModelConfig struct {
@@ -361,6 +362,7 @@ func GetFlags() []cli.Flag {
 		&cli.StringFlag{Name: "lookmergeprompt", Usage: "merges a newly saved avatar look into the one already held, so each person keeps one current look; {subject} is replaced (required)", Sources: src("lookmergeprompt", "METALD_LOOKMERGEPROMPT")},
 		&cli.StringFlag{Name: "sortprompt", Usage: "suggests a kind, the person and the others involved for memories saved without a kind; the operator reviews each suggestion before it is applied (required)", Sources: src("sortprompt", "METALD_SORTPROMPT")},
 		&cli.StringFlag{Name: "presenceframe", Usage: "heads the list of who is in the channel now, which goes with a message when it has changed (required)", Sources: src("presenceframe", "METALD_PRESENCEFRAME")},
+		&cli.StringFlag{Name: "timeframe", Usage: "heads the current time (UTC, and the local time of the speaker and anyone named who has a time zone), sent with each message (required)", Sources: src("timeframe", "METALD_TIMEFRAME")},
 		&cli.StringFlag{Name: "memoryframe", Usage: "text introducing what the bot remembers about the speaker; {nick} is replaced (required)", Sources: src("memoryframe", "METALD_MEMORYFRAME")},
 		&cli.StringFlag{Name: "memorypolicy", Usage: "policy checked before a fact is written to memory (required)", Sources: src("memorypolicy", "METALD_MEMORYPOLICY")},
 		&cli.StringFlag{Name: "recapprompt", Usage: "instructions for folding older conversation into the channel recap (required)", Sources: src("recapprompt", "METALD_RECAPPROMPT")},
@@ -603,6 +605,7 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			LookMergePrompt:     c.String("lookmergeprompt"),
 			SortPrompt:          c.String("sortprompt"),
 			PresenceFrame:       c.String("presenceframe"),
+			TimeFrame:           c.String("timeframe"),
 			RecapPrompt:         c.String("recapprompt"),
 			RecapFrame:          c.String("recapframe"),
 			BacklogFrame:        c.String("backlogframe"),

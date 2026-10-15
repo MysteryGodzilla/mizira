@@ -71,7 +71,7 @@ export interface Earlier {
 
 // Mirrors internal/admin/mz_profiles.go.
 export interface Profile {
-  subject: string; bot: boolean; runBy: string; pronouns: string; avatarPronouns: string; aliases: string[] | null;
+  subject: string; bot: boolean; runBy: string; pronouns: string; avatarPronouns: string; aliases: string[] | null; timezone?: string;
   runs?: string[]; by?: string; updated?: number;
 }
 

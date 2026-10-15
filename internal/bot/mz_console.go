@@ -566,7 +566,7 @@ func (c console) Profiles(network string) ([]admin.ProfileView, error) {
 	var out []admin.ProfileView
 	for _, p := range list {
 		out = append(out, admin.ProfileView{Subject: p.Subject, Bot: p.Bot, RunBy: p.RunBy, Pronouns: p.Pronouns,
-			AvatarPronouns: p.AvatarPronouns, Aliases: p.Aliases, Runs: people.Bots(p.Subject), By: p.By,
+			AvatarPronouns: p.AvatarPronouns, Aliases: p.Aliases, Timezone: p.Timezone, Runs: people.Bots(p.Subject), By: p.By,
 			Updated: p.Updated.Unix()})
 	}
 	return out, nil
@@ -578,7 +578,7 @@ func (c console) SetProfile(network string, p admin.ProfileView, by string) erro
 		return err
 	}
 	return store.SetProfile(network, core.Profile{Subject: p.Subject, Bot: p.Bot, RunBy: p.RunBy,
-		Pronouns: p.Pronouns, AvatarPronouns: p.AvatarPronouns, Aliases: p.Aliases, By: by})
+		Pronouns: p.Pronouns, AvatarPronouns: p.AvatarPronouns, Aliases: p.Aliases, Timezone: p.Timezone, By: by})
 }
 
 func (c console) DeleteProfile(network, subject, _ string) (bool, error) {

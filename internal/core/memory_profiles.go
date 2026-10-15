@@ -25,6 +25,7 @@ type Profile struct {
 	Pronouns       string
 	AvatarPronouns string // only when the avatar's differ from the person's
 	Aliases        []string
+	Timezone       string // an IANA name, e.g. Australia/Brisbane; "" when not known
 	By             string
 	Updated        time.Time
 }
@@ -49,7 +50,23 @@ func createProfiles(db *sql.DB) error {
 		updated         INTEGER NOT NULL,
 		PRIMARY KEY (network, subject)
 	);`)
+	if err != nil {
+		return err
+	}
+	if !hasColumn(db, "memory_profiles", "timezone") {
+		_, err = db.Exec(`ALTER TABLE memory_profiles ADD COLUMN timezone TEXT NOT NULL DEFAULT ''`)
+	}
 	return err
+}
+
+// ValidTimezone reports whether tz is an IANA time zone name Go knows, like "Australia/Melbourne".
+// "Local" and "" are refused: the bot's own zone means nothing to the person.
+func ValidTimezone(tz string) bool {
+	if tz == "" || strings.EqualFold(tz, "local") {
+		return false
+	}
+	_, err := time.LoadLocation(tz)
+	return err == nil
 }
 
 // validName accepts one word that could be a nick or a name: no spaces or punctuation that IRC
@@ -85,6 +102,7 @@ func (m *MemoryStore) SetProfile(network string, p Profile) error {
 	p.RunBy = normalizeSubject(p.RunBy)
 	p.Pronouns = strings.TrimSpace(p.Pronouns)
 	p.AvatarPronouns = strings.TrimSpace(p.AvatarPronouns)
+	p.Timezone = strings.TrimSpace(p.Timezone)
 	p.Aliases = CleanAlso(p.Subject, p.Aliases)
 	switch {
 	case !validName(p.Subject):
@@ -95,6 +113,8 @@ func (m *MemoryStore) SetProfile(network string, p Profile) error {
 		return fmt.Errorf("pronouns are short, like she/her (up to %d characters)", maxPronouns)
 	case len(p.Aliases) > maxAliases:
 		return fmt.Errorf("up to %d other names", maxAliases)
+	case p.Timezone != "" && !ValidTimezone(p.Timezone):
+		return fmt.Errorf("%q isn't a time zone name; use one like Australia/Brisbane or America/New_York", p.Timezone)
 	}
 	for _, a := range p.Aliases {
 		if !validName(a) {
@@ -124,13 +144,13 @@ func (m *MemoryStore) SetProfile(network string, p Profile) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	_, err = m.db.Exec(`INSERT INTO memory_profiles
-		(network, subject, bot, run_by, pronouns, avatar_pronouns, aliases, by, updated)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(network, subject, bot, run_by, pronouns, avatar_pronouns, aliases, timezone, by, updated)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(network, subject) DO UPDATE SET bot = excluded.bot, run_by = excluded.run_by,
 		  pronouns = excluded.pronouns, avatar_pronouns = excluded.avatar_pronouns,
-		  aliases = excluded.aliases, by = excluded.by, updated = excluded.updated`,
+		  aliases = excluded.aliases, timezone = excluded.timezone, by = excluded.by, updated = excluded.updated`,
 		network, p.Subject, p.Bot, p.RunBy, p.Pronouns, p.AvatarPronouns, strings.Join(p.Aliases, ","),
-		p.By, time.Now().Unix())
+		p.Timezone, p.By, time.Now().Unix())
 	return err
 }
 
@@ -151,7 +171,7 @@ func (m *MemoryStore) DeleteProfile(network, subject string) (bool, error) {
 func (m *MemoryStore) Profiles(network string) ([]Profile, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	rows, err := m.db.Query(`SELECT subject, bot, run_by, pronouns, avatar_pronouns, aliases, by, updated
+	rows, err := m.db.Query(`SELECT subject, bot, run_by, pronouns, avatar_pronouns, aliases, timezone, by, updated
 		FROM memory_profiles WHERE network = ? ORDER BY subject`, network)
 	if err != nil {
 		return nil, err
@@ -162,7 +182,7 @@ func (m *MemoryStore) Profiles(network string) ([]Profile, error) {
 		var p Profile
 		var aliases string
 		var updated int64
-		if err := rows.Scan(&p.Subject, &p.Bot, &p.RunBy, &p.Pronouns, &p.AvatarPronouns, &aliases, &p.By, &updated); err != nil {
+		if err := rows.Scan(&p.Subject, &p.Bot, &p.RunBy, &p.Pronouns, &p.AvatarPronouns, &aliases, &p.Timezone, &p.By, &updated); err != nil {
 			return nil, err
 		}
 		if aliases != "" {
@@ -227,3 +247,27 @@ func (p People) Bots(subject string) []string {
 
 // Names lists every name a profile answers to, mapped to its subject.
 func (p People) Names() map[string]string { return p.byName }
+
+// SetTimezone sets one subject's time zone, keeping the rest of their profile (or starting one).
+func (m *MemoryStore) SetTimezone(network, subject, tz, by string) error {
+	people, err := m.People(network)
+	if err != nil {
+		return err
+	}
+	p, ok := people.Get(subject)
+	if !ok {
+		p = Profile{Subject: subject}
+	}
+	p.Timezone, p.By = tz, by
+	return m.SetProfile(network, p)
+}
+
+// Location is a subject's time zone, if their profile has one.
+func (p People) Location(subject string) (*time.Location, bool) {
+	pr, ok := p.Get(subject)
+	if !ok || pr.Timezone == "" {
+		return nil, false
+	}
+	loc, err := time.LoadLocation(pr.Timezone)
+	return loc, err == nil
+}
