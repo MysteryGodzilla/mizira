@@ -81,7 +81,11 @@ var configFields = map[string]configField{
 		getter: func(c *config.Configuration) string { return c.Bot.Prompt },
 	},
 	"model": {
-		setter: func(c *config.Configuration, v string) error { c.Model.Model = v; return nil },
+		setter: func(c *config.Configuration, v string) error {
+			c.Model.Model = v
+			core.ExportModelEnv(c.API.OpenAIURL, v, c.API.OpenAIKey)
+			return nil
+		},
 		getter: func(c *config.Configuration) string { return c.Model.Model },
 	},
 	"maxtokens": {

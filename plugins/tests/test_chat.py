@@ -22,6 +22,26 @@ class ChatTest(unittest.TestCase):
         self.addCleanup(self.srv.close)
         self.url = self.srv.url + "/v1"
 
+    # Unset, a tool's model settings are the bot's own model, so a single-model server isn't
+    # asked to swap; its own settings still win.
+    def test_endpoint_falls_back_to_the_bots_model(self):
+        keep = {k: os.environ.get(k) for k in ("METALD_MODEL_URL", "METALD_MODEL", "METALD_MODEL_KEY",
+                                                "X_API_URL", "X_API_MODEL", "X_API_KEY")}
+        def restore():
+            for k, v in keep.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+        self.addCleanup(restore)
+        for k in keep:
+            os.environ.pop(k, None)
+        self.assertEqual(chat.endpoint("X_API"), {"url": "http://127.0.0.1:4000/v1", "model": "chat", "key": ""})
+        os.environ.update({"METALD_MODEL_URL": "http://127.0.0.1:8081/v1", "METALD_MODEL": "m1", "METALD_MODEL_KEY": "k1"})
+        self.assertEqual(chat.endpoint("X_API"), {"url": "http://127.0.0.1:8081/v1", "model": "m1", "key": "k1"})
+        os.environ["X_API_MODEL"] = "vision-model"
+        self.assertEqual(chat.endpoint("X_API")["model"], "vision-model")
+
     def test_complete_sends_params_and_key(self):
         content, finish = chat.complete(self.url, "m", [{"role": "user", "content": "x"}],
                                         key="k", max_tokens=5, reasoning_effort="none")

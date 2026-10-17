@@ -8,7 +8,7 @@ Shared safety-review helper for metald tools.
 
 Configure under env: in config.yml (shared by every tool):
   SAFETY_REVIEW          "off" disables every review (deliberately explicit)
-  SAFETY_REVIEW_URL      OpenAI-compatible endpoint (default the local proxy)
+  SAFETY_REVIEW_URL      OpenAI-compatible endpoint (default the bot's own model, then the local proxy)
   SAFETY_REVIEW_MODEL    model/group name (default "chat")
   SAFETY_REVIEW_KEY      api key, if the endpoint needs one
   SAFETY_REVIEW_TIMEOUT  seconds (default 45)
@@ -20,12 +20,14 @@ import math
 
 from metald_tools import chat
 
+# Unset, the review uses the bot's own model (METALD_MODEL_*, exported by the bot).
 REVIEW_URL = os.environ.get("SAFETY_REVIEW_URL",
-                            os.environ.get("SANDBOX_REVIEW_URL", "http://127.0.0.1:4000/v1"))
+                            os.environ.get("SANDBOX_REVIEW_URL",
+                                           os.environ.get("METALD_MODEL_URL") or "http://127.0.0.1:4000/v1"))
 REVIEW_MODEL = os.environ.get("SAFETY_REVIEW_MODEL",
-                              os.environ.get("SANDBOX_REVIEW_MODEL", "chat"))
+                              os.environ.get("SANDBOX_REVIEW_MODEL", os.environ.get("METALD_MODEL") or "chat"))
 REVIEW_KEY = os.environ.get("SAFETY_REVIEW_KEY",
-                            os.environ.get("SANDBOX_REVIEW_KEY", "not-needed"))
+                            os.environ.get("SANDBOX_REVIEW_KEY", os.environ.get("METALD_MODEL_KEY") or "not-needed"))
 REVIEW_TIMEOUT = int(os.environ.get("SAFETY_REVIEW_TIMEOUT",
                                    os.environ.get("SANDBOX_REVIEW_TIMEOUT", "45")))
 

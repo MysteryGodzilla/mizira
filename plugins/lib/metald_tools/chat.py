@@ -17,11 +17,12 @@ class ChatError(RuntimeError):
 
 def endpoint(prefix: str, default_url: str = "http://127.0.0.1:4000/v1",
              default_model: str = "chat") -> dict:
-    """Read PREFIX_URL, PREFIX_MODEL and PREFIX_KEY, e.g. endpoint("VISION_API")."""
+    """Read PREFIX_URL, PREFIX_MODEL and PREFIX_KEY, e.g. endpoint("VISION_API"). Unset, they are
+    the bot's own model (METALD_MODEL_*), then the defaults."""
     return {
-        "url": os.environ.get(prefix + "_URL", default_url),
-        "model": os.environ.get(prefix + "_MODEL", default_model),
-        "key": os.environ.get(prefix + "_KEY", ""),
+        "url": os.environ.get(prefix + "_URL") or os.environ.get("METALD_MODEL_URL") or default_url,
+        "model": os.environ.get(prefix + "_MODEL") or os.environ.get("METALD_MODEL") or default_model,
+        "key": os.environ.get(prefix + "_KEY") or os.environ.get("METALD_MODEL_KEY", ""),
     }
 
 def request(url: str, payload: dict, key: str = "", timeout: float = 120) -> dict:

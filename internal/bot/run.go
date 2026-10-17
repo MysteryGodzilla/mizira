@@ -67,6 +67,7 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	commands.ApplyOverrides(cfg)
 	checkAdminMasks(config.List(&cfg.Bot.Admins))
 	core.SetConcurrency(cfg.Bot.MaxConcurrent)
+	core.ExportModelEnv(cfg.API.OpenAIURL, cfg.Model.Model, cfg.API.OpenAIKey)
 	if lib := core.ExportPluginLib(cfg.Bot.PluginLib); lib != "" {
 		core.GetLogger().Info("plugin_lib_exported", "path", lib)
 	} else {

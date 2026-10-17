@@ -723,7 +723,9 @@ env:
   # VISION_API_KEY: ""
   # VISION_MAX_SIDE: 1536   # larger images are shrunk to fit the model's vision budget
 
-  # pastes (paste)
+  # pastes (paste): an opengist instance, or PASTE_BACKEND: hosting to upload the text
+  # through UPLOAD_BACKEND below (e.g. rustypaste)
+  # PASTE_BACKEND: gist
   # GIST_URL: https://gist.example.com
   # GIST_TOKEN: ""
 
@@ -738,10 +740,14 @@ env:
   # RADIO_DJ_STYLE: An upbeat radio DJ, warm and quick   # how intros are spoken (MOSS)
   # LYRICS_ALIGN: comfyui   # contrib/lyricalign's ComfyUI nodes time song lyrics for read-along
 
-  # hosting for generated media. UPLOAD_BACKEND is zipline (default), imgbb
-  # (images only) or http (any host); see plugins/lib/metald_tools/hosting.py.
+  # hosting for generated media. UPLOAD_BACKEND is zipline (default), rustypaste,
+  # imgbb (images only) or http (any host); see plugins/lib/metald_tools/hosting.py.
   # ZIPLINE_URL: https://files.example.com
   # ZIPLINE_TOKEN: ""
+  # UPLOAD_BACKEND: rustypaste
+  # RUSTYPASTE_URL: https://files.example.com
+  # RUSTYPASTE_TOKEN: ""      # one of the server's auth tokens; give the bot its own
+  # RUSTYPASTE_EXPIRE: 7d     # used when a tool gives no expiry; unset keeps files
   # UPLOAD_BACKEND: http
   # UPLOAD_URL: https://files.example.com/api/upload   # may contain {filename}
   # UPLOAD_RESPONSE: files.0.url                        # JSON path to the URL, or "text"

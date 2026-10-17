@@ -4,7 +4,7 @@
 """Upload generated files to a host and return a public URL.
 
 Every media tool calls upload_file(). UPLOAD_BACKEND picks zipline (default),
-imgbb (images only) or http (any host, configured from the environment), and
+rustypaste, imgbb (images only) or http (any host, configured from the environment), and
 UPLOAD_HEADERS adds headers to every upload. The env: section of
 examples/chatbot.yml lists every setting. A custom plugin can add a backend with register_backend().
 """
@@ -54,8 +54,12 @@ def multipart(fields: dict, file_field: str, filename: str, content_type: str, d
     out += data + f"\r\n--{boundary}--\r\n".encode("utf-8")
     return out, f"multipart/form-data; boundary={boundary}"
 
+# Python's own User-Agent is refused by some hosts' bot checks (Cloudflare's 1010); UPLOAD_HEADERS
+# can still set another.
+USER_AGENT = "metald-uploader/1"
+
 def send(url: str, body: bytes, headers: dict, method: str = "POST", label: str = "upload") -> bytes:
-    headers = {**headers, **extra_headers()}
+    headers = {"User-Agent": USER_AGENT, **headers, **extra_headers()}
     req = urllib.request.Request(url, data=body, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=UPLOAD_TIMEOUT) as resp:
@@ -139,8 +143,21 @@ def upload_http(data: bytes, filename: str, content_type: str, deletes_at: str) 
     return find_url(send(url, body, headers, method=method, label="upload host"),
                     os.environ.get("UPLOAD_RESPONSE", ""))
 
-BACKENDS = {"zipline": upload_zipline, "imgbb": upload_imgbb, "http": upload_http}
-REQUIRES = {"zipline": ["ZIPLINE_URL", "ZIPLINE_TOKEN"], "imgbb": ["IMGBB_API_KEY"], "http": ["UPLOAD_URL"]}
+def upload_rustypaste(data: bytes, filename: str, content_type: str, deletes_at: str) -> str:
+    base, token = os.environ.get("RUSTYPASTE_URL", ""), os.environ.get("RUSTYPASTE_TOKEN", "")
+    if not base or not token:
+        raise HostingError("RUSTYPASTE_URL and RUSTYPASTE_TOKEN must be set")
+    body, ctype = multipart({}, "file", filename, content_type, data)
+    headers = {"Authorization": token, "Content-Type": ctype}
+    # rustypaste keeps a file forever unless told otherwise; "never" means just that.
+    expiry = (deletes_at or os.environ.get("RUSTYPASTE_EXPIRE", "")).strip()
+    if expiry and expiry.lower() != "never":
+        headers["expire"] = expiry
+    return find_url(send(base.rstrip("/") + "/", body, headers, label="rustypaste"), "text")
+
+BACKENDS = {"zipline": upload_zipline, "imgbb": upload_imgbb, "http": upload_http, "rustypaste": upload_rustypaste}
+REQUIRES = {"zipline": ["ZIPLINE_URL", "ZIPLINE_TOKEN"], "imgbb": ["IMGBB_API_KEY"], "http": ["UPLOAD_URL"],
+            "rustypaste": ["RUSTYPASTE_URL", "RUSTYPASTE_TOKEN"]}
 
 def register_backend(name: str, fn, requires=()):
     """fn(data, filename, content_type, deletes_at) -> url. Call send() and
