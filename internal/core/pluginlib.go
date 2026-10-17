@@ -33,3 +33,15 @@ func ExportPluginLib(dir string) string {
 	os.Setenv("PYTHONPATH", strings.Join(parts, string(os.PathListSeparator)))
 	return abs
 }
+
+// ExportModelEnv tells tools which model the bot is using (METALD_MODEL_URL, METALD_MODEL,
+// METALD_MODEL_KEY), so their own model calls (safety reviews, vision) use it unless their settings
+// name another. Asking a single-model server for a different one makes it unload the bot's model.
+func ExportModelEnv(url, model, key string) {
+	if _, name, found := strings.Cut(model, "/"); found {
+		model = name
+	}
+	os.Setenv("METALD_MODEL_URL", strings.TrimSuffix(url, "/"))
+	os.Setenv("METALD_MODEL", model)
+	os.Setenv("METALD_MODEL_KEY", key)
+}

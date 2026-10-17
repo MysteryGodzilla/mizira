@@ -48,7 +48,7 @@ class HostingTest(unittest.TestCase):
         keep = {k: v for k, v in os.environ.items()}
         self.addCleanup(lambda: (os.environ.clear(), os.environ.update(keep)))
         for k in list(os.environ):
-            if k.startswith(("UPLOAD_", "ZIPLINE_", "IMGBB_", "IMAGE_HOST")):
+            if k.startswith(("UPLOAD_", "ZIPLINE_", "IMGBB_", "IMAGE_HOST", "RUSTYPASTE_")):
                 del os.environ[k]
         os.environ["UPLOAD_RETRIES"] = "1"
         hosting.UPLOAD_RETRIES = 1
@@ -112,6 +112,37 @@ class HostingTest(unittest.TestCase):
         self.assertEqual(hosting.requires(), ["IMGBB_API_KEY"])
         os.environ["UPLOAD_BACKEND"] = "http"
         self.assertEqual(hosting.requires(), ["UPLOAD_URL"])
+
+    def test_rustypaste_backend(self):
+        os.environ.update({"UPLOAD_BACKEND": "rustypaste", "RUSTYPASTE_URL": self.base + "/",
+                           "RUSTYPASTE_TOKEN": "tok"})
+        self.assertEqual(hosting.requires(), ["RUSTYPASTE_URL", "RUSTYPASTE_TOKEN"])
+        Recorder.reply = b"https://files.example.com/abc123.txt\n"
+        url = hosting.upload_file(b"hello", "note.txt", "text/plain", deletes_at="1d")
+        self.assertEqual(url, "https://files.example.com/abc123.txt")
+        seen = Recorder.seen[-1]
+        self.assertEqual((seen["method"], seen["path"]), ("POST", "/"))
+        self.assertEqual(seen["headers"]["authorization"], "tok")
+        self.assertEqual(seen["headers"]["expire"], "1d")
+        self.assertIn(b'name="file"; filename="note.txt"', seen["body"])
+        # "never", or no expiry at all, keeps the file.
+        hosting.upload_file(b"hello", "keep.txt", "text/plain", deletes_at="never")
+        self.assertNotIn("expire", Recorder.seen[-1]["headers"])
+        os.environ["RUSTYPASTE_EXPIRE"] = "7d"
+        hosting.upload_file(b"hello", "keep.txt", "text/plain")
+        self.assertEqual(Recorder.seen[-1]["headers"]["expire"], "7d")
+        del os.environ["RUSTYPASTE_TOKEN"]
+        with self.assertRaises(hosting.HostingError):
+            hosting.upload_file(b"x", "a.txt", "text/plain")
+
+    # Cloudflare's bot check answers 403 (error 1010) to Python's own User-Agent.
+    def test_uploads_send_their_own_user_agent(self):
+        os.environ.update({"UPLOAD_BACKEND": "http", "UPLOAD_URL": self.base + "/up", "UPLOAD_RESPONSE": "url"})
+        hosting.upload_file(b"x", "a.png", "image/png")
+        self.assertEqual(Recorder.seen[-1]["headers"]["user-agent"], hosting.USER_AGENT)
+        os.environ["UPLOAD_HEADERS"] = "User-Agent: mine/2"
+        hosting.upload_file(b"x", "a.png", "image/png")
+        self.assertEqual(Recorder.seen[-1]["headers"]["user-agent"], "mine/2")
 
     def test_register_backend(self):
         hosting.register_backend("mine", lambda d, f, c, e: "https://mine.example.com/" + f, requires=["MINE_KEY"])

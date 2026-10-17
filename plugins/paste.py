@@ -7,8 +7,10 @@
 post_gist tool for metald.
 
 Configure under env: in config.yml:
-  GIST_URL      base url of the opengist instance (required)
-  GIST_TOKEN    access token for the bot's account (required)
+  PASTE_BACKEND gist (default: an opengist instance) or hosting (a text file through
+                metald_tools.hosting, i.e. UPLOAD_BACKEND and its settings)
+  GIST_URL      base url of the opengist instance (required for gist)
+  GIST_TOKEN    access token for the bot's account (required for gist)
   GIST_EXPIRE   default expiry: 1hour/12hours/1day (1day is the ceiling)
 """
 
@@ -23,9 +25,14 @@ _here = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [_here, os.path.join(_here, "lib")]
 from metald_tools import toollog
 from metald_tools import safetyreview
+from metald_tools import hosting
 
 GIST_URL = os.environ.get("GIST_URL", "").rstrip("/")
 GIST_TOKEN = os.environ.get("GIST_TOKEN", "")
+BACKEND = (os.environ.get("PASTE_BACKEND") or "gist").strip().lower()
+
+# The same expiries in the units upload hosts take.
+HOSTING_EXPIRY = {"1hour": "1h", "12hours": "12h", "1day": "1d"}
 
 # Expiries this tool offers. OpenGist also accepts longer ones and "never"; those are
 # deliberately not offered.
@@ -127,9 +134,14 @@ def print_schema():
         "additionalProperties": False,
         # Needs outbound network access (the gist API).
         "sandbox": {"allowNetwork": True},
-        "requires": ["GIST_URL", "GIST_TOKEN", "PASTE_SAFETY_POLICY"] + safetyreview.requires("PASTE_REVIEW"),
+        "requires": backend_requires() + ["PASTE_SAFETY_POLICY"] + safetyreview.requires("PASTE_REVIEW"),
     }
     print(json.dumps(schema, indent=2))
+
+def backend_requires() -> list:
+    if BACKEND == "hosting":
+        return hosting.requires()
+    return ["GIST_URL", "GIST_TOKEN"]
 
 def filename_for(title: str, language: str) -> str:
     ext = LANGUAGE_EXTENSIONS.get(language, LANGUAGE_EXTENSIONS[DEFAULT_LANGUAGE])
@@ -172,7 +184,10 @@ def post_gist(content: str, language: str = DEFAULT_LANGUAGE,
         return "Error: content is empty"
     if len(content) > MAX_CONTENT_LEN:
         return f"Error: content too long ({len(content)} chars, max {MAX_CONTENT_LEN})"
-    if not GIST_TOKEN:
+    if BACKEND not in ("gist", "hosting"):
+        toollog.log_detail("paste", f"unknown PASTE_BACKEND {BACKEND!r}: gist or hosting")
+        return GENERIC_ERROR
+    if BACKEND == "gist" and not GIST_TOKEN:
         toollog.log_detail("paste", "GIST_TOKEN is not set")
         return GENERIC_ERROR
 
@@ -195,6 +210,15 @@ def post_gist(content: str, language: str = DEFAULT_LANGUAGE,
         if not allowed:
             toollog.log_detail("paste", f"review DENIED ({reason}): {content[:200]!r}")
             return REVIEW_REFUSAL.format(reason=reason)
+
+    if BACKEND == "hosting":
+        try:
+            url = hosting.upload_file(content.encode("utf-8"), filename_for(title, language),
+                                      "text/plain; charset=utf-8", HOSTING_EXPIRY[expire])
+        except hosting.HostingError as e:
+            toollog.log_detail("paste", f"hosting upload failed: {e}")
+            return GENERIC_ERROR
+        return f"url: {url}\nlines: {content.count(chr(10)) + 1}\nexpires: {expire}"
 
     try:
         url = create_gist(content, language, title, expire)

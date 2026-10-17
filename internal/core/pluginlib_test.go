@@ -33,3 +33,14 @@ func TestExportPluginLibMissingDirIsANoop(t *testing.T) {
 		t.Fatal("missing dir must not be exported")
 	}
 }
+
+func TestExportModelEnv(t *testing.T) {
+	for _, k := range []string{"METALD_MODEL_URL", "METALD_MODEL", "METALD_MODEL_KEY"} {
+		t.Setenv(k, "")
+	}
+	ExportModelEnv("http://127.0.0.1:8081/v1/", "openai/gemma-small", "k")
+	if os.Getenv("METALD_MODEL_URL") != "http://127.0.0.1:8081/v1" || os.Getenv("METALD_MODEL") != "gemma-small" ||
+		os.Getenv("METALD_MODEL_KEY") != "k" {
+		t.Errorf("exported %q %q %q", os.Getenv("METALD_MODEL_URL"), os.Getenv("METALD_MODEL"), os.Getenv("METALD_MODEL_KEY"))
+	}
+}
