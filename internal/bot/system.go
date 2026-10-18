@@ -153,6 +153,9 @@ func loadToolSpec(reg *tools.ToolRegistry, toolSpec string, adminTools map[strin
 					if tool, ok := reg.Get(name); ok && meta.Requester {
 						reg.Register(irc.NewRequesterTool(tool))
 					}
+					if meta.Announcer {
+						core.SetAnnouncer(name, toolSpec)
+					}
 				}
 			}
 		}

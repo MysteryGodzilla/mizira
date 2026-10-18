@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -86,5 +87,45 @@ func TestQuietTools(t *testing.T) {
 	SetQuietTool("slap__slap")
 	if !QuietTool("slap__slap") || QuietTool("websearch__web_search") {
 		t.Fatal("quiet tool set is wrong")
+	}
+}
+
+// announceTool writes a plugin that prints line for --announce, or fails when line is empty.
+func announceTool(t *testing.T, line string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "tool.sh")
+	body := "#!/bin/sh\n[ \"$1\" = --announce ] && [ -n '" + line + "' ] && echo '" + line + "' && exit 0\nexit 1\n"
+	if runtime.GOOS == "windows" {
+		p = filepath.Join(t.TempDir(), "tool.cmd")
+		body = "@echo off\r\nif \"%1\"==\"--announce\" if not \"" + line + "\"==\"\" (echo " + line + "& exit /b 0)\r\nexit /b 1\r\n"
+	}
+	if err := os.WriteFile(p, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestAnnouncementRunsTheTool(t *testing.T) {
+	SetAnnouncer("announcetest__ok", announceTool(t, "action: is drawing"))
+	got, ok := Announcement("announcetest__ok")
+	if !ok || strings.TrimSpace(got) != "action: is drawing" {
+		t.Fatalf("got %q, %v", got, ok)
+	}
+}
+
+func TestAnnouncementFailsWithoutAnnouncer(t *testing.T) {
+	if _, ok := Announcement("announcetest__none"); ok {
+		t.Fatal("a tool without an announcer announced")
+	}
+	SetAnnouncer("announcetest__broken", announceTool(t, ""))
+	if _, ok := Announcement("announcetest__broken"); ok {
+		t.Fatal("a failing --announce counted as an announcement")
+	}
+}
+
+func TestReadShellToolMetaAnnouncer(t *testing.T) {
+	meta, err := ReadShellToolMeta(fakeTool(t, `{"title":"x","announcer":true}`))
+	if err != nil || !meta.Announcer {
+		t.Fatalf("announcer not read: %+v, %v", meta, err)
 	}
 }
