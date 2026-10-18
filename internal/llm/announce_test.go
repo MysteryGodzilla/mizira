@@ -107,3 +107,19 @@ func TestOnComplete_ReplyWithoutTheToolURLGetsIt(t *testing.T) {
 		t.Fatalf("want the reply then the link, got %q", got)
 	}
 }
+
+// Another bot's call to a people-only tool only refuses, so nothing is announced.
+func TestOnToolStart_PeopleOnlyToolIsNotAnnouncedForBots(t *testing.T) {
+	core.SetAnnouncer("botstest__picture", announcer(t, "action: is drawing a picture"))
+	sys := mocktest.NewMockSystem()
+	sys.ToolRegistry.Register(irc.NewPeopleOnlyTool(namedTool{name: "botstest__picture"}))
+	ctx := mocktest.NewMockContext().WithSystem(sys)
+	ctx.BotLine = true
+	cfg := ctx.GetConfig()
+	cfg.Bot.ShowToolActions = true
+	h := newCallbackHandler(ctx, irc.NewChunker(make(chan string, 10), 350), cfg)
+	h.onToolStart([]messages.ChatMessageToolCall{{Name: "botstest__picture"}})
+	if len(ctx.Actions) != 0 {
+		t.Fatalf("announced for a bot: %q", ctx.Actions)
+	}
+}

@@ -524,7 +524,7 @@ func (h *callbackHandler) onToolStart(calls []messages.ChatMessageToolCall) {
 	// (e.g. after a failed safety check) shouldn't re-announce "calling X" a second time.
 	var names []string
 	for _, tc := range calls {
-		if silentTools[tc.Name] || core.QuietTool(tc.Name) || !h.toolExists(tc.Name) || h.refusedAsNonAdmin(tc.Name) {
+		if silentTools[tc.Name] || core.QuietTool(tc.Name) || !h.toolExists(tc.Name) || h.refusedHere(tc.Name) {
 			continue
 		}
 		displayName := toolDisplayName(tc.Name)
@@ -693,13 +693,13 @@ func (h *callbackHandler) toolExists(name string) bool {
 	return ok
 }
 
-// refusedAsNonAdmin reports whether the call is to an admin-only tool by someone who isn't an admin:
-// the tool will only refuse, so announcing it would say something is happening when nothing is.
-func (h *callbackHandler) refusedAsNonAdmin(name string) bool {
+// refusedHere reports whether the tool will only refuse this caller (admin-only for someone who
+// isn't, people-only for another bot): announcing it would say something is happening when nothing is.
+func (h *callbackHandler) refusedHere(name string) bool {
 	sys := h.chatCtx.GetSystem()
-	if sys == nil || sys.GetToolRegistry() == nil || h.chatCtx.IsAdmin() {
+	if sys == nil || sys.GetToolRegistry() == nil {
 		return false
 	}
 	tool, ok := sys.GetToolRegistry().Get(name)
-	return ok && irc.IsAdminOnly(tool)
+	return ok && irc.RefusedFor(tool, h.chatCtx)
 }

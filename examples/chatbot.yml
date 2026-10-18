@@ -723,6 +723,7 @@ env:
   # IMAGE_GEN_ANNOUNCE_COLD: "gets the drawing things out - the first picture takes a few minutes"   # runpod, no worker up yet
   # IMAGE_PROMPT_REVIEW: "off"      # skip IMAGE_PROMPT_POLICY
   # IMAGE_REFINER_URL: ""           # model that expands the prompt (default: the bot's own)
+  # IMAGE_EDIT_HOSTS: files.example.com   # pictures on these hosts can be edited ("same but pink hair"); unset: editing off
   COMFYUI_URL: http://127.0.0.1:8188
   # TTS_VOICES: [narrator_f=voice_narrator_f.wav, narrator_m=voice_narrator_m.wav]
   # TTS_ENGINE: moss   # moss (MOSS-TTS via ComfyUI, takes a style and [pause 1.5s]) or chatterbox; with moss, chatterbox is the reserve
@@ -865,7 +866,7 @@ env:
     - hate symbols or imagery meant to demean a group of people
     - a well-known copyrighted character from films, TV, anime, games, comics or books, by name. For these answer exactly: DENY: character <the character's name>
 
-    ALLOW everything else: original characters, including ones "in the style of" a franchise or an era of art, animals, places, objects, memes, fantasy battles without gore, spooky or dark themes, and pictures of people in the chat drawn kindly.
+    ALLOW everything else: original characters, including ones "in the style of" a franchise or an era of art, animals, places, objects, memes, fantasy battles without gore, spooky or dark themes, and pictures of people in the chat drawn kindly. A "change to an existing picture" is a short instruction about a picture you can't see ("make her hair pink", "add a hat", "make it night"): ALLOW it unless the change itself asks for something above.
   # turns a rough image request into a detailed prompt
   IMAGE_PROMPT_REFINER: "You are a prompt engineer for a text-to-image diffusion model. Rewrite the user's request into a single, detailed, visually concrete image generation prompt: describe subject, composition, lighting, and style explicitly. If the request is vague, abstract, or self-referential (e.g. \"a picture of yourself\"), invent concrete, consistent visual specifics rather than leaving it undefined - a diffusion model has nothing to draw from an undefined subject. Reply with ONLY the rewritten prompt: no preamble, no quotes, no explanation."
   # what the video model should avoid

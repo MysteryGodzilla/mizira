@@ -128,6 +128,50 @@ func (a *AdminOnlyTool) Execute(ctx context.Context, args map[string]any) (strin
 	return a.Tool.Execute(ctx, args)
 }
 
+// PeopleOnlyTool wraps a tool so it refuses calls made for another bot's line: a person could
+// otherwise ask a bot to ask, and get round the tool's per-person limits.
+type PeopleOnlyTool struct {
+	tools.Tool
+}
+
+// NewPeopleOnlyTool wraps tool so it refuses calls made for another bot's line.
+func NewPeopleOnlyTool(tool tools.Tool) *PeopleOnlyTool {
+	return &PeopleOnlyTool{Tool: tool}
+}
+
+func (p *PeopleOnlyTool) Execute(ctx context.Context, args map[string]any) (string, error) {
+	chatCtx, err := GetIRCContext(ctx)
+	if err != nil {
+		return "", err
+	}
+	if chatCtx.IsBotLine() {
+		return fmt.Sprintf("Not allowed: this tool is only used for people, not for other bots (%s). "+
+			"Say so plainly; don't retry it for them.", chatCtx.Speaker()), nil
+	}
+	return p.Tool.Execute(ctx, args)
+}
+
+// RefusedFor reports whether tool will only refuse this caller: an admin-only tool for someone who
+// isn't an admin, or a people-only tool for another bot's line.
+func RefusedFor(tool tools.Tool, chatCtx ChatContextInterface) bool {
+	for {
+		switch t := tool.(type) {
+		case *AdminOnlyTool:
+			if !chatCtx.IsAdmin() {
+				return true
+			}
+			tool = t.Tool
+		case *PeopleOnlyTool:
+			if chatCtx.IsBotLine() {
+				return true
+			}
+			tool = t.Tool
+		default:
+			return false
+		}
+	}
+}
+
 // RegisterIRCTools registers IRC tools as native tools with polly's registry
 func RegisterIRCTools(registry *tools.ToolRegistry) {
 	for name, f := range nativeFactories {

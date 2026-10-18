@@ -30,7 +30,7 @@ class RunPodImageTests(unittest.TestCase):
             self.addCleanup(p.stop)
 
     def draw(self, verdict="SAFE - a cat", error=None, who="alice"):
-        def run(workflow, timeout, log=None):
+        def run(workflow, timeout, log=None, inputs=None):
             self.sent = workflow
             if error:
                 raise error
@@ -83,6 +83,45 @@ class RunPodImageTests(unittest.TestCase):
     def test_sizes_are_bounded(self):
         self.assertEqual([imagegen.side(v) for v in (None, "x", 100, 1000, 9999)], [1024, 1024, 512, 992, 1536])
 
+    def test_edit_sends_the_picture_and_keeps_its_size(self):
+        seen = {}
+
+        def run(workflow, timeout, log=None, inputs=None):
+            seen.update(workflow=workflow, inputs=inputs)
+            return {"images": [b"png"], "texts": ["SAFE"]}
+        with patch.object(imagegen, "EDIT_HOSTS", ["files.example.com"]), \
+                patch.object(imagegen.vision, "fetch_image", lambda url: (b"source", "image/png")), \
+                patch.object(imagegen.vision, "fit_for_model", lambda b, m: (b, m)), \
+                patch.object(imagegen, "refine_prompt", lambda p: self.fail("an edit was sent to the refiner")), \
+                patch.object(runpod, "run", run):
+            reply = imagegen.generate_image("make her hair pink", 1024, 1024, requested_by="alice",
+                                            image_url="https://files.example.com/a.png")
+        self.assertEqual(reply, "url: https://files.example.com/a.png")
+        wf = seen["workflow"]
+        self.assertEqual(seen["inputs"], {imagegen.SOURCE_NAME: b"source"})
+        self.assertEqual(wf["11"], {"class_type": "LoadImage", "inputs": {"image": imagegen.SOURCE_NAME}})
+        self.assertEqual(wf["4"]["inputs"]["images.image_1"], ["11", 0])
+        self.assertEqual(wf["4"]["inputs"]["prompt"], "make her hair pink")
+        self.assertEqual(wf["6"]["inputs"]["latent_image"], ["4", 2])
+        self.assertNotIn("5", wf)
+
+    def test_edit_only_from_allowed_hosts(self):
+        with patch.object(imagegen, "EDIT_HOSTS", ["files.example.com"]), \
+                patch.object(imagegen.vision, "fetch_image", lambda url: self.fail("fetched a disallowed host")):
+            reply = imagegen.generate_image("pink hair", 1024, 1024, requested_by="alice",
+                                            image_url="https://evil.example.net/a.png")
+        self.assertTrue(reply.startswith("Not edited: only pictures on files.example.com"), reply)
+        self.assertTrue(self.draw().startswith("url: "), "a refused edit doesn't use up the cap")
+
+    def test_schema_keeps_other_bots_out(self):
+        import io, json
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            imagegen.print_schema()
+        schema = json.loads(buf.getvalue())
+        self.assertTrue(schema["nobots"] and schema["requester"] and schema["announcer"])
+        self.assertIn("image_url", schema["properties"])
 
 if __name__ == "__main__":
     unittest.main()
