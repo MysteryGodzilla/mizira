@@ -8,6 +8,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alexschlessinger/pollytool/tools"
 
@@ -96,5 +97,25 @@ func TestRefusedForLooksThroughEveryWrapper(t *testing.T) {
 		if got := RefusedFor(tool, tc.ctx); got != tc.want {
 			t.Errorf("%s: RefusedFor = %v, want %v", name, got, tc.want)
 		}
+	}
+}
+
+// The model drew a second picture in the same turn and posted both.
+func TestOncePerRequestTool(t *testing.T) {
+	rec := &argsRecorder{}
+	once := NewOncePerRequestTool(rec)
+	ctx := InjectContext(context.Background(), mocktest.NewMockContext())
+	if out, _ := once.Execute(ctx, map[string]any{}); out != "ok" {
+		t.Fatalf("first call = %q", out)
+	}
+	if out, _ := once.Execute(ctx, map[string]any{}); !strings.HasPrefix(out, "Already done:") {
+		t.Fatalf("second call in the same request = %q", out)
+	}
+	now := time.Now()
+	if !once.first("another-request", now) {
+		t.Fatal("a new request was refused")
+	}
+	if !once.first("mock-request", now.Add(2*time.Hour)) {
+		t.Fatal("old requests aren't forgotten")
 	}
 }

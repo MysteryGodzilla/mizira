@@ -129,7 +129,8 @@ def print_schema():
             "image_url": {
                 "type": "string",
                 "description": "optional: the link of an earlier picture to change instead of drawing a new one "
-                               "(\"same but pink hair\"); prompt then says only what to change, e.g. 'make her hair pink'",
+                               "(\"same but pink hair\"), usually the latest one you posted; prompt then names exactly "
+                               "which thing changes and to what, e.g. 'make her cardigan and socks mint green', not just a colour",
             },
             "width": {"type": "integer", "description": f"image width in pixels, {MIN_SIDE}-{MAX_SIDE} (default 1024)"},
             "height": {"type": "integer", "description": f"image height in pixels, {MIN_SIDE}-{MAX_SIDE} (default 1024)"},
@@ -142,6 +143,8 @@ def print_schema():
         # Caps are per person, so the bot passes who asked, and another bot can't ask on someone's behalf.
         "requester": True,
         "nobots": True,
+        # One picture per request: it once drew a second in the same turn and posted both.
+        "once": True,
         # The bot runs --announce for the /me shown while the picture is made.
         "announcer": True,
     }
@@ -242,6 +245,11 @@ def review_prompt(prompt: str, edit: bool = False) -> str:
                 "without naming the character.")
     return f"Error: refused - that request can't be drawn ({reason})."
 
+def edit_prompt(change: str) -> str:
+    """The change, plus keeping the rest: "mint green instead of purple" also recoloured lilac hair."""
+    change = change.strip().rstrip(".")
+    return change + ". Keep everything else exactly the same."
+
 def fetch_source(url: str) -> tuple:
     """(picture bytes, "") for a picture that may be edited, or (None, the reply saying why not)."""
     host = (urllib.parse.urlparse(url).hostname or "").lower()
@@ -296,7 +304,7 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
         if source is None:
             return why_not
     # An edit is a short instruction about the picture; expanding it would redraw the whole scene.
-    final_prompt = prompt if source else refine_prompt(prompt)
+    final_prompt = edit_prompt(prompt) if source else refine_prompt(prompt)
     try:
         image_bytes, verdict = render(build_workflow(final_prompt, width, height, negative,
                                                      SOURCE_NAME if source else ""), source)

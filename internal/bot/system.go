@@ -153,6 +153,9 @@ func loadToolSpec(reg *tools.ToolRegistry, toolSpec string, adminTools map[strin
 					if tool, ok := reg.Get(name); ok && meta.Requester {
 						reg.Register(irc.NewRequesterTool(tool))
 					}
+					if tool, ok := reg.Get(name); ok && meta.Once {
+						reg.Register(irc.NewOncePerRequestTool(tool))
+					}
 					if tool, ok := reg.Get(name); ok && meta.NoBots {
 						reg.Register(irc.NewPeopleOnlyTool(tool))
 					}

@@ -101,7 +101,7 @@ class RunPodImageTests(unittest.TestCase):
         self.assertEqual(seen["inputs"], {imagegen.SOURCE_NAME: b"source"})
         self.assertEqual(wf["11"], {"class_type": "LoadImage", "inputs": {"image": imagegen.SOURCE_NAME}})
         self.assertEqual(wf["4"]["inputs"]["images.image_1"], ["11", 0])
-        self.assertEqual(wf["4"]["inputs"]["prompt"], "make her hair pink")
+        self.assertEqual(wf["4"]["inputs"]["prompt"], "make her hair pink. Keep everything else exactly the same.")
         self.assertEqual(wf["6"]["inputs"]["latent_image"], ["4", 2])
         self.assertNotIn("5", wf)
 
@@ -120,7 +120,7 @@ class RunPodImageTests(unittest.TestCase):
         with redirect_stdout(buf):
             imagegen.print_schema()
         schema = json.loads(buf.getvalue())
-        self.assertTrue(schema["nobots"] and schema["requester"] and schema["announcer"])
+        self.assertTrue(schema["nobots"] and schema["once"] and schema["requester"] and schema["announcer"])
         self.assertIn("image_url", schema["properties"])
 
 if __name__ == "__main__":

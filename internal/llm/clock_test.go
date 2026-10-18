@@ -5,6 +5,7 @@
 package llm
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -12,25 +13,17 @@ import (
 	mocktest "B4reMetal/metald/internal/testing"
 )
 
-func TestTimeBlock(t *testing.T) {
+// A saved time zone never appears beside a message: she brought up where people live.
+func TestTimeBlockIsUTCOnly(t *testing.T) {
 	ctx := mocktest.NewMockContext().WithSource("bob")
 	net := ctx.GetNetwork()
 	mem, _ := core.Memories()
 	mem.SetTimezone(net, "bob", "Australia/Melbourne", "bob")
-	mem.SetTimezone(net, "carol", "America/New_York", "carol")
-	t.Cleanup(func() {
-		mem.DeleteProfile(net, "bob")
-		mem.DeleteProfile(net, "carol")
-	})
+	t.Cleanup(func() { mem.DeleteProfile(net, "bob") })
 	now := time.Date(2026, 10, 15, 3, 0, 0, 0, time.UTC)
 
-	want := "the time now:\n  Thu 15 Oct 2026 03:00 UTC; bob: Thu 15 Oct 14:00 AEDT (Australia/Melbourne); " +
-		"carol: Wed 14 Oct 23:00 EDT (America/New_York)"
-	if got := timeBlock(ctx, "is carol around?", now); got != want {
-		t.Errorf("time block =\n%s\nwant\n%s", got, want)
-	}
-	other := mocktest.NewMockContext().WithSource("dave")
-	if got := timeBlock(other, "hi", now); got != "the time now:\n  Thu 15 Oct 2026 03:00 UTC; dave: time zone not known" {
-		t.Errorf("unknown zone = %q", got)
+	got := timeBlock(ctx, now)
+	if !strings.HasSuffix(got, "\n  Thu 15 Oct 2026 03:00 UTC") || strings.Contains(got, "Melbourne") || strings.Contains(got, "bob") {
+		t.Errorf("time block = %q", got)
 	}
 }
