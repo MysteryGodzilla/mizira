@@ -23,8 +23,9 @@ Configure under env: in config.yml:
   IMAGE_GEN_EXPIRE     how long uploaded images stay up, e.g. 30d (default: the host's default)
   IMAGE_GEN_PER_HOUR, IMAGE_GEN_PER_DAY   images one person may have (default: 0, no cap)
   IMAGE_GEN_DAY_TOTAL  images everyone together may have in 24 hours (default: 0, no cap)
-  IMAGE_GEN_ANNOUNCE, IMAGE_GEN_ANNOUNCE_COLD  the /me shown when a picture is started, and with
-                       runpod when no worker is up yet and the first picture will take minutes
+  IMAGE_GEN_ANNOUNCE, IMAGE_GEN_ANNOUNCE_EDIT, IMAGE_GEN_ANNOUNCE_COLD  the /me shown when a picture
+                       is started, when an earlier one is edited, and with runpod when no worker is
+                       up yet and the first picture will take minutes
   IMAGE_SAFETY_CHECK   vision (default: VISION_API_* looks at the image) or encoder (the image
                        model's own Qwen3-VL text encoder looks at it in the same job; runpod only)
   IMAGE_PROMPT_POLICY  what may be drawn, checked with safetyreview before anything is made
@@ -77,6 +78,7 @@ DAY_TOTAL = int(os.environ.get("IMAGE_GEN_DAY_TOTAL") or 0)
 ANNOUNCE = os.environ.get("IMAGE_GEN_ANNOUNCE", "").strip() or "is drawing a picture"
 ANNOUNCE_COLD = (os.environ.get("IMAGE_GEN_ANNOUNCE_COLD", "").strip()
                  or "gets the drawing things out - the first picture takes a few minutes")
+ANNOUNCE_EDIT = os.environ.get("IMAGE_GEN_ANNOUNCE_EDIT", "").strip() or "is touching up the picture"
 
 EDIT_HOSTS = [h.strip().lower() for h in os.environ.get("IMAGE_EDIT_HOSTS", "").split(",") if h.strip()]
 # A RunPod request body is capped at 10 MB and the picture goes in it as base64.
@@ -152,10 +154,13 @@ def print_schema():
     }
     print(json.dumps(schema, indent=2))
 
-def announcement() -> str:
-    """The /me for a new picture: a cold RunPod endpoint gets the line that warns of a long wait."""
-    cold = BACKEND == "runpod" and runpod.cold()
-    return "action: " + (ANNOUNCE_COLD if cold else ANNOUNCE)
+def announcement(args: dict = None) -> str:
+    """The /me for a call: an edit says so, and a cold RunPod endpoint gets the line that warns of a
+    long wait. Only the call's kind is read from args; the text is always the configured one."""
+    if BACKEND == "runpod" and runpod.cold():
+        return "action: " + ANNOUNCE_COLD
+    edit = isinstance(args, dict) and isinstance(args.get("image_url"), str) and args["image_url"].strip()
+    return "action: " + (ANNOUNCE_EDIT if edit else ANNOUNCE)
 
 def combined_negative(negative: str) -> str:
     """The configured default negative plus this request's, bounded."""
@@ -351,7 +356,11 @@ def main():
         return
 
     if option == "--announce":
-        print(announcement())
+        try:
+            args = json.loads(sys.argv[2]) if len(sys.argv) > 2 else {}
+        except json.JSONDecodeError:
+            args = {}
+        print(announcement(args))
         return
 
     if option == "--execute":

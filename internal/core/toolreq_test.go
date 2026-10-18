@@ -107,18 +107,18 @@ func announceTool(t *testing.T, line string) string {
 
 func TestAnnouncementRunsTheTool(t *testing.T) {
 	SetAnnouncer("announcetest__ok", announceTool(t, "action: is drawing"))
-	got, ok := Announcement("announcetest__ok")
+	got, ok := Announcement("announcetest__ok", `{"a":1}`)
 	if !ok || strings.TrimSpace(got) != "action: is drawing" {
 		t.Fatalf("got %q, %v", got, ok)
 	}
 }
 
 func TestAnnouncementFailsWithoutAnnouncer(t *testing.T) {
-	if _, ok := Announcement("announcetest__none"); ok {
+	if _, ok := Announcement("announcetest__none", ""); ok {
 		t.Fatal("a tool without an announcer announced")
 	}
 	SetAnnouncer("announcetest__broken", announceTool(t, ""))
-	if _, ok := Announcement("announcetest__broken"); ok {
+	if _, ok := Announcement("announcetest__broken", ""); ok {
 		t.Fatal("a failing --announce counted as an announcement")
 	}
 }
