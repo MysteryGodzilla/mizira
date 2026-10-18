@@ -49,3 +49,38 @@ func TestProfileTimezoneTool(t *testing.T) {
 		t.Errorf("dave = %+v", d)
 	}
 }
+
+// The local time comes with its offset, never the zone's name, so it can't say where someone lives.
+func TestProfileLocalTimeTool(t *testing.T) {
+	mock := mocktest.NewMockContext().WithSource("carol")
+	mock.GetConfig().Server.Name = "localtime-tool"
+	store, _ := core.Memories()
+	store.SetTimezone("localtime-tool", "carol", "Australia/Melbourne", "carol")
+	store.SetTimezone("localtime-tool", "dave", "Asia/Kolkata", "dave")
+	t.Cleanup(func() {
+		store.DeleteProfile("localtime-tool", "carol")
+		store.DeleteProfile("localtime-tool", "dave")
+	})
+	ctx := InjectContext(context.Background(), mock)
+
+	out := runTool(t, newProfileLocalTimeTool(), ctx, tools.Args{})
+	if !strings.HasPrefix(out, "carol's local time: ") || !strings.Contains(out, "(UTC+1") || strings.Contains(out, "Melbourne") {
+		t.Errorf("own time = %q", out)
+	}
+	if out := runTool(t, newProfileLocalTimeTool(), ctx, tools.Args{"nick": "dave"}); !strings.Contains(out, "(UTC+5:30)") || strings.Contains(out, "Kolkata") {
+		t.Errorf("half-hour zone = %q", out)
+	}
+	if out := runTool(t, newProfileLocalTimeTool(), ctx, tools.Args{"nick": "erin"}); !strings.Contains(out, "no time zone saved") {
+		t.Errorf("unknown = %q", out)
+	}
+}
+
+func TestProfileLineLeavesOutTheTimeZone(t *testing.T) {
+	store, _ := core.Memories()
+	store.SetTimezone("tz-line", "carol", "Australia/Melbourne", "carol")
+	t.Cleanup(func() { store.DeleteProfile("tz-line", "carol") })
+	people, _ := store.People("tz-line")
+	if line := ProfileLine(people, "carol"); strings.Contains(line, "Melbourne") || strings.Contains(line, "time zone") {
+		t.Errorf("profile line = %q", line)
+	}
+}

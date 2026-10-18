@@ -8,6 +8,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/alexschlessinger/pollytool/schema"
 	"github.com/alexschlessinger/pollytool/tools"
@@ -151,6 +153,47 @@ func (p *PeopleOnlyTool) Execute(ctx context.Context, args map[string]any) (stri
 	return p.Tool.Execute(ctx, args)
 }
 
+// OncePerRequestTool wraps a tool so one request runs it once: the model asked for a picture, then
+// drew a second one in the same turn and posted both.
+type OncePerRequestTool struct {
+	tools.Tool
+	mu   sync.Mutex
+	used map[string]time.Time // request id -> first call
+}
+
+// NewOncePerRequestTool wraps tool so each request may run it once.
+func NewOncePerRequestTool(tool tools.Tool) *OncePerRequestTool {
+	return &OncePerRequestTool{Tool: tool, used: map[string]time.Time{}}
+}
+
+func (o *OncePerRequestTool) Execute(ctx context.Context, args map[string]any) (string, error) {
+	chatCtx, err := GetIRCContext(ctx)
+	if err != nil {
+		return "", err
+	}
+	if !o.first(chatCtx.GetRequestID(), time.Now()) {
+		return "Already done: this tool runs once per request and its result is above. Don't call it again; " +
+			"answer with what you have. If it wasn't right, say so and let them ask again.", nil
+	}
+	return o.Tool.Execute(ctx, args)
+}
+
+// first records the request's call and reports whether it is the first; old requests are dropped.
+func (o *OncePerRequestTool) first(request string, now time.Time) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	for id, at := range o.used {
+		if now.Sub(at) > time.Hour {
+			delete(o.used, id)
+		}
+	}
+	if _, seen := o.used[request]; seen {
+		return false
+	}
+	o.used[request] = now
+	return true
+}
+
 // RefusedFor reports whether tool will only refuse this caller: an admin-only tool for someone who
 // isn't an admin, or a people-only tool for another bot's line.
 func RefusedFor(tool tools.Tool, chatCtx ChatContextInterface) bool {
@@ -165,6 +208,8 @@ func RefusedFor(tool tools.Tool, chatCtx ChatContextInterface) bool {
 			if chatCtx.IsBotLine() {
 				return true
 			}
+			tool = t.Tool
+		case *OncePerRequestTool:
 			tool = t.Tool
 		default:
 			return false
@@ -181,32 +226,33 @@ func RegisterIRCTools(registry *tools.ToolRegistry) {
 
 // nativeFactories are the bot's own tools, loaded by name from the tool list.
 var nativeFactories = map[string]func() tools.Tool{
-	"irc__op":           newIrcOpTool,
-	"irc__kick":         newIrcKickTool,
-	"irc__ban":          newIrcBanTool,
-	"irc__topic":        newIrcTopicTool,
-	"irc__action":       newIrcActionTool,
-	"irc__mode_set":     newIrcModeSetTool,
-	"irc__mode_query":   newIrcModeQueryTool,
-	"irc__invite":       newIrcInviteTool,
-	"irc__names":        newIrcNamesTool,
-	"irc__whois":        newIrcWhoisTool,
-	"irc__ignore":       newIrcIgnoreTool,
-	"irc__slap":         newIrcSlapTool,
-	"memory__remember":  newMemoryRememberTool,
-	"memory__recall":    newMemoryRecallTool,
-	"memory__forget":    newMemoryForgetTool,
-	"memory__correct":   newMemoryCorrectTool,
-	"history__search":   newHistorySearchTool,
-	"task__start":       newTaskStartTool,
-	"task__schedule":    newTaskScheduleTool,
-	"goal__propose":     newGoalProposeTool,
-	"todo__set":         newTodoSetTool,
-	"todo__update":      newTodoUpdateTool,
-	"task__note":        newTaskNoteTool,
-	"irc__remind":       newIrcRemindTool,
-	"irc__reminders":    newIrcRemindersTool,
-	"profile__timezone": newProfileTimezoneTool,
+	"irc__op":            newIrcOpTool,
+	"irc__kick":          newIrcKickTool,
+	"irc__ban":           newIrcBanTool,
+	"irc__topic":         newIrcTopicTool,
+	"irc__action":        newIrcActionTool,
+	"irc__mode_set":      newIrcModeSetTool,
+	"irc__mode_query":    newIrcModeQueryTool,
+	"irc__invite":        newIrcInviteTool,
+	"irc__names":         newIrcNamesTool,
+	"irc__whois":         newIrcWhoisTool,
+	"irc__ignore":        newIrcIgnoreTool,
+	"irc__slap":          newIrcSlapTool,
+	"memory__remember":   newMemoryRememberTool,
+	"memory__recall":     newMemoryRecallTool,
+	"memory__forget":     newMemoryForgetTool,
+	"memory__correct":    newMemoryCorrectTool,
+	"history__search":    newHistorySearchTool,
+	"task__start":        newTaskStartTool,
+	"task__schedule":     newTaskScheduleTool,
+	"goal__propose":      newGoalProposeTool,
+	"todo__set":          newTodoSetTool,
+	"todo__update":       newTodoUpdateTool,
+	"task__note":         newTaskNoteTool,
+	"irc__remind":        newIrcRemindTool,
+	"irc__reminders":     newIrcRemindersTool,
+	"profile__timezone":  newProfileTimezoneTool,
+	"profile__localtime": newProfileLocalTimeTool,
 }
 
 func newIrcOpTool() tools.Tool {

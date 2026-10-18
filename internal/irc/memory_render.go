@@ -65,9 +65,7 @@ func ProfileLine(people core.People, subject string) string {
 	if len(p.Aliases) > 0 {
 		parts = append(parts, "also called "+strings.Join(p.Aliases, ", "))
 	}
-	if p.Timezone != "" {
-		parts = append(parts, "time zone "+p.Timezone)
-	}
+	// No time zone: it says where someone lives, and profile__localtime gives the time when needed.
 	for _, bot := range bots {
 		parts = append(parts, "runs the bot "+bot)
 	}

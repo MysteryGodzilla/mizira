@@ -31,6 +31,8 @@ type ShellToolMeta struct {
 	Announcer bool `json:"announcer"`
 	// NoBots true refuses calls made for another bot's line.
 	NoBots bool `json:"nobots"`
+	// Once true lets one request run the tool once.
+	Once bool `json:"once"`
 }
 
 // ReadShellToolMeta runs a plugin's --schema and returns its metadata.

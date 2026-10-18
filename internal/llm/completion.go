@@ -349,7 +349,7 @@ func Complete(ctx irc.ChatContextInterface, msg string) (<-chan string, error) {
 		if here := presenceBlock(ctx, inConversation); here != "" {
 			known = append(known, here)
 		}
-		known = append(known, timeBlock(ctx, msg, time.Now()))
+		known = append(known, timeBlock(ctx, time.Now()))
 		if len(known) > 0 {
 			content += "\n\n" + strings.Join(known, "\n\n")
 		}
