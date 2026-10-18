@@ -116,6 +116,9 @@ def check_image_safety(image_bytes: bytes) -> tuple[bool, str]:
     verdict = describe_image_bytes(image_bytes, "image/png", SAFETY_PROMPT)
     if verdict.startswith("Error:"):
         return False, f"safety check itself failed: {verdict}"
+    return says_safe(verdict), verdict
+
+def says_safe(verdict: str) -> bool:
+    """Whether a safety verdict starts with SAFE (IMAGE_SAFETY_PROMPT asks for SAFE or UNSAFE first)."""
     match = re.match(r"\s*([A-Za-z]+)", verdict)
-    first_word = match.group(1).upper() if match else ""
-    return first_word == "SAFE", verdict
+    return bool(match) and match.group(1).upper() == "SAFE"
