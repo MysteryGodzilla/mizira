@@ -30,6 +30,11 @@ func TestCheckAddressed(t *testing.T) {
 		{"after another bot's tag", "[otherbot] bot, it's me", "bot", true},
 		{"just the name", "bot", "bot", true},
 		{"multi-word trigger after filler", "yo hey bot wake up", "hey bot", true},
+		{"now before", "Now bot make an image of alice", "bot", true},
+		{"alright before", "alright bot make an image of the whole party", "bot", true},
+		{"short opener then name and comma", "Good first image bot, you are a good girl", "bot", true},
+		{"told then name and comma", "i told bot, she never listens", "bot", false},
+		{"long lead then name and comma", "i was saying to alice earlier that bot, honestly", "bot", false},
 		// Only talking about it.
 		{"subject mid-line", "Hey alice did you see what bot did", "bot", false},
 		{"object at the end", "alice say hi to bot", "bot", false},

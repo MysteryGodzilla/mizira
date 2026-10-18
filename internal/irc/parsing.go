@@ -70,10 +70,14 @@ func CheckAddressedAmong(message, trigger string, otherName func(word string) bo
 	if len(after) == 0 || allPunctuation(after) {
 		return !objectMarkers[bareAddressWord(before[len(before)-1])]
 	}
-	// Called mid-line, set off by commas: "ok so, bot, what now?"
+	// Called mid-line, set off by commas: "ok so, bot, what now?", or after a short opener: "good
+	// first image bot, you did well". Not after a word that makes it the object: "i told bot, ...".
 	name := words[at+len(trig)-1]
 	prev := before[len(before)-1]
-	return strings.ContainsAny(lastRune(name), ",:") && strings.ContainsAny(lastRune(prev), ",.!?")
+	if !strings.ContainsAny(lastRune(name), ",:") {
+		return false
+	}
+	return strings.ContainsAny(lastRune(prev), ",.!?") || len(before) <= 4 && !objectMarkers[bareAddressWord(prev)]
 }
 
 // fillerWords may come before the name of someone being called: "hey bot", "thanks bot".
@@ -83,6 +87,9 @@ var fillerWords = map[string]bool{
 	"thanks": true, "thank": true, "you": true, "ty": true, "thx": true, "please": true, "pls": true,
 	"sorry": true, "good": true, "morning": true, "night": true, "evening": true, "afternoon": true,
 	"gm": true, "gn": true, "welcome": true, "back": true, "dear": true, "lol": true, "haha": true,
+	"now": true, "alright": true, "aight": true, "right": true, "also": true, "anyway": true, "then": true,
+	"hmm": true, "hm": true, "um": true, "uh": true, "ooh": true, "wow": true, "nice": true, "great": true,
+	"cool": true, "yes": true, "yeah": true, "yep": true, "yup": true, "no": true, "nope": true, "plz": true,
 }
 
 // statementVerbs right after a leading name make the line a statement about it: "bot is ...".

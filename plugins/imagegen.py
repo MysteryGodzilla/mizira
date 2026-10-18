@@ -104,7 +104,9 @@ def print_schema():
             "things the image must NOT show - usually when someone asks to "
             "leave something out or a previous render had an unwanted thing "
             "(extra arms, text, a hat). it roughly doubles render time, so "
-            "leave it empty otherwise."
+            "leave it empty otherwise. call it only when the latest message asks for a picture, "
+            "and call it every time one does: it checks limits and permissions itself, so never "
+            "tell someone they are limited or not allowed without calling it for that request."
         ),
         "type": "object",
         "properties": {
