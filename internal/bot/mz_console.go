@@ -284,6 +284,31 @@ func (c console) ResetSetting(key, by string) (admin.SettingChange, error) {
 	return c.clearIfNeeded(settingChange(key)(commands.ResetSetting(c.cfg, c.sys, key, by, core.GetLogger())))
 }
 
+func (c console) ToolSettings() []admin.ToolSettingView {
+	out := []admin.ToolSettingView{}
+	for _, s := range commands.ToolSettingValues() {
+		out = append(out, admin.ToolSettingView{Key: s.Key, Group: s.Group, Kind: s.Kind, Help: s.Help,
+			Value: s.Value, Default: s.Default, Overridden: s.Overridden})
+	}
+	return out
+}
+
+func (c console) SetToolSetting(key, value, by string) (string, error) {
+	stored, err := commands.SetToolSetting(key, value)
+	if err == nil {
+		core.GetLogger().Info("tool_setting_changed", "key", key, "value", stored, "by", by)
+	}
+	return stored, err
+}
+
+func (c console) ResetToolSetting(key, by string) (string, error) {
+	value, err := commands.ResetToolSetting(key)
+	if err == nil {
+		core.GetLogger().Info("tool_setting_reset", "key", key, "value", value, "by", by)
+	}
+	return value, err
+}
+
 // clearIfNeeded wipes each channel conversation after a change that ~set would wipe it for.
 func (c console) clearIfNeeded(change admin.SettingChange, err error) (admin.SettingChange, error) {
 	if err != nil || !commands.ClearsHistory(change.Key) {

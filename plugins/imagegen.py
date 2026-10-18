@@ -114,7 +114,9 @@ def print_schema():
             "(extra arms, text, a hat). it roughly doubles render time, so "
             "leave it empty otherwise. call it only when the latest message asks for a picture, "
             "and call it every time one does: it checks limits and permissions itself, so never "
-            "tell someone they are limited or not allowed without calling it for that request."
+            "tell someone they are limited or not allowed without calling it for that request. when "
+            "someone corrects how a person looks (\"don't forget my glasses are gold\"), redraw it and also save "
+            "the correction with memory__remember."
         ),
         "type": "object",
         "properties": {

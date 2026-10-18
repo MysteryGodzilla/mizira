@@ -290,6 +290,11 @@ func ResetAll(cfg *config.Configuration, sys core.System, by string, log *slog.L
 		}
 		reset = append(reset, key)
 	}
+	for _, key := range sortedKeys(o.Env) {
+		if _, err := ResetToolSetting(key); err == nil {
+			reset = append(reset, key)
+		}
+	}
 	overridesMu.Lock()
 	o = loadOverrides()
 	for key, list := range listOverrides(o) {

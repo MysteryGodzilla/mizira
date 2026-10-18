@@ -58,6 +58,11 @@ type Mizira interface {
 	Settings() []SettingView
 	SetSetting(key, value, by string) (SettingChange, error)
 	ResetSetting(key, by string) (SettingChange, error)
+	// Tool settings (env: in config.yml) the console may change; a change applies from the tool's next
+	// call. The value returned is the one stored.
+	ToolSettings() []ToolSettingView
+	SetToolSetting(key, value, by string) (string, error)
+	ResetToolSetting(key, by string) (string, error)
 	ToolCatalog() []ToolView
 	SwitchTool(spec string, on bool, by string) error
 	ResetToolSwitches(by string) error

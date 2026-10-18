@@ -58,6 +58,9 @@ func (s *Server) mzSettingsRoutes(api *http.ServeMux) {
 	api.HandleFunc("DELETE /settings/{key}", s.resetSetting)
 	api.HandleFunc("POST /settings/export", s.exportSettings)
 	api.HandleFunc("POST /settings/reset-all", s.resetAllSettings)
+	api.HandleFunc("GET /toolsettings", s.toolSettings)
+	api.HandleFunc("PUT /toolsettings/{key}", s.setToolSetting)
+	api.HandleFunc("DELETE /toolsettings/{key}", s.resetToolSetting)
 	api.HandleFunc("GET /tools", s.tools)
 	api.HandleFunc("PUT /tools", s.switchTool)
 	api.HandleFunc("DELETE /tools/switches", s.resetTools)
@@ -242,4 +245,53 @@ func (s *Server) resetTools(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, http.StatusOK, map[string]any{"reset": true})
+}
+
+// ToolSettingView is a tool setting (under env: in config.yml) the console may change. Credentials,
+// hosts the bot dials and safety policies are never in the list.
+type ToolSettingView struct {
+	Key        string `json:"key"`
+	Group      string `json:"group"`
+	Kind       string `json:"kind"` // number or text
+	Help       string `json:"help"`
+	Value      string `json:"value"`
+	Default    string `json:"default"` // config.yml's value
+	Overridden bool   `json:"overridden"`
+}
+
+func (s *Server) toolSettings(w http.ResponseWriter, _ *http.Request) {
+	respond(w, http.StatusOK, map[string]any{"settings": s.mz.ToolSettings()})
+}
+
+func (s *Server) setToolSetting(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Value *string `json:"value"`
+	}
+	if !decode(w, r, &in) || in.Value == nil {
+		fail(w, http.StatusBadRequest, `send {"value": "..."}`)
+		return
+	}
+	if len(*in.Value) > maxSettingValue {
+		fail(w, http.StatusBadRequest, "the value is too long")
+		return
+	}
+	key, by := r.PathValue("key"), s.who(r)
+	value, err := s.mz.SetToolSetting(key, *in.Value, by)
+	if err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.log.Info("console_action", "action", "tool_setting", "key", key, "value", value, "by", by)
+	respond(w, http.StatusOK, SettingChange{Key: key, Value: value})
+}
+
+func (s *Server) resetToolSetting(w http.ResponseWriter, r *http.Request) {
+	key, by := r.PathValue("key"), s.who(r)
+	value, err := s.mz.ResetToolSetting(key, by)
+	if err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.log.Info("console_action", "action", "tool_setting_reset", "key", key, "value", value, "by", by)
+	respond(w, http.StatusOK, SettingChange{Key: key, Value: value})
 }
