@@ -35,6 +35,8 @@ type runtimeOverrides struct {
 	// Tool list entries switched on or off from the operator console, relative to config.yml's list.
 	ToolsOn  []string `json:"toolson,omitempty"`
 	ToolsOff []string `json:"toolsoff,omitempty"`
+	// Env holds tool settings changed from the console (ToolSettings), by name.
+	Env map[string]string `json:"env,omitempty"`
 }
 
 var overridesMu sync.Mutex
@@ -230,6 +232,7 @@ func ApplyOverrides(cfg *config.Configuration) []string {
 		}
 	}
 	applyToolOverrides(cfg, o)
+	applyToolEnvOverrides(o)
 	if o.BotNicks != nil {
 		config.SetList(&cfg.Bot.BotNicks, *o.BotNicks)
 		core.GetLogger().Info("override_applied", "key", "botnicks", "count", len(*o.BotNicks))

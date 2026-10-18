@@ -19,9 +19,54 @@ import (
 // exaDashboard is where the Exa balance and usage live; Exa has no API for them.
 const exaDashboard = "https://dashboard.exa.ai"
 
-// Services lists the model server and, when a search tool is loaded, web search.
+// Services lists the model server and, when their tools are loaded, web search and pictures.
 func (c console) Services(ctx context.Context) []admin.ServiceView {
-	return append([]admin.ServiceView{c.modelServer(ctx)}, c.webSearch(ctx)...)
+	out := append([]admin.ServiceView{c.modelServer(ctx)}, c.webSearch(ctx)...)
+	return append(out, c.pictures(ctx)...)
+}
+
+// lowCredit is the RunPod balance, in dollars, below which the card warns.
+const lowCredit = 2.0
+
+// pictures is image generation on RunPod: the account's credit, the endpoint's workers, and the
+// pictures and GPU time from the tool log.
+func (c console) pictures(ctx context.Context) []admin.ServiceView {
+	if _, ok := c.sys.GetToolRegistry().Get("imagegen__picture"); !ok || os.Getenv("IMAGE_GEN_BACKEND") != "runpod" {
+		return nil
+	}
+	key, endpoint := os.Getenv("RUNPOD_API_KEY"), os.Getenv("RUNPOD_ENDPOINT_ID")
+	v := admin.ServiceView{ID: "pictures", Name: "Pictures (RunPod)",
+		Link: "https://console.runpod.io/serverless/user/endpoint/" + endpoint}
+	if acct, err := core.RunPodBalance(ctx, key); err != nil {
+		v.Stats = append(v.Stats, core.ServiceStat{Label: "credit", Value: "RunPod didn't answer: " + err.Error()})
+	} else {
+		credit := fmt.Sprintf("$%.2f", acct.Balance)
+		if acct.Balance < lowCredit {
+			credit += " (low: top up soon)"
+		}
+		v.Stats = append(v.Stats, core.ServiceStat{Label: "credit", Value: credit})
+		if acct.SpendPerHr > 0 {
+			v.Stats = append(v.Stats, core.ServiceStat{Label: "spending now", Value: fmt.Sprintf("$%.2f/hr", acct.SpendPerHr)})
+		}
+	}
+	if w, err := core.RunPodWorkers(ctx, key, endpoint); err == nil {
+		v.Stats = append(v.Stats, core.ServiceStat{Label: "workers",
+			Value: fmt.Sprintf("%d running · %d ready · %d starting", w["running"], w["idle"], w["initializing"])})
+	}
+	now := time.Now()
+	if jobs, err := core.ReadImageJobs(os.Getenv("METALD_TOOL_LOG"), now); err == nil {
+		v.Stats = append(v.Stats,
+			core.ServiceStat{Label: "today", Value: fmt.Sprintf("%d · %.1f GPU min", jobs.TodayJobs, jobs.TodayGPU.Minutes())},
+			core.ServiceStat{Label: "this month", Value: fmt.Sprintf("%d · %.1f GPU min", jobs.MonthJobs, jobs.MonthGPU.Minutes())})
+	}
+	if n, err := core.ImageUses(core.DataPath("usage-imagegen.json"), now); err == nil {
+		used := strconv.Itoa(n)
+		if total := os.Getenv("IMAGE_GEN_DAY_TOTAL"); total != "" && total != "0" {
+			used += " of " + total
+		}
+		v.Stats = append(v.Stats, core.ServiceStat{Label: "last 24h", Value: used})
+	}
+	return []admin.ServiceView{v}
 }
 
 func (c console) modelServer(ctx context.Context) admin.ServiceView {

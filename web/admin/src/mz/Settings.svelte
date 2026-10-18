@@ -5,6 +5,7 @@
   import Badge from "../components/Badge.svelte";
   import Card from "../components/Card.svelte";
   import Model from "./Model.svelte";
+  import ToolSettings from "./ToolSettings.svelte";
   let { mz }: { mz: MzConsole } = $props();
 
   // Edits in progress, by key; a key not here shows its live value.
@@ -49,6 +50,7 @@
 </script>
 
 <Model {mz} />
+<ToolSettings {mz} />
 
 <Card title="Settings">
   <p class="sub">Every <code>~set</code> setting. A change applies now and is kept across restarts until reset to

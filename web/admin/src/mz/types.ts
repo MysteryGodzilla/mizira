@@ -44,6 +44,11 @@ export interface Setting { key: string; value: string; default: string; overridd
 
 export interface SettingChange { key: string; value: string; warning?: string }
 
+/** A tool setting (env: in config.yml) the console may change; it applies from the tool's next call. */
+export interface ToolSetting {
+  key: string; group: string; kind: "number" | "text"; help: string; value: string; default: string; overridden: boolean;
+}
+
 export interface Tool {
   spec: string; kind: "native" | "work" | "plugin" | "mcp"; description: string; loaded: boolean; names: string[];
   inConfig: boolean; switched: boolean; adminOnly: boolean;

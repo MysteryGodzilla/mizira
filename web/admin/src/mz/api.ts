@@ -1,5 +1,5 @@
 import { Api } from "../lib/api";
-import type { Bots, Cheatsheet, ExportResult, Conversation, Earlier, Feature, Fold, Memory, People, Profile, ProfileHint, Reset, RunState, Safety, SelfNote, Service, Setting, SettingChange, SortItem, Subject, Tool } from "./types";
+import type { Bots, Cheatsheet, ExportResult, Conversation, Earlier, Feature, Fold, Memory, People, Profile, ProfileHint, Reset, RunState, Safety, SelfNote, Service, Setting, SettingChange, SortItem, Subject, Tool, ToolSetting } from "./types";
 
 const q = (params: Record<string, string>) => new URLSearchParams(params).toString();
 
@@ -40,6 +40,10 @@ export class MzApi extends Api {
   set = (key: string, value: string) => this.call<SettingChange>("PUT", `settings/${encodeURIComponent(key)}`, { value });
   resetSetting = (key: string) => this.call<SettingChange>("DELETE", `settings/${encodeURIComponent(key)}`);
 
+  toolSettings = () => this.call<{ settings: ToolSetting[] }>("GET", "toolsettings").then((r) => r.settings);
+  setToolSetting = (key: string, value: string) =>
+    this.call<SettingChange>("PUT", `toolsettings/${encodeURIComponent(key)}`, { value });
+  resetToolSetting = (key: string) => this.call<SettingChange>("DELETE", `toolsettings/${encodeURIComponent(key)}`);
   tools = () => this.call<{ tools: Tool[] }>("GET", "tools").then((r) => r.tools);
   restrictTool = (spec: string, adminOnly: boolean) =>
     this.call<{ spec: string; adminOnly: boolean }>("PUT", "tools/restrict", { spec, adminOnly });

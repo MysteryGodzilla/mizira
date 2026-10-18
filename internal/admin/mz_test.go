@@ -17,6 +17,8 @@ import (
 )
 
 type fakeMizira struct {
+	toolSetting string
+
 	state   string
 	offline []string
 	tools   []string
@@ -261,6 +263,7 @@ func TestMiziraEndpointsNeedTheToken(t *testing.T) {
 		{"GET", "/api/v1/bots"}, {"POST", "/api/v1/bots"}, {"DELETE", "/api/v1/bots?kind=nick&value=bob"},
 		{"GET", "/api/v1/settings"}, {"PUT", "/api/v1/settings/maxreplylines"}, {"DELETE", "/api/v1/settings/maxreplylines"},
 		{"GET", "/api/v1/tools"}, {"PUT", "/api/v1/tools"}, {"DELETE", "/api/v1/tools/switches"},
+		{"GET", "/api/v1/toolsettings"}, {"PUT", "/api/v1/toolsettings/IMAGE_GEN_PER_HOUR"}, {"DELETE", "/api/v1/toolsettings/IMAGE_GEN_PER_HOUR"},
 		{"GET", "/api/v1/memories/subjects?network=net"}, {"GET", "/api/v1/memories?network=net"}, {"POST", "/api/v1/memories"},
 		{"PUT", "/api/v1/memories/1?network=net"}, {"DELETE", "/api/v1/memories/1?network=net"},
 		{"PUT", "/api/v1/memories/1/meta?network=net"}, {"GET", "/api/v1/memories/history?network=net&subject=bob"}, {"GET", "/api/v1/memories/history?network=net&subject=bob"}, {"POST", "/api/v1/memories/sort/preview"}, {"POST", "/api/v1/memories/sort/apply"}, {"GET", "/api/v1/profiles/hints?network=net&subject=bob"}, {"GET", "/api/v1/profiles?network=net"}, {"PUT", "/api/v1/profiles"}, {"DELETE", "/api/v1/profiles?network=net&subject=bob"},
@@ -514,6 +517,20 @@ func (f *fakeMizira) ResetSetting(key, by string) (SettingChange, error) {
 	f.setting = "4"
 	return SettingChange{Key: key, Value: "4"}, nil
 }
+func (f *fakeMizira) ToolSettings() []ToolSettingView {
+	return []ToolSettingView{{Key: "IMAGE_GEN_PER_HOUR", Kind: "number", Value: f.toolSetting, Default: "5", Overridden: f.toolSetting != "5"}}
+}
+func (f *fakeMizira) SetToolSetting(key, value, by string) (string, error) {
+	if key != "IMAGE_GEN_PER_HOUR" || value == "lots" {
+		return "", errors.New("refused")
+	}
+	f.toolSetting = value
+	return value, nil
+}
+func (f *fakeMizira) ResetToolSetting(key, by string) (string, error) {
+	f.toolSetting = "5"
+	return "5", nil
+}
 func (f *fakeMizira) ToolCatalog() []ToolView {
 	return []ToolView{{Spec: "irc__slap", Kind: "native", Loaded: slices.Contains(f.tools, "irc__slap"), Names: []string{}}}
 }
@@ -567,6 +584,26 @@ func TestSettingsFromTheConsole(t *testing.T) {
 		t.Errorf("no value = %d, want 400", code)
 	}
 	if code, out := r.call(t, "DELETE", "/api/v1/settings/maxreplylines", "s3cret", ""); code != http.StatusOK || out["value"] != "4" {
+		t.Errorf("reset = %d %v", code, out)
+	}
+}
+
+func TestToolSettingsFromTheConsole(t *testing.T) {
+	r, m := newMzRig(t)
+	m.toolSetting = "5"
+	if code, out := r.call(t, "PUT", "/api/v1/toolsettings/IMAGE_GEN_PER_HOUR", "s3cret", `{"value":"8"}`); code != http.StatusOK || out["value"] != "8" {
+		t.Fatalf("set = %d %v", code, out)
+	}
+	_, out := r.call(t, "GET", "/api/v1/toolsettings", "s3cret", "")
+	if s := out["settings"].([]any)[0].(map[string]any); s["value"] != "8" || s["overridden"] != true {
+		t.Errorf("tool settings = %v", s)
+	}
+	for _, c := range [][2]string{{"IMAGE_GEN_PER_HOUR", `{"value":"lots"}`}, {"RUNPOD_API_KEY", `{"value":"x"}`}, {"IMAGE_GEN_PER_HOUR", `{}`}} {
+		if code, _ := r.call(t, "PUT", "/api/v1/toolsettings/"+c[0], "s3cret", c[1]); code != http.StatusBadRequest {
+			t.Errorf("%s %s = %d, want 400", c[0], c[1], code)
+		}
+	}
+	if code, out := r.call(t, "DELETE", "/api/v1/toolsettings/IMAGE_GEN_PER_HOUR", "s3cret", ""); code != http.StatusOK || out["value"] != "5" {
 		t.Errorf("reset = %d %v", code, out)
 	}
 }
