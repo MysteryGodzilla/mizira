@@ -85,13 +85,13 @@ def take(tool: str, who: str, per_hour: int = 0, per_day: int = 0, day_total: in
         hour = [t for t in mine if now - t < HOUR]
         if per_hour and len(hour) >= per_hour:
             return (f"Limit reached: {who} has had {len(hour)} in the last hour (the limit is {per_hour} an hour); "
-                    f"the next is possible in {_wait(hour, HOUR, per_hour, now)}. Say so; don't retry.")
+                    f"the next is possible in {_wait(hour, HOUR, per_hour, now)}. Say so; don't retry now. Limits change, so for any later request call the tool again instead of assuming it's still reached.")
         if per_day and len(mine) >= per_day:
             return (f"Limit reached: {who} has had {len(mine)} in the last 24 hours (the limit is {per_day} a day); "
-                    f"the next is possible in {_wait(mine, DAY, per_day, now)}. Say so; don't retry.")
+                    f"the next is possible in {_wait(mine, DAY, per_day, now)}. Say so; don't retry now. Limits change, so for any later request call the tool again instead of assuming it's still reached.")
         if day_total and len(uses) >= day_total:
             return (f"Limit reached: everyone together has had {len(uses)} in the last 24 hours (the limit is "
-                    f"{day_total}); try again in {_wait([t for t, _ in uses], DAY, day_total, now)}. Say so; don't retry.")
+                    f"{day_total}); try again in {_wait([t for t, _ in uses], DAY, day_total, now)}. Say so; don't retry now. Limits change, so for any later request call the tool again instead of assuming it's still reached.")
         _save(path, uses + [[now, who]])
     return ""
 

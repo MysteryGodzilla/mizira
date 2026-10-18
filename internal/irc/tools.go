@@ -121,7 +121,9 @@ func (a *AdminOnlyTool) Execute(ctx context.Context, args map[string]any) (strin
 		return "", err
 	}
 	if !chatCtx.IsAdmin() {
-		return "You are not authorized to use this tool", nil
+		// Spelled out: a bare "not authorized" was read in chat as a usage limit that had run out.
+		return fmt.Sprintf("Not allowed: this tool is for admins only right now and %s isn't one. "+
+			"It isn't a usage limit and nothing is broken. Say so plainly; don't retry it for them.", chatCtx.GetSource()), nil
 	}
 	return a.Tool.Execute(ctx, args)
 }
