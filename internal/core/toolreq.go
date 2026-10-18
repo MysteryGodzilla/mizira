@@ -29,6 +29,8 @@ type ShellToolMeta struct {
 	// Announcer true has the bot run "<tool> --announce" when the tool is called and post the
 	// "action: " line it prints instead of "calling <tool>".
 	Announcer bool `json:"announcer"`
+	// NoBots true refuses calls made for another bot's line.
+	NoBots bool `json:"nobots"`
 }
 
 // ReadShellToolMeta runs a plugin's --schema and returns its metadata.

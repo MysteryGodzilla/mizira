@@ -68,3 +68,33 @@ func TestAdminOnlyToolRefusalSaysWhy(t *testing.T) {
 		}
 	}
 }
+
+// A person could ask another bot to ask, and get round per-person limits.
+func TestPeopleOnlyToolRefusesBots(t *testing.T) {
+	bot := mocktest.NewMockContext().WithSource("bob")
+	bot.BotLine, bot.BotTag = true, "[botty]"
+	rec := &argsRecorder{}
+	got, err := NewPeopleOnlyTool(rec).Execute(InjectContext(context.Background(), bot), map[string]any{})
+	if err != nil || rec.got != nil || !strings.Contains(got, "not for other bots (botty)") {
+		t.Fatalf("bot line: ran=%v reply=%q err=%v", rec.got != nil, got, err)
+	}
+	person := mocktest.NewMockContext().WithSource("alice")
+	if _, err := NewPeopleOnlyTool(rec).Execute(InjectContext(context.Background(), person), map[string]any{}); err != nil || rec.got == nil {
+		t.Fatalf("a person's call didn't run: %v", err)
+	}
+}
+
+func TestRefusedForLooksThroughEveryWrapper(t *testing.T) {
+	tool := NewAdminOnlyTool(NewPeopleOnlyTool(&argsRecorder{}))
+	admin := mocktest.NewMockContext().WithAdmin(true)
+	adminBot := mocktest.NewMockContext().WithAdmin(true)
+	adminBot.BotLine = true
+	for name, tc := range map[string]struct {
+		ctx  *mocktest.MockChatContext
+		want bool
+	}{"admin": {admin, false}, "non-admin": {mocktest.NewMockContext(), true}, "admin's bot": {adminBot, true}} {
+		if got := RefusedFor(tool, tc.ctx); got != tc.want {
+			t.Errorf("%s: RefusedFor = %v, want %v", name, got, tc.want)
+		}
+	}
+}

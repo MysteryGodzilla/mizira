@@ -45,6 +45,14 @@ class RunPodTests(unittest.TestCase):
         self.assertEqual(sent["headers"]["authorization"], "Bearer k1")
         self.assertEqual(sent["headers"]["user-agent"], runpod.USER_AGENT)
 
+    def test_inputs_go_with_the_job(self):
+        done = {"status": "COMPLETED", "output": {"images": [{"data": base64.b64encode(PNG).decode()}]}}
+        srv = self.serve({"/ep1/run": lambda p, b: (200, {"id": "j1"}),
+                          "/ep1/status/j1": lambda p, b: (200, done)})
+        runpod.run({"1": {}}, timeout=5, log=lambda m: None, inputs={"src.png": b"abc"})
+        sent = json.loads(srv.seen[0]["body"])["input"]
+        self.assertEqual(sent["images"], [{"name": "src.png", "image": base64.b64encode(b"abc").decode()}])
+
     def test_failed_job_is_a_generic_error(self):
         self.serve({"/ep1/run": lambda p, b: (200, {"id": "j1"}),
                     "/ep1/status/j1": lambda p, b: (200, {"status": "FAILED", "error": "secret detail"})})

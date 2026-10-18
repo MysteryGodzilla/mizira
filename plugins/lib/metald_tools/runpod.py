@@ -68,12 +68,16 @@ def _decode(item) -> bytes:
     return base64.b64decode(data)
 
 
-def run(workflow: dict, timeout: float = 600, log=None) -> dict:
+def run(workflow: dict, timeout: float = 600, log=None, inputs: dict = None) -> dict:
     """Submit an API-format workflow ({node id: node}), wait, and return its images (bytes) and
-    texts. A job still waiting at the timeout is cancelled, so it can't run and bill later."""
+    texts. inputs ({name: bytes}) are put in ComfyUI's input folder first, for LoadImage nodes. A job
+    still waiting at the timeout is cancelled, so it can't run and bill later."""
     log = _log(log)
+    job_input = {"workflow": workflow}
+    if inputs:
+        job_input["images"] = [{"name": n, "image": base64.b64encode(b).decode("ascii")} for n, b in inputs.items()]
     try:
-        job = _call("POST", "/run", {"input": {"workflow": workflow}})
+        job = _call("POST", "/run", {"input": job_input})
     except urllib.error.HTTPError as e:
         log(f"runpod refused the job: {e.code} {e.read().decode('utf-8', 'replace')[:300]}")
         raise ComfyError("backend unreachable")

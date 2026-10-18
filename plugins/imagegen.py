@@ -31,6 +31,8 @@ Configure under env: in config.yml:
                        (IMAGE_PROMPT_REVIEW: off skips it)
   IMAGE_REFINER_URL, IMAGE_REFINER_MODEL, IMAGE_REFINER_KEY  the model that expands the prompt
                        (default: the bot's own model)
+  IMAGE_EDIT_HOSTS     hosts whose pictures may be edited (image_url), comma-separated, e.g. the
+                       hosting backend's own (default: none, editing off)
   hosting              see metald_tools/hosting.py (UPLOAD_BACKEND, UPLOAD_HEADERS, ...)
 """
 
@@ -39,6 +41,7 @@ import os
 import json
 import time
 import urllib.error
+import urllib.parse
 
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [_here, os.path.join(_here, "lib")]
@@ -74,6 +77,11 @@ DAY_TOTAL = int(os.environ.get("IMAGE_GEN_DAY_TOTAL") or 0)
 ANNOUNCE = os.environ.get("IMAGE_GEN_ANNOUNCE", "").strip() or "is drawing a picture"
 ANNOUNCE_COLD = (os.environ.get("IMAGE_GEN_ANNOUNCE_COLD", "").strip()
                  or "gets the drawing things out - the first picture takes a few minutes")
+
+EDIT_HOSTS = [h.strip().lower() for h in os.environ.get("IMAGE_EDIT_HOSTS", "").split(",") if h.strip()]
+# A RunPod request body is capped at 10 MB and the picture goes in it as base64.
+MAX_SOURCE = 6 * 1024 * 1024
+SOURCE_NAME = "metald_source.png"
 
 PROMPT_POLICY = os.environ.get("IMAGE_PROMPT_POLICY", "")
 REVIEW_PROMPTS = safetyreview.enabled("IMAGE_PROMPT_REVIEW")
@@ -118,6 +126,11 @@ def print_schema():
                 "type": "string",
                 "description": "optional: comma-separated things to keep out of the image, e.g. 'text, watermark, extra fingers'",
             },
+            "image_url": {
+                "type": "string",
+                "description": "optional: the link of an earlier picture to change instead of drawing a new one "
+                               "(\"same but pink hair\"); prompt then says only what to change, e.g. 'make her hair pink'",
+            },
             "width": {"type": "integer", "description": f"image width in pixels, {MIN_SIDE}-{MAX_SIDE} (default 1024)"},
             "height": {"type": "integer", "description": f"image height in pixels, {MIN_SIDE}-{MAX_SIDE} (default 1024)"},
         },
@@ -126,8 +139,9 @@ def print_schema():
         # Needs outbound network access (ComfyUI or RunPod, the hosting backend).
         "sandbox": {"allowNetwork": True},
         "requires": requires(),
-        # Caps are per person, so the bot passes who asked.
+        # Caps are per person, so the bot passes who asked, and another bot can't ask on someone's behalf.
         "requester": True,
+        "nobots": True,
         # The bot runs --announce for the /me shown while the picture is made.
         "announcer": True,
     }
@@ -151,7 +165,8 @@ def side(value, default: int = 1024) -> int:
         n = default
     return min(MAX_SIDE, max(MIN_SIDE, n)) // 16 * 16
 
-def build_workflow(prompt: str, width: int, height: int, negative: str = "") -> dict:
+def build_workflow(prompt: str, width: int, height: int, negative: str = "", source: str = "") -> dict:
+    """source names an uploaded picture to edit; the result then keeps that picture's size."""
     negative = combined_negative(negative)
     # cfg 1 skips the negative branch entirely, so a negative only takes effect with more guidance.
     cfg = NEGATIVE_CFG if negative else GEN_CFG
@@ -187,6 +202,13 @@ def build_workflow(prompt: str, width: int, height: int, negative: str = "") -> 
             "filename_prefix": "metald_gen", "images": ["7", 0],
         }},
     }
+    if source:
+        # The encoder sees the picture and splices it in as reference latents; its latent output is
+        # the picture's size, which keeps the edit in place.
+        nodes["11"] = {"class_type": "LoadImage", "inputs": {"image": source}}
+        nodes["4"]["inputs"].update({"vae": ["3", 0], "images.image_1": ["11", 0]})
+        nodes["6"]["inputs"]["latent_image"] = ["4", 2]
+        del nodes["5"]
     if SAFETY_CHECK == "encoder":
         # The Qwen3-VL text encoder already loaded for the prompt looks at the finished image.
         nodes["9"] = {"class_type": "TextGenerate", "inputs": {
@@ -203,11 +225,13 @@ def refine_prompt(user_prompt: str) -> str:
     ep = chat.endpoint("IMAGE_REFINER")
     return _refine(user_prompt, ep["url"], ep["model"], ep["key"])
 
-def review_prompt(prompt: str) -> str:
+def review_prompt(prompt: str, edit: bool = False) -> str:
     """Why the request may not be drawn, as the tool's reply, or "" when it may."""
     if not REVIEW_PROMPTS:
         return ""
-    allowed, reason = safetyreview.review(PROMPT_POLICY, prompt, "IMAGE REQUEST",
+    # A bare "make her hair pink" reads as missing context unless the reviewer knows it's a change.
+    content = f"Change to an existing picture: {prompt}" if edit else prompt
+    allowed, reason = safetyreview.review(PROMPT_POLICY, content, "IMAGE REQUEST",
                                           logger=lambda m: toollog.log_detail("image_gen", f"prompt review: {m}"))
     if allowed:
         return ""
@@ -218,34 +242,64 @@ def review_prompt(prompt: str) -> str:
                 "without naming the character.")
     return f"Error: refused - that request can't be drawn ({reason})."
 
-def render(workflow: dict) -> tuple:
+def fetch_source(url: str) -> tuple:
+    """(picture bytes, "") for a picture that may be edited, or (None, the reply saying why not)."""
+    host = (urllib.parse.urlparse(url).hostname or "").lower()
+    if host not in EDIT_HOSTS:
+        allowed = ", ".join(EDIT_HOSTS) or "nowhere: editing is off"
+        return None, (f"Not edited: only pictures on {allowed} can be changed. Offer to draw a new one "
+                      "from a description instead.")
+    try:
+        data, mime = vision.fetch_image(url)
+    except (urllib.error.URLError, ValueError, OSError) as e:
+        toollog.log_detail("image_gen", f"edit source unreadable: {e}")
+        return None, "Error: couldn't fetch that picture to edit; check the link."
+    if not mime.startswith("image/"):
+        return None, "Error: that link isn't a picture."
+    data, _ = vision.fit_for_model(data, mime)
+    if len(data) > MAX_SOURCE:
+        return None, "Error: that picture is too large to edit."
+    return data, ""
+
+def render(workflow: dict, source: bytes = None) -> tuple:
     """(image bytes, safety verdict or None). The verdict comes with the image when the encoder checks it."""
     log = lambda m: toollog.log_detail("image_gen", m)
     if BACKEND == "runpod":
-        out = runpod.run(workflow["prompt"], POLL_TIMEOUT, log=log)
+        out = runpod.run(workflow["prompt"], POLL_TIMEOUT, log=log,
+                         inputs={SOURCE_NAME: source} if source else None)
         verdict = out["texts"][0] if out["texts"] else ""
         return out["images"][0], (verdict if SAFETY_CHECK == "encoder" else None)
+    if source:
+        workflow["prompt"]["11"]["inputs"]["image"] = comfyui.upload(source, SOURCE_NAME, log=log)
     return comfyui.run(workflow, "images", POLL_TIMEOUT, log=log), None
 
-def generate_image(prompt: str, width: int, height: int, negative: str = "", requested_by: str = "") -> str:
+def generate_image(prompt: str, width: int, height: int, negative: str = "", requested_by: str = "",
+                   image_url: str = "") -> str:
     if SAFETY_CHECK == "encoder" and BACKEND != "runpod":
         return "Error: IMAGE_SAFETY_CHECK encoder needs IMAGE_GEN_BACKEND runpod"
     over = usagecap.take("imagegen", requested_by, PER_HOUR, PER_DAY, DAY_TOTAL)
     if over:
         return over
-    reply = draw(prompt, width, height, negative)
+    reply = draw(prompt, width, height, negative, image_url)
     if not reply.startswith("url: "):
         # Only a posted picture counts against the caps.
         usagecap.give_back("imagegen", requested_by)
     return reply
 
-def draw(prompt: str, width: int, height: int, negative: str) -> str:
-    refused = review_prompt(prompt)
+def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "") -> str:
+    refused = review_prompt(prompt, edit=bool(image_url))
     if refused:
         return refused
-    refined_prompt = refine_prompt(prompt)
+    source = None
+    if image_url:
+        source, why_not = fetch_source(image_url)
+        if source is None:
+            return why_not
+    # An edit is a short instruction about the picture; expanding it would redraw the whole scene.
+    final_prompt = prompt if source else refine_prompt(prompt)
     try:
-        image_bytes, verdict = render(build_workflow(refined_prompt, width, height, negative))
+        image_bytes, verdict = render(build_workflow(final_prompt, width, height, negative,
+                                                     SOURCE_NAME if source else ""), source)
     except comfyui.ComfyCancelled:
         return comfyui.CANCELLED_REPLY
     except comfyui.ComfyError as e:
@@ -313,7 +367,8 @@ def main():
         negative = input_data.get("negative") or ""
         if not isinstance(negative, str):
             negative = ""
-        print(generate_image(prompt, width, height, negative, str(input_data.get("requested_by") or "")))
+        print(generate_image(prompt, width, height, negative, str(input_data.get("requested_by") or ""),
+                             str(input_data.get("image_url") or "").strip()))
         return
 
     print("Usage: image_gen.py [--schema | --announce | --execute <json>]")
