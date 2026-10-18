@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/alexschlessinger/pollytool/messages"
 	"github.com/alexschlessinger/pollytool/tools"
@@ -82,5 +83,27 @@ func TestOnToolStart_AdminOnlyToolIsNotAnnouncedForOthers(t *testing.T) {
 		if want := map[bool]int{false: 0, true: 1}[admin]; len(ctx.Actions) != want {
 			t.Errorf("admin=%v: actions = %q, want %d", admin, ctx.Actions, want)
 		}
+	}
+}
+
+// A reply that talks about the picture but leaves out its link still gets the link posted.
+func TestOnComplete_ReplyWithoutTheToolURLGetsIt(t *testing.T) {
+	ctx := mocktest.NewMockContext()
+	output := make(chan string, 10)
+	chunker := irc.NewChunker(output, 350)
+	h := newCallbackHandler(ctx, chunker, ctx.GetConfig())
+
+	h.onToolEnd(messages.ChatMessageToolCall{Name: "imagegen__picture"}, "url: https://files.example.com/cat.png", time.Millisecond, nil)
+	h.onContent("here you go, a sleepy cat!")
+	h.onComplete(&messages.ChatMessage{})
+	chunker.Flush()
+	close(output)
+
+	var got []string
+	for line := range output {
+		got = append(got, line)
+	}
+	if len(got) != 2 || got[1] != "https://files.example.com/cat.png" {
+		t.Fatalf("want the reply then the link, got %q", got)
 	}
 }

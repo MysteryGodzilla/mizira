@@ -339,10 +339,13 @@ func (h *callbackHandler) onComplete(response *messages.ChatMessage) {
 	}
 	h.chatCtx.GetLogger().Info("request_complete", fields...)
 
-	if (!h.hadContent || h.overBudget) && h.lastToolURL != "" {
-		h.chatCtx.GetLogger().Warn("empty_final_reply_fallback", "url", h.lastToolURL)
+	// A tool that made something answers "url: ..."; if the reply didn't post that link, the channel
+	// would never see what was made.
+	if h.lastToolURL != "" && (!h.hadContent || h.overBudget || !strings.Contains(h.visible.String(), h.lastToolURL)) {
+		h.chatCtx.GetLogger().Warn("reply_missing_tool_url", "url", h.lastToolURL)
 		h.overBudget = false // let the url itself through
-		h.chunker.Write(h.lastToolURL + "\n")
+		// Its own line, not the end of the reply's last one; the chunker drops the empty line otherwise.
+		h.chunker.Write("\n" + h.lastToolURL + "\n")
 	}
 }
 
