@@ -26,8 +26,8 @@ type ShellToolMeta struct {
 	Announce *bool `json:"announce"`
 	// Requester true has the bot pass the asking nick as "requested_by".
 	Requester bool `json:"requester"`
-	// Announcer true has the bot run "<tool> --announce" when the tool is called and post the
-	// "action: " line it prints instead of "calling <tool>".
+	// Announcer true has the bot run "<tool> --announce '<arguments>'" when the tool is called and post
+	// the "action: " line it prints instead of "calling <tool>".
 	Announcer bool `json:"announcer"`
 	// NoBots true refuses calls made for another bot's line.
 	NoBots bool `json:"nobots"`
@@ -67,16 +67,19 @@ const announceTimeout = 10 * time.Second
 // SetAnnouncer records the command that prints a tool's start line.
 func SetAnnouncer(name, command string) { announcers.Store(name, command) }
 
-// Announcement runs a tool's --announce and returns what it printed; false when the tool has no
-// announcer or it failed.
-func Announcement(name string) (string, bool) {
+// Announcement runs a tool's --announce with the call's arguments (JSON), so it can tell kinds of
+// call apart, and returns what it printed; false when the tool has no announcer or it failed.
+func Announcement(name, arguments string) (string, bool) {
 	command, ok := announcers.Load(name)
 	if !ok {
 		return "", false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), announceTimeout)
 	defer cancel()
-	out, err := tools.ScriptCommand(ctx, command.(string), "--announce").Output()
+	if strings.TrimSpace(arguments) == "" {
+		arguments = "{}"
+	}
+	out, err := tools.ScriptCommand(ctx, command.(string), "--announce", arguments).Output()
 	if err != nil {
 		GetLogger().Warn("tool_announce_failed", "tool", name, "error", err)
 		return "", false

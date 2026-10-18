@@ -532,7 +532,7 @@ func (h *callbackHandler) onToolStart(calls []messages.ChatMessageToolCall) {
 			continue
 		}
 		h.announcedTools[displayName] = true
-		if out, ok := core.Announcement(tc.Name); ok {
+		if out, ok := core.Announcement(tc.Name, tc.Arguments); ok {
 			if action, ok := toolAction(out); ok {
 				h.chatCtx.ReplyAction(action)
 				continue

@@ -79,6 +79,10 @@ class RunPodImageTests(unittest.TestCase):
             self.assertEqual(imagegen.announcement(), "action: " + imagegen.ANNOUNCE_COLD)
         with patch.object(runpod, "cold", lambda: False):
             self.assertEqual(imagegen.announcement(), "action: " + imagegen.ANNOUNCE)
+            self.assertEqual(imagegen.announcement({"prompt": "a cat"}), "action: " + imagegen.ANNOUNCE)
+            self.assertEqual(imagegen.announcement({"prompt": "pink hair", "image_url": "https://files.example.com/a.png"}),
+                             "action: " + imagegen.ANNOUNCE_EDIT)
+            self.assertEqual(imagegen.announcement({"image_url": " "}), "action: " + imagegen.ANNOUNCE)
 
     def test_sizes_are_bounded(self):
         self.assertEqual([imagegen.side(v) for v in (None, "x", 100, 1000, 9999)], [1024, 1024, 512, 992, 1536])

@@ -34,6 +34,7 @@ var ToolSettings = []ToolSetting{
 	{"IMAGE_GEN_DAY_TOTAL", "Pictures", "number", "pictures everyone together may have in 24 hours (0: no cap)"},
 	{"IMAGE_GEN_NEGATIVE", "Pictures", "text", "kept out of every picture, comma-separated"},
 	{"IMAGE_GEN_ANNOUNCE", "Pictures", "text", "her /me when she starts a picture"},
+	{"IMAGE_GEN_ANNOUNCE_EDIT", "Pictures", "text", "her /me when she changes an earlier picture"},
 	{"IMAGE_GEN_ANNOUNCE_COLD", "Pictures", "text", "her /me when the image server has to start up first"},
 	{"IMAGE_GEN_EXPIRE", "Pictures", "text", "how long pictures stay up, e.g. 30d (empty: the host's default)"},
 	{"IMAGE_EDIT_HOSTS", "Pictures", "text", "hosts whose pictures can be edited, comma-separated (empty: no editing)"},

@@ -720,6 +720,7 @@ env:
   # IMAGE_GEN_PER_DAY: "20"
   # IMAGE_GEN_DAY_TOTAL: "60"       # everyone together, per 24 hours
   # IMAGE_GEN_ANNOUNCE: "is drawing a picture"                # the /me when a picture is started
+  # IMAGE_GEN_ANNOUNCE_EDIT: "is touching up the picture"     # the /me when an earlier picture is edited
   # IMAGE_GEN_ANNOUNCE_COLD: "gets the drawing things out - the first picture takes a few minutes"   # runpod, no worker up yet
   # IMAGE_PROMPT_REVIEW: "off"      # skip IMAGE_PROMPT_POLICY
   # IMAGE_REFINER_URL: ""           # model that expands the prompt (default: the bot's own)
