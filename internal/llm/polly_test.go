@@ -45,7 +45,7 @@ func TestOnComplete_EmptyReplyFallsBackToToolURL(t *testing.T) {
 	}
 }
 
-// The fallback applies only when the reply was empty; a normal reply gets no duplicate url.
+// A reply that already posted the link gets no duplicate url.
 func TestOnComplete_NoFallbackWhenContentPresent(t *testing.T) {
 	ctx := mocktest.NewMockContext()
 	output := make(chan string, 10)

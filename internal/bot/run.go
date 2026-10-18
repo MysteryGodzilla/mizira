@@ -60,6 +60,10 @@ func Run(ctx context.Context, cfg *config.Configuration) error {
 	if os.Getenv("METALD_TOOL_LOG") == "" {
 		os.Setenv("METALD_TOOL_LOG", core.DataPath(filepath.Join("logs", "tools.log")))
 	}
+	// Plugins keep their own state (use caps) here too.
+	if os.Getenv("METALD_DATADIR") == "" {
+		os.Setenv("METALD_DATADIR", core.DataPath("."))
+	}
 	commands.OverridesPath = core.DataPath("config-overrides.json")
 
 	// Layer persisted runtime changes (+set, +admins, +tools) over config.yml. Must run
