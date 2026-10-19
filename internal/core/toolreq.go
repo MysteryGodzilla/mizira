@@ -33,6 +33,8 @@ type ShellToolMeta struct {
 	NoBots bool `json:"nobots"`
 	// Once true lets one request run the tool once.
 	Once bool `json:"once"`
+	// People true has the bot pass how the people a picture prompt names look, as "people".
+	People bool `json:"people"`
 }
 
 // ReadShellToolMeta runs a plugin's --schema and returns its metadata.

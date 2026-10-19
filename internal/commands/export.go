@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"reflect"
 	"regexp"
@@ -96,13 +97,24 @@ func ExportConfig(configPath string, now time.Time) (string, []ExportChange, err
 			changes = append(changes, change("tool", before["tool"], value))
 		}
 	}
+	envChanges, wantEnv := envOverrides(o, before["env"])
+	changes = append(changes, envChanges...)
 	if len(changes) == 0 {
 		return "", nil, ErrNothingToExport
 	}
 	sort.Slice(changes, func(i, j int) bool { return changes[i].Key < changes[j].Key })
 
 	var appended []string
+	for _, key := range slices.Sorted(maps.Keys(wantEnv)) {
+		var err error
+		if text, err = setEnvKey(text, key, wantEnv[key]); err != nil {
+			return "", nil, err
+		}
+	}
 	for _, c := range changes {
+		if _, isEnv := strings.CutPrefix(c.Key, "env."); isEnv {
+			continue
+		}
 		rendered, err := renderKey(c.Key, want[c.Key])
 		if err != nil {
 			return "", nil, err
@@ -122,6 +134,16 @@ func ExportConfig(configPath string, now time.Time) (string, []ExportChange, err
 	var after map[string]any
 	if err := yaml.Unmarshal([]byte(text), &after); err != nil {
 		return "", nil, fmt.Errorf("the export doesn't parse: %w", err)
+	}
+	if len(wantEnv) > 0 {
+		merged := map[string]any{}
+		if m, ok := before["env"].(map[string]any); ok {
+			maps.Copy(merged, m)
+		}
+		for k, v := range wantEnv {
+			merged[k] = v
+		}
+		want["env"] = merged
 	}
 	for key, v := range before {
 		if w, changed := want[key]; changed {
@@ -327,4 +349,67 @@ func ListOverrides(configPath string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// envOverrides are the console's tool settings (env:) that differ from config.yml, as changes named
+// env.<KEY>, and their values.
+func envOverrides(o runtimeOverrides, before any) ([]ExportChange, map[string]string) {
+	held, _ := before.(map[string]any)
+	want := map[string]string{}
+	var changes []ExportChange
+	for _, key := range sortedKeys(o.Env) {
+		was, set := held[key]
+		if set && fmt.Sprint(was) == o.Env[key] {
+			continue
+		}
+		want[key] = o.Env[key]
+		if !set {
+			was = nil
+		}
+		changes = append(changes, change("env."+key, was, o.Env[key]))
+	}
+	return changes, want
+}
+
+// setEnvKey writes one setting under env:, replacing its line (and any block it has) or adding it
+// first in the section, or adding the section when config.yml has none.
+func setEnvKey(text, key, value string) (string, error) {
+	rendered, err := renderKey(key, value)
+	if err != nil {
+		return "", err
+	}
+	rendered = "  " + strings.ReplaceAll(rendered, "\n", "\n  ")
+	lines := strings.Split(text, "\n")
+	env := slices.IndexFunc(lines, func(l string) bool { return l == "env:" || strings.HasPrefix(l, "env: ") })
+	if env < 0 {
+		return strings.TrimRight(text, "\n") + "\n\nenv:\n" + rendered + "\n", nil
+	}
+	for i := env + 1; i < len(lines); i++ {
+		l := lines[i]
+		if strings.TrimSpace(l) != "" && l[0] != ' ' && l[0] != '\t' && !strings.HasPrefix(l, "#") {
+			break // the next top-level key: the section has no such setting
+		}
+		if !strings.HasPrefix(l, "  "+key+":") {
+			continue
+		}
+		end := i + 1
+		for k := i + 1; k < len(lines); k++ {
+			if strings.TrimSpace(lines[k]) == "" {
+				continue
+			}
+			if strings.HasPrefix(lines[k], "   ") {
+				end = k + 1
+				continue
+			}
+			break
+		}
+		newLines := strings.Split(rendered, "\n")
+		if c := trailingComment.FindString(strings.TrimPrefix(l, "  "+key+":")); c != "" && len(newLines) == 1 {
+			newLines[0] += c
+		}
+		out := append(append(slices.Clone(lines[:i]), newLines...), lines[end:]...)
+		return strings.Join(out, "\n"), nil
+	}
+	out := append(append(slices.Clone(lines[:env+1]), strings.Split(rendered, "\n")...), lines[env+1:]...)
+	return strings.Join(out, "\n"), nil
 }

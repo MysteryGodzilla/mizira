@@ -137,3 +137,50 @@ func TestResetAllKeepsRunState(t *testing.T) {
 		t.Errorf("list overrides left: %v", left)
 	}
 }
+
+// The console's picture settings live under env:, so the export rewrites single settings there and
+// leaves the rest of the section, comments and multi-line policies included, as it was.
+func TestExportConfigToolSettings(t *testing.T) {
+	dir := t.TempDir()
+	old := OverridesPath
+	OverridesPath = filepath.Join(dir, "overrides.json")
+	t.Cleanup(func() { OverridesPath = old })
+	cfgPath := filepath.Join(dir, "config.yml")
+	conf := "nick: botty\n\nenv:\n  # pictures\n  IMAGE_GEN_PER_HOUR: \"5\"   # per person\n  IMAGE_PROMPT_POLICY: |-\n    DENY nudity.\n\n    ALLOW the rest.\n  RUSTYPASTE_URL: https://files.example.com\n\ntool:\n  - irc__slap\n"
+	if err := os.WriteFile(cfgPath, []byte(conf), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	saveOverrides(runtimeOverrides{Env: map[string]string{
+		"IMAGE_GEN_PER_HOUR": "8", "IMAGE_GEN_ANNOUNCE_EDIT": "is fixing the picture", "IMAGE_GEN_EXPIRE": "",
+	}})
+
+	path, changes, err := ExportConfig(cfgPath, time.Date(2026, 10, 19, 9, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(path)
+	var got struct {
+		Nick string
+		Env  map[string]string
+		Tool []string
+	}
+	if err := yaml.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"IMAGE_GEN_PER_HOUR": "8", "IMAGE_PROMPT_POLICY": "DENY nudity.\n\nALLOW the rest.",
+		"RUSTYPASTE_URL": "https://files.example.com", "IMAGE_GEN_ANNOUNCE_EDIT": "is fixing the picture", "IMAGE_GEN_EXPIRE": ""}
+	for k, v := range want {
+		if got.Env[k] != v {
+			t.Errorf("env %s = %q, want %q", k, got.Env[k], v)
+		}
+	}
+	if got.Nick != "botty" || len(got.Tool) != 1 {
+		t.Errorf("other keys changed: %+v", got)
+	}
+	if !strings.Contains(string(raw), "# per person") || !strings.Contains(string(raw), "  # pictures") {
+		t.Errorf("comments lost:\n%s", raw)
+	}
+	if len(changes) != 3 || changes[0].Key != "env.IMAGE_GEN_ANNOUNCE_EDIT" {
+		t.Errorf("changes = %+v", changes)
+	}
+}

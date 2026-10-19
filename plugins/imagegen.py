@@ -86,6 +86,11 @@ MAX_SOURCE = 6 * 1024 * 1024
 SOURCE_NAME = "metald_source.png"
 
 PROMPT_POLICY = os.environ.get("IMAGE_PROMPT_POLICY", "")
+# How the people a prompt names look ("people", passed by the bot) reach the prompt writer; {people}.
+PEOPLE_FRAME = os.environ.get("IMAGE_PROMPT_PEOPLE", "")
+# Asked of the finished edit with the encoder check; {change} is the instruction, answer YES or NO.
+EDIT_CHECK = os.environ.get("IMAGE_EDIT_CHECK_PROMPT", "")
+EDITS_CHECKED = SAFETY_CHECK == "encoder" and bool(EDIT_HOSTS)
 REVIEW_PROMPTS = safetyreview.enabled("IMAGE_PROMPT_REVIEW")
 
 COLD_REPLY = ("Not ready: the image server is still starting up, which can take several minutes the first "
@@ -93,7 +98,9 @@ COLD_REPLY = ("Not ready: the image server is still starting up, which can take 
 
 
 def requires() -> list:
-    need = ["IMAGE_SAFETY_PROMPT", "IMAGE_PROMPT_REFINER"] + hosting.requires()
+    need = ["IMAGE_SAFETY_PROMPT", "IMAGE_PROMPT_REFINER", "IMAGE_PROMPT_PEOPLE"] + hosting.requires()
+    if EDITS_CHECKED:
+        need.append("IMAGE_EDIT_CHECK_PROMPT")
     if REVIEW_PROMPTS:
         need += ["IMAGE_PROMPT_POLICY"] + safetyreview.requires("IMAGE_PROMPT_REVIEW")
     if BACKEND == "runpod":
@@ -118,7 +125,9 @@ def print_schema():
             "and call it every time one does: it checks limits and permissions itself, so never "
             "tell someone they are limited or not allowed without calling it for that request. when "
             "someone corrects how a person looks (\"don't forget my glasses are gold\"), redraw it and also save "
-            "the correction with memory__remember."
+            "the correction with memory__remember. the tool itself checks what may be drawn (romance like "
+            "hand holding or a kiss is fine, nudity isn't), so don't refuse a picture request yourself: call it "
+            "and pass on its answer."
         ),
         "type": "object",
         "properties": {
@@ -147,6 +156,8 @@ def print_schema():
         # Caps are per person, so the bot passes who asked, and another bot can't ask on someone's behalf.
         "requester": True,
         "nobots": True,
+        # ...and how the people the prompt names look, from memory.
+        "people": True,
         # One picture per request: it once drew a second in the same turn and posted both.
         "once": True,
         # The bot runs --announce for the /me shown while the picture is made.
@@ -175,8 +186,10 @@ def side(value, default: int = 1024) -> int:
         n = default
     return min(MAX_SIDE, max(MIN_SIDE, n)) // 16 * 16
 
-def build_workflow(prompt: str, width: int, height: int, negative: str = "", source: str = "") -> dict:
-    """source names an uploaded picture to edit; the result then keeps that picture's size."""
+def build_workflow(prompt: str, width: int, height: int, negative: str = "", source: str = "",
+                   change: str = "") -> dict:
+    """source names an uploaded picture to edit; the result then keeps that picture's size. change is the
+    edit's instruction, checked against the result."""
     negative = combined_negative(negative)
     # cfg 1 skips the negative branch entirely, so a negative only takes effect with more guidance.
     cfg = NEGATIVE_CFG if negative else GEN_CFG
@@ -226,12 +239,22 @@ def build_workflow(prompt: str, width: int, height: int, negative: str = "", sou
             "max_length": 40, "sampling_mode": "off",
         }}
         nodes["10"] = {"class_type": "PreviewAny", "inputs": {"source": ["9", 0]}}
+        if source and change and EDIT_CHECK:
+            # An edit about 1 in 5 times came back without the change: the encoder says whether it shows.
+            nodes["12"] = {"class_type": "TextGenerate", "inputs": {
+                "clip": ["2", 0], "prompt": EDIT_CHECK.replace("{change}", change), "image": ["7", 0],
+                "max_length": 8, "sampling_mode": "off",
+            }}
+            nodes["13"] = {"class_type": "PreviewAny", "inputs": {"source": ["12", 0]}}
     return {"prompt": nodes}
 
 def upload_image(image_bytes: bytes) -> str:
     return upload_file(image_bytes, f"metald_{int(time.time() * 1000)}.png", "image/png", EXPIRE)
 
-def refine_prompt(user_prompt: str) -> str:
+def refine_prompt(user_prompt: str, people: str = "") -> str:
+    """The detailed prompt; people (from memory, passed by the bot) says how those named look."""
+    if people.strip() and PEOPLE_FRAME.strip():
+        user_prompt += "\n\n" + PEOPLE_FRAME.strip().replace("{people}", people.strip())
     ep = chat.endpoint("IMAGE_REFINER")
     return _refine(user_prompt, ep["url"], ep["model"], ep["key"])
 
@@ -277,31 +300,38 @@ def fetch_source(url: str) -> tuple:
     return data, ""
 
 def render(workflow: dict, source: bytes = None) -> tuple:
-    """(image bytes, safety verdict or None). The verdict comes with the image when the encoder checks it."""
+    """(image bytes, safety verdict or None, edit check or ""). The verdict and the check come with the
+    image when the encoder looks at it; the texts arrive in node order, safety first."""
     log = lambda m: toollog.log_detail("image_gen", m)
     if BACKEND == "runpod":
         out = runpod.run(workflow["prompt"], POLL_TIMEOUT, log=log,
                          inputs={SOURCE_NAME: source} if source else None)
-        verdict = out["texts"][0] if out["texts"] else ""
-        return out["images"][0], (verdict if SAFETY_CHECK == "encoder" else None)
+        texts = out["texts"]
+        verdict = texts[0] if texts else ""
+        check = texts[1] if "12" in workflow["prompt"] and len(texts) > 1 else ""
+        return out["images"][0], (verdict if SAFETY_CHECK == "encoder" else None), check
     if source:
         workflow["prompt"]["11"]["inputs"]["image"] = comfyui.upload(source, SOURCE_NAME, log=log)
-    return comfyui.run(workflow, "images", POLL_TIMEOUT, log=log), None
+    return comfyui.run(workflow, "images", POLL_TIMEOUT, log=log), None, ""
+
+def edit_missed(check: str) -> bool:
+    """Whether the encoder said the edit doesn't show; no answer isn't a miss."""
+    return check.strip().upper().startswith("NO")
 
 def generate_image(prompt: str, width: int, height: int, negative: str = "", requested_by: str = "",
-                   image_url: str = "") -> str:
+                   image_url: str = "", people: str = "") -> str:
     if SAFETY_CHECK == "encoder" and BACKEND != "runpod":
         return "Error: IMAGE_SAFETY_CHECK encoder needs IMAGE_GEN_BACKEND runpod"
     over = usagecap.take("imagegen", requested_by, PER_HOUR, PER_DAY, DAY_TOTAL)
     if over:
         return over
-    reply = draw(prompt, width, height, negative, image_url)
+    reply = draw(prompt, width, height, negative, image_url, people)
     if not reply.startswith("url: "):
         # Only a posted picture counts against the caps.
         usagecap.give_back("imagegen", requested_by)
     return reply
 
-def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "") -> str:
+def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "", people: str = "") -> str:
     refused = review_prompt(prompt, edit=bool(image_url))
     if refused:
         return refused
@@ -311,10 +341,18 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
         if source is None:
             return why_not
     # An edit is a short instruction about the picture; expanding it would redraw the whole scene.
-    final_prompt = edit_prompt(prompt) if source else refine_prompt(prompt)
+    if people and not source:
+        toollog.log_detail("image_gen", "looks from memory for: " + ", ".join(
+            line.split(":", 1)[0] for line in people.splitlines()))
+    final_prompt = edit_prompt(prompt) if source else refine_prompt(prompt, people)
     try:
-        image_bytes, verdict = render(build_workflow(final_prompt, width, height, negative,
-                                                     SOURCE_NAME if source else ""), source)
+        workflow = lambda: build_workflow(final_prompt, width, height, negative, SOURCE_NAME if source else "",
+                                          prompt if source else "")
+        image_bytes, verdict, check = render(workflow(), source)
+        if source and edit_missed(check):
+            # One more try, with a new seed; the second result stands either way.
+            toollog.log_detail("image_gen", f"edit missed ({check.strip()[:40]!r}), trying again")
+            image_bytes, verdict, check = render(workflow(), source)
     except comfyui.ComfyCancelled:
         return comfyui.CANCELLED_REPLY
     except comfyui.ComfyError as e:
@@ -387,7 +425,7 @@ def main():
         if not isinstance(negative, str):
             negative = ""
         print(generate_image(prompt, width, height, negative, str(input_data.get("requested_by") or ""),
-                             str(input_data.get("image_url") or "").strip()))
+                             str(input_data.get("image_url") or "").strip(), str(input_data.get("people") or "")))
         return
 
     print("Usage: image_gen.py [--schema | --announce | --execute <json>]")

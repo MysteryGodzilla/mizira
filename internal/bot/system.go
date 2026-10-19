@@ -153,6 +153,9 @@ func loadToolSpec(reg *tools.ToolRegistry, toolSpec string, adminTools map[strin
 					if tool, ok := reg.Get(name); ok && meta.Requester {
 						reg.Register(irc.NewRequesterTool(tool))
 					}
+					if tool, ok := reg.Get(name); ok && meta.People {
+						reg.Register(irc.NewPicturePeopleTool(tool))
+					}
 					if tool, ok := reg.Get(name); ok && meta.Once {
 						reg.Register(irc.NewOncePerRequestTool(tool))
 					}
