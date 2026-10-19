@@ -14,6 +14,9 @@ sys.path[:0] = [os.path.join(os.path.dirname(__file__), ".."), os.path.join(os.p
 import imagegen
 from metald_tools import comfyui, runpod, usagecap
 
+# The tests below swap refine_prompt out; this is the real one.
+REFINE_PROMPT = imagegen.refine_prompt
+
 
 class RunPodImageTests(unittest.TestCase):
     def setUp(self):
@@ -24,7 +27,7 @@ class RunPodImageTests(unittest.TestCase):
                   patch.object(imagegen, "SAFETY_CHECK", "encoder"),
                   patch.object(imagegen, "REVIEW_PROMPTS", False),
                   patch.object(imagegen, "PER_HOUR", 1),
-                  patch.object(imagegen, "refine_prompt", lambda p: p),
+                  patch.object(imagegen, "refine_prompt", lambda p, people="": p),
                   patch.object(imagegen, "upload_image", lambda b: "https://files.example.com/a.png")):
             p.start()
             self.addCleanup(p.stop)
@@ -96,7 +99,7 @@ class RunPodImageTests(unittest.TestCase):
         with patch.object(imagegen, "EDIT_HOSTS", ["files.example.com"]), \
                 patch.object(imagegen.vision, "fetch_image", lambda url: (b"source", "image/png")), \
                 patch.object(imagegen.vision, "fit_for_model", lambda b, m: (b, m)), \
-                patch.object(imagegen, "refine_prompt", lambda p: self.fail("an edit was sent to the refiner")), \
+                patch.object(imagegen, "refine_prompt", lambda p, people="": self.fail("an edit was sent to the refiner")), \
                 patch.object(runpod, "run", run):
             reply = imagegen.generate_image("make her hair pink", 1024, 1024, requested_by="alice",
                                             image_url="https://files.example.com/a.png")
@@ -124,8 +127,46 @@ class RunPodImageTests(unittest.TestCase):
         with redirect_stdout(buf):
             imagegen.print_schema()
         schema = json.loads(buf.getvalue())
-        self.assertTrue(schema["nobots"] and schema["once"] and schema["requester"] and schema["announcer"])
+        self.assertTrue(schema["nobots"] and schema["once"] and schema["people"] and schema["requester"] and schema["announcer"])
         self.assertIn("image_url", schema["properties"])
+
+    def edit(self, checks):
+        """An edit whose encoder checks answer checks in turn; returns the reply and the workflows sent."""
+        sent = []
+
+        def run(workflow, timeout, log=None, inputs=None):
+            sent.append(workflow)
+            return {"images": [b"png%d" % len(sent)], "texts": ["SAFE", checks[len(sent) - 1]]}
+        with patch.object(imagegen, "EDIT_HOSTS", ["files.example.com"]), \
+                patch.object(imagegen, "EDIT_CHECK", "Does it show: {change}? YES or NO"), \
+                patch.object(imagegen.vision, "fetch_image", lambda url: (b"source", "image/png")), \
+                patch.object(imagegen.vision, "fit_for_model", lambda b, m: (b, m)), \
+                patch.object(imagegen, "upload_image", lambda b: "url-of-" + b.decode()), \
+                patch.object(runpod, "run", run):
+            reply = imagegen.generate_image("make her hair pink", 1024, 1024, requested_by="alice",
+                                            image_url="https://files.example.com/a.png")
+        return reply, sent
+
+    def test_missed_edit_is_tried_once_more(self):
+        reply, sent = self.edit(["NO", "YES"])
+        self.assertEqual(reply, "url: url-of-png2")
+        self.assertEqual(len(sent), 2)
+        self.assertEqual(sent[0]["12"]["inputs"]["prompt"], "Does it show: make her hair pink? YES or NO")
+        with patch.object(imagegen, "PER_HOUR", 0):
+            reply, sent = self.edit(["NO", "NO"])
+        self.assertEqual((reply, len(sent)), ("url: url-of-png2", 2), "only one retry")
+        with patch.object(imagegen, "PER_HOUR", 0):
+            reply, sent = self.edit(["YES"])
+        self.assertEqual((reply, len(sent)), ("url: url-of-png1", 1))
+
+    def test_people_reach_the_prompt_writer(self):
+        seen = []
+        with patch.object(imagegen, "PEOPLE_FRAME", "People: {people}"), \
+                patch.object(imagegen, "_refine", lambda text, *a: seen.append(text) or text):
+            REFINE_PROMPT("bob at the beach", "bob: drawn as female")
+            REFINE_PROMPT("a cat", "")
+        self.assertEqual(seen, ["bob at the beach\n\nPeople: bob: drawn as female", "a cat"])
+
 
 if __name__ == "__main__":
     unittest.main()
