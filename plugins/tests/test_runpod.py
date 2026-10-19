@@ -75,10 +75,10 @@ class RunPodTests(unittest.TestCase):
                 runpod.run({}, timeout=1, log=lambda m: None)
         self.assertEqual(str(e.exception), "backend unreachable")
 
-    def test_cold_only_without_any_worker(self):
+    def test_cold_unless_a_worker_is_running(self):
         for workers, cold in (({"idle": 0, "running": 0, "ready": 0, "initializing": 1}, True),
-                              ({"idle": 1, "running": 0, "ready": 1}, False),
-                              ({"running": 1}, False)):
+                              ({"idle": 1, "running": 0, "ready": 1}, True),
+                              ({"running": 1, "idle": 1}, False)):
             self.serve({"/ep1/health": lambda p, b, w=workers: (200, {"workers": w})})
             self.assertEqual(runpod.cold(), cold, workers)
 

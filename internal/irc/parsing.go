@@ -65,15 +65,26 @@ func CheckAddressedAmong(message, trigger string, otherName func(word string) bo
 	if allFiller {
 		return true
 	}
+	prev := before[len(before)-1]
 	// Called at the end: "what do you think bot?". Not after a word that makes it the object:
 	// "say hi to bot", "who is bot".
 	if len(after) == 0 || allPunctuation(after) {
-		return !objectMarkers[bareAddressWord(before[len(before)-1])]
+		return !objectMarkers[bareAddressWord(prev)]
+	}
+	states := statementVerbs[bareAddressWord(after[0])] && !strings.Contains(message, "?")
+	// A sentence that opens with the name: "bottle glass. bot fix the beer".
+	if strings.ContainsAny(lastRune(prev), ".!?") && !states {
+		return true
+	}
+	// One word before it that is no one's name and doesn't make it the object, often a typo of a
+	// greeting: "alight bot let's try again".
+	if len(before) == 1 && !states && !objectMarkers[bareAddressWord(prev)] &&
+		(otherName == nil || !otherName(bareAddressWord(prev))) {
+		return true
 	}
 	// Called mid-line, set off by commas: "ok so, bot, what now?", or after a short opener: "good
 	// first image bot, you did well". Not after a word that makes it the object: "i told bot, ...".
 	name := words[at+len(trig)-1]
-	prev := before[len(before)-1]
 	if !strings.ContainsAny(lastRune(name), ",:") {
 		return false
 	}
