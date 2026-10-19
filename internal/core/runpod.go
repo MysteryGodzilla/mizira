@@ -164,3 +164,35 @@ func ImageUses(path string, now time.Time) (int, error) {
 	}
 	return n, nil
 }
+
+var runpodREST = "https://rest.runpod.io/v1"
+
+// RunPodDay is what an endpoint was billed for one UTC day.
+type RunPodDay struct {
+	Day    time.Time // midnight UTC
+	Amount float64   // dollars
+	Billed time.Duration
+}
+
+// RunPodBilling reads an endpoint's daily bill from since (UTC days).
+func RunPodBilling(ctx context.Context, key, endpoint string, since time.Time) ([]RunPodDay, error) {
+	var rows []struct {
+		Amount       float64 `json:"amount"`
+		TimeBilledMs int64   `json:"timeBilledMs"`
+		Time         string  `json:"time"`
+	}
+	url := fmt.Sprintf("%s/billing/endpoints?bucketSize=day&endpointId=%s&startTime=%s", runpodREST, endpoint,
+		since.UTC().Format(time.RFC3339))
+	if err := runpodDo(ctx, http.MethodGet, url, key, nil, &rows); err != nil {
+		return nil, err
+	}
+	out := make([]RunPodDay, 0, len(rows))
+	for _, r := range rows {
+		day, err := time.Parse("2006-01-02 15:04:05", r.Time)
+		if err != nil {
+			continue
+		}
+		out = append(out, RunPodDay{Day: day, Amount: r.Amount, Billed: time.Duration(r.TimeBilledMs) * time.Millisecond})
+	}
+	return out, nil
+}

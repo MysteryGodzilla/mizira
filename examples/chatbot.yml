@@ -737,6 +737,7 @@ env:
   # VISION_API_URL: http://127.0.0.1:8080/v1
   # VISION_API_KEY: ""
   # VISION_MAX_SIDE: 1536   # larger images are shrunk to fit the model's vision budget
+  # VISION_ANNOUNCE: "is having a look at the picture"   # the /me when she starts looking (a model may load first)
 
   # pastes (paste): an opengist instance, or PASTE_BACKEND: hosting to upload the text
   # through UPLOAD_BACKEND below (e.g. rustypaste)

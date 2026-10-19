@@ -56,9 +56,10 @@ func (c console) pictures(ctx context.Context) []admin.ServiceView {
 	now := time.Now()
 	if jobs, err := core.ReadImageJobs(os.Getenv("METALD_TOOL_LOG"), now); err == nil {
 		v.Stats = append(v.Stats,
-			core.ServiceStat{Label: "today", Value: fmt.Sprintf("%d · %.1f GPU min", jobs.TodayJobs, jobs.TodayGPU.Minutes())},
-			core.ServiceStat{Label: "this month", Value: fmt.Sprintf("%d · %.1f GPU min", jobs.MonthJobs, jobs.MonthGPU.Minutes())})
+			core.ServiceStat{Label: "pictures today", Value: fmt.Sprintf("%d · %.1f GPU min", jobs.TodayJobs, jobs.TodayGPU.Minutes())},
+			core.ServiceStat{Label: "pictures this month", Value: fmt.Sprintf("%d · %.1f GPU min", jobs.MonthJobs, jobs.MonthGPU.Minutes())})
 	}
+	v.Stats = append(v.Stats, billedStats(ctx, key, endpoint, now)...)
 	if n, err := core.ImageUses(core.DataPath("usage-imagegen.json"), now); err == nil {
 		used := strconv.Itoa(n)
 		if total := os.Getenv("IMAGE_GEN_DAY_TOTAL"); total != "" && total != "0" {
@@ -67,6 +68,31 @@ func (c console) pictures(ctx context.Context) []admin.ServiceView {
 		v.Stats = append(v.Stats, core.ServiceStat{Label: "last 24h", Value: used})
 	}
 	return []admin.ServiceView{v}
+}
+
+// billedStats is what RunPod billed the endpoint, by UTC day as RunPod bills: today and this month,
+// with the billed minutes (workers running, idle time included). The bill covers every job on the
+// endpoint, the other bot's and tests too, so no cost per picture from this bot's count.
+func billedStats(ctx context.Context, key, endpoint string, now time.Time) []core.ServiceStat {
+	utc := now.UTC()
+	month := time.Date(utc.Year(), utc.Month(), 1, 0, 0, 0, 0, time.UTC)
+	days, err := core.RunPodBilling(ctx, key, endpoint, month)
+	if err != nil {
+		return []core.ServiceStat{{Label: "billed", Value: "RunPod didn't answer: " + err.Error()}}
+	}
+	var today, total float64
+	var todayTime, totalTime time.Duration
+	for _, d := range days {
+		total += d.Amount
+		totalTime += d.Billed
+		if d.Day.Format("2006-01-02") == utc.Format("2006-01-02") {
+			today, todayTime = d.Amount, d.Billed
+		}
+	}
+	return []core.ServiceStat{
+		{Label: "billed today (UTC)", Value: fmt.Sprintf("$%.2f · %.0f min", today, todayTime.Minutes())},
+		{Label: "billed this month", Value: fmt.Sprintf("$%.2f · %.0f min", total, totalTime.Minutes())},
+	}
 }
 
 func (c console) modelServer(ctx context.Context) admin.ServiceView {

@@ -25,6 +25,12 @@ func TestRunPodBalanceAndWorkers(t *testing.T) {
 		switch r.URL.Path {
 		case "/graphql":
 			fmt.Fprint(w, `{"data":{"myself":{"clientBalance":8.06,"currentSpendPerHr":0.89,"spendLimit":80}}}`)
+		case "/v1/billing/endpoints":
+			if r.URL.Query().Get("endpointId") != "ep1" || r.URL.Query().Get("bucketSize") != "day" {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			fmt.Fprint(w, `[{"amount":1.97,"timeBilledMs":7015703,"endpointId":"ep1","time":"2026-10-18 00:00:00"},{"amount":1.25,"timeBilledMs":4045414,"endpointId":"ep1","time":"2026-10-19 00:00:00"}]`)
 		case "/v2/ep1/health":
 			fmt.Fprint(w, `{"workers":{"idle":2,"running":1,"initializing":0}}`)
 		default:
@@ -32,9 +38,9 @@ func TestRunPodBalanceAndWorkers(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	oldG, oldA := runpodGraphQL, runpodAPI
-	runpodGraphQL, runpodAPI = srv.URL+"/graphql", srv.URL+"/v2"
-	t.Cleanup(func() { runpodGraphQL, runpodAPI = oldG, oldA })
+	oldG, oldA, oldR := runpodGraphQL, runpodAPI, runpodREST
+	runpodGraphQL, runpodAPI, runpodREST = srv.URL+"/graphql", srv.URL+"/v2", srv.URL+"/v1"
+	t.Cleanup(func() { runpodGraphQL, runpodAPI, runpodREST = oldG, oldA, oldR })
 
 	acct, err := RunPodBalance(context.Background(), "k1")
 	if err != nil || acct.Balance != 8.06 || acct.SpendPerHr != 0.89 || acct.SpendLimit != 80 {
@@ -42,6 +48,10 @@ func TestRunPodBalanceAndWorkers(t *testing.T) {
 	}
 	if _, err := RunPodBalance(context.Background(), "wrong"); err == nil {
 		t.Error("a refused key gave a balance")
+	}
+	days, err := RunPodBilling(context.Background(), "k1", "ep1", time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC))
+	if err != nil || len(days) != 2 || days[1].Amount != 1.25 || days[0].Day.Day() != 18 || days[0].Billed.Round(time.Second) != 7016*time.Second {
+		t.Errorf("billing = %+v, %v", days, err)
 	}
 	w, err := RunPodWorkers(context.Background(), "k1", "ep1")
 	if err != nil || w["idle"] != 2 || w["running"] != 1 {
