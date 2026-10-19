@@ -53,12 +53,13 @@ def workers():
 
 
 def cold() -> bool:
-    """Whether a job would wait for a worker to be set up: no worker running and none ready to start.
-    Unknown counts as warm, so a failed check never claims a long wait."""
+    """Whether a job has to start a worker first: none is running. A scaled-down worker restarts in
+    seconds but loads the model again, so the job takes twice as long or more; one still being set up
+    takes minutes. Unknown counts as warm, so a failed check never claims a wait."""
     w = workers()
     if w is None:
         return False
-    return not any(w.get(k, 0) for k in ("running", "idle", "ready"))
+    return not w.get("running", 0)
 
 
 def _decode(item) -> bytes:

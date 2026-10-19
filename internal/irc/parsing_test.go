@@ -34,6 +34,10 @@ func TestCheckAddressed(t *testing.T) {
 		{"alright before", "alright bot make an image of the whole party", "bot", true},
 		{"short opener then name and comma", "Good first image bot, you are a good girl", "bot", true},
 		{"told then name and comma", "i told bot, she never listens", "bot", false},
+		{"typo of a greeting", "Alight bot let's try the image again", "bot", true},
+		{"new sentence opens with the name", "Bottle glass. Bot fix the beer, make it a bottle", "bot", true},
+		{"new sentence states something", "Long day. Bot is tired too", "bot", false},
+		{"one word then a statement", "Poor bot can't draw hands", "bot", false},
 		{"long lead then name and comma", "i was saying to alice earlier that bot, honestly", "bot", false},
 		// Only talking about it.
 		{"subject mid-line", "Hey alice did you see what bot did", "bot", false},

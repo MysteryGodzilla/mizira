@@ -158,12 +158,20 @@ func (p *PeopleOnlyTool) Execute(ctx context.Context, args map[string]any) (stri
 type OncePerRequestTool struct {
 	tools.Tool
 	mu   sync.Mutex
-	used map[string]time.Time // request id -> first call
+	used map[string]onceCall // by request id
 }
+
+type onceCall struct {
+	at     time.Time
+	result string // the first call's result, first line
+}
+
+// OnceRepeated starts the answer to a second call in the same request.
+const OnceRepeated = "Already done:"
 
 // NewOncePerRequestTool wraps tool so each request may run it once.
 func NewOncePerRequestTool(tool tools.Tool) *OncePerRequestTool {
-	return &OncePerRequestTool{Tool: tool, used: map[string]time.Time{}}
+	return &OncePerRequestTool{Tool: tool, used: map[string]onceCall{}}
 }
 
 func (o *OncePerRequestTool) Execute(ctx context.Context, args map[string]any) (string, error) {
@@ -171,27 +179,47 @@ func (o *OncePerRequestTool) Execute(ctx context.Context, args map[string]any) (
 	if err != nil {
 		return "", err
 	}
-	if !o.first(chatCtx.GetRequestID(), time.Now()) {
-		return "Already done: this tool runs once per request and its result is above. Don't call it again; " +
-			"answer with what you have. If it wasn't right, say so and let them ask again.", nil
+	request := chatCtx.GetRequestID()
+	if earlier, again := o.first(request, time.Now()); again {
+		// After a refusal it kept retrying "with less physical implication": say what the first call
+		// got, and that this turn is over for this tool.
+		return fmt.Sprintf("%s this tool runs once per request, and this request already had its answer: %q. "+
+			"Don't call it again or retry it differently; reply now, in a line or two, with that answer. "+
+			"They can ask again if they want another try.", OnceRepeated, earlier), nil
 	}
-	return o.Tool.Execute(ctx, args)
+	result, err := o.Tool.Execute(ctx, args)
+	o.record(request, result)
+	return result, err
 }
 
-// first records the request's call and reports whether it is the first; old requests are dropped.
-func (o *OncePerRequestTool) first(request string, now time.Time) bool {
+// first records the request's call; again is true, with the first call's result, when it already had
+// one. Old requests are dropped.
+func (o *OncePerRequestTool) first(request string, now time.Time) (earlier string, again bool) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	for id, at := range o.used {
-		if now.Sub(at) > time.Hour {
+	for id, c := range o.used {
+		if now.Sub(c.at) > time.Hour {
 			delete(o.used, id)
 		}
 	}
-	if _, seen := o.used[request]; seen {
-		return false
+	if c, seen := o.used[request]; seen {
+		return c.result, true
 	}
-	o.used[request] = now
-	return true
+	o.used[request] = onceCall{at: now}
+	return "", false
+}
+
+func (o *OncePerRequestTool) record(request, result string) {
+	first, _, _ := strings.Cut(result, "\n")
+	if r := []rune(first); len(r) > 200 {
+		first = string(r[:200]) + "…"
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if c, ok := o.used[request]; ok {
+		c.result = first
+		o.used[request] = c
+	}
 }
 
 // RefusedFor reports whether tool will only refuse this caller: an admin-only tool for someone who

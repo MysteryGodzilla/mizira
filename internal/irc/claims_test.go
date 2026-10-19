@@ -77,3 +77,35 @@ func TestWithoutClaims(t *testing.T) {
 		}
 	}
 }
+
+// From the live test: a promise to draw with no picture, and requests worded many ways.
+func TestDrawClaimAndPictureAsks(t *testing.T) {
+	for line, want := range map[string]bool{
+		"give me a sec, I'll draw it now!":         true,
+		"Let me make a new image of you two":       true,
+		"I'm drawing you now, don't move":          true,
+		"I could draw that if you want?":           false,
+		"I drew that one earlier, remember?":       false,
+		"I'll remember that your glasses are gold": false,
+		"Metalai already got that done~":           false,
+	} {
+		kind, ok := DetectClaim(line)
+		if got := ok && kind == ClaimDraw; got != want {
+			t.Errorf("DetectClaim(%q) = %q, %v; want draw %v", line, kind, ok, want)
+		}
+	}
+	for text, want := range map[string]bool{
+		"Mizira image of drunk hori being dragged through shibuya by iroha": true,
+		"an image of hori, iroha, you and me in an izakaya":                 true,
+		"make some yuri images for me please":                               true,
+		"draw you and me in a hot spring":                                   true,
+		"lets start again from scratch, try another picture of us":          true,
+		"why is it so gloomy, add some sunshine":                            false,
+		"did you see metalai's latest post?":                                false,
+		"how are you today":                                                 false,
+	} {
+		if got := AsksForPicture(text); got != want {
+			t.Errorf("AsksForPicture(%q) = %v, want %v", text, got, want)
+		}
+	}
+}

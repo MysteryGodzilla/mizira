@@ -25,7 +25,7 @@ Configure under env: in config.yml:
   IMAGE_GEN_DAY_TOTAL  images everyone together may have in 24 hours (default: 0, no cap)
   IMAGE_GEN_ANNOUNCE, IMAGE_GEN_ANNOUNCE_EDIT, IMAGE_GEN_ANNOUNCE_COLD  the /me shown when a picture
                        is started, when an earlier one is edited, and with runpod when no worker is
-                       up yet and the first picture will take minutes
+                       running and the picture takes longer
   IMAGE_SAFETY_CHECK   vision (default: VISION_API_* looks at the image) or encoder (the image
                        model's own Qwen3-VL text encoder looks at it in the same job; runpod only)
   IMAGE_PROMPT_POLICY  what may be drawn, checked with safetyreview before anything is made
@@ -77,7 +77,7 @@ PER_DAY = int(os.environ.get("IMAGE_GEN_PER_DAY") or 0)
 DAY_TOTAL = int(os.environ.get("IMAGE_GEN_DAY_TOTAL") or 0)
 ANNOUNCE = os.environ.get("IMAGE_GEN_ANNOUNCE", "").strip() or "is drawing a picture"
 ANNOUNCE_COLD = (os.environ.get("IMAGE_GEN_ANNOUNCE_COLD", "").strip()
-                 or "gets the drawing things out - the first picture takes a few minutes")
+                 or "gets the drawing things out - this one takes a little longer")
 ANNOUNCE_EDIT = os.environ.get("IMAGE_GEN_ANNOUNCE_EDIT", "").strip() or "is touching up the picture"
 
 EDIT_HOSTS = [h.strip().lower() for h in os.environ.get("IMAGE_EDIT_HOSTS", "").split(",") if h.strip()]

@@ -100,7 +100,8 @@ func TestRefusedForLooksThroughEveryWrapper(t *testing.T) {
 	}
 }
 
-// The model drew a second picture in the same turn and posted both.
+// The model drew a second picture in the same turn and posted both; after a refusal it kept
+// retrying. A repeat is answered with what the first call got.
 func TestOncePerRequestTool(t *testing.T) {
 	rec := &argsRecorder{}
 	once := NewOncePerRequestTool(rec)
@@ -108,14 +109,15 @@ func TestOncePerRequestTool(t *testing.T) {
 	if out, _ := once.Execute(ctx, map[string]any{}); out != "ok" {
 		t.Fatalf("first call = %q", out)
 	}
-	if out, _ := once.Execute(ctx, map[string]any{}); !strings.HasPrefix(out, "Already done:") {
+	out, _ := once.Execute(ctx, map[string]any{})
+	if !strings.HasPrefix(out, OnceRepeated) || !strings.Contains(out, `"ok"`) {
 		t.Fatalf("second call in the same request = %q", out)
 	}
 	now := time.Now()
-	if !once.first("another-request", now) {
+	if _, again := once.first("another-request", now); again {
 		t.Fatal("a new request was refused")
 	}
-	if !once.first("mock-request", now.Add(2*time.Hour)) {
+	if _, again := once.first("mock-request", now.Add(2*time.Hour)); again {
 		t.Fatal("old requests aren't forgotten")
 	}
 }

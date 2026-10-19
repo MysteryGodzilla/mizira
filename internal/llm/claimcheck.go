@@ -21,6 +21,7 @@ var claimAction = map[irc.ClaimKind]string{
 	irc.ClaimIgnore:   "ignore someone",
 	irc.ClaimForget:   "forget a memory",
 	irc.ClaimSearch:   "search the web",
+	irc.ClaimDraw:     "draw the picture yourself",
 }
 
 // claimFallback replaces a claim the retry still didn't back with a tool call.
@@ -29,6 +30,7 @@ var claimFallback = map[irc.ClaimKind]string{
 	irc.ClaimIgnore:   "sorry, i didn't actually ignore anyone. ask me again?",
 	irc.ClaimForget:   "sorry, i didn't actually forget that. ask me again?",
 	irc.ClaimSearch:   "sorry, i didn't actually search for that. ask me again?",
+	irc.ClaimDraw:     "sorry, i didn't actually draw that one. ask me again?",
 }
 
 // claimableTools lists the claim tools this request can call; nil when it has no tools.

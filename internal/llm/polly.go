@@ -263,6 +263,9 @@ type callbackHandler struct {
 	claimTools       map[string]bool     // tools a claim is checked against; nil checks nothing
 	toolsRun         map[string]bool     // tools started this request
 	claims           map[irc.ClaimKind]bool
+	askedPicture     bool // the message asks for a picture, so a link in the reply must be one drawn now
+	shown            bool // the channel saw a tool's effect: its start line, its own /me, or its action
+	repeats          int  // calls this request to a once-per-request tool after its first
 }
 
 // maxTurnContent bounds how much visible text ONE request may post.
@@ -284,11 +287,16 @@ func newCallbackHandler(chatCtx core.ChatContextInterface, chunker *irc.Chunker,
 // watchClaims makes the chunker hold back a line claiming an action whose tool hasn't run yet.
 func (h *callbackHandler) watchClaims(claimTools map[string]bool) {
 	h.claimTools = claimTools
+	h.askedPicture = irc.AsksForPicture(strings.Join(h.chatCtx.GetArgs(), " "))
 	h.chunker.SetHold(h.holdClaim)
 }
 
 func (h *callbackHandler) holdClaim(line string) bool {
 	kind, ok := irc.DetectClaim(line)
+	// Asked for a picture, she twice answered with a link another bot had posted earlier.
+	if !ok && h.askedPicture && irc.HasLink(line) {
+		kind, ok = irc.ClaimDraw, true
+	}
 	if !ok {
 		return false
 	}
@@ -516,7 +524,11 @@ func (h *callbackHandler) onToolStart(calls []messages.ChatMessageToolCall) {
 		h.chatCtx.GetLogger().Info("tool_started", "tool", tc.Name)
 	}
 
-	if !h.cfg.Bot.ShowToolActions || len(calls) == 0 {
+	if len(calls) == 0 {
+		return
+	}
+	if !h.cfg.Bot.ShowToolActions {
+		h.shown = true // with no start lines, a tool that ran counts as an answer, as it always has
 		return
 	}
 
@@ -524,7 +536,11 @@ func (h *callbackHandler) onToolStart(calls []messages.ChatMessageToolCall) {
 	// (e.g. after a failed safety check) shouldn't re-announce "calling X" a second time.
 	var names []string
 	for _, tc := range calls {
-		if silentTools[tc.Name] || core.QuietTool(tc.Name) || !h.toolExists(tc.Name) || h.refusedHere(tc.Name) {
+		if silentTools[tc.Name] || core.QuietTool(tc.Name) {
+			h.shown = true // its own effect is what the channel sees
+			continue
+		}
+		if !h.toolExists(tc.Name) || h.refusedHere(tc.Name) {
 			continue
 		}
 		displayName := toolDisplayName(tc.Name)
@@ -532,6 +548,7 @@ func (h *callbackHandler) onToolStart(calls []messages.ChatMessageToolCall) {
 			continue
 		}
 		h.announcedTools[displayName] = true
+		h.shown = true
 		if out, ok := core.Announcement(tc.Name, tc.Arguments); ok {
 			if action, ok := toolAction(out); ok {
 				h.chatCtx.ReplyAction(action)
@@ -574,8 +591,13 @@ func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result stri
 		"preview", preview,
 	)
 
+	if strings.HasPrefix(result, irc.OnceRepeated) {
+		h.repeats++
+	}
+
 	// A plugin posts a /me by starting its result with "action: ".
 	if action, ok := toolAction(result); ok {
+		h.shown = true
 		h.flush()
 		h.chatCtx.ReplyAction(action)
 		recordAction(h.chatCtx.GetRequestID(), action)
@@ -602,9 +624,19 @@ func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result stri
 // to call it; past that it only burns iterations asking again.
 const maxToolRefusals = 2
 
+// maxRepeats is how often a request may call a once-per-request tool again before it may call no
+// tool at all.
+const maxRepeats = 2
+
 // approveToolCalls denies calls to a tool that has already refused this request twice.
 func (h *callbackHandler) approveToolCalls(calls []messages.ChatMessageToolCall) []bool {
 	ok := make([]bool, len(calls))
+	// Told twice it had already run a once-per-request tool, the model called it again and again
+	// until it ran out of steps, posting half-replies on the way. No more tools this request.
+	if h.repeats >= maxRepeats {
+		h.chatCtx.GetLogger().Warn("tool_calls_denied_after_repeats", "repeats", h.repeats)
+		return ok
+	}
 	for i, tc := range calls {
 		ok[i] = h.refusals[tc.Name] < maxToolRefusals
 		if !ok[i] {
@@ -635,10 +667,10 @@ func isToolRefusal(result string) bool {
 // noAnswer is what the channel sees when the model twice finished without writing anything.
 const noAnswer = "i went quiet on that one - thought it through and never wrote an answer. ask again, maybe more specifically."
 
-// silent reports whether this turn produced nothing the channel saw: no text, no tool, no fallback
-// link.
+// silent reports whether this turn produced nothing the channel saw: no text, no tool effect, no
+// fallback link. A tool that only refused unseen (admin-only, for someone else) shows nothing.
 func (h *callbackHandler) silent() bool {
-	return !h.hadContent && h.toolCount == 0 && h.lastToolURL == ""
+	return !h.hadContent && !h.shown && h.lastToolURL == ""
 }
 
 // outOfSteps is what the channel sees when a request used every tool iteration without answering.

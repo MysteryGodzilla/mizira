@@ -123,3 +123,61 @@ func TestOnToolStart_PeopleOnlyToolIsNotAnnouncedForBots(t *testing.T) {
 		t.Fatalf("announced for a bot: %q", ctx.Actions)
 	}
 }
+
+// Asked for a picture, she answered with a link another bot had posted: held, as a claim to draw.
+func TestPictureAnsweredWithSomeoneElsesLinkIsHeld(t *testing.T) {
+	ctx := mocktest.NewMockContext().WithArgs("mizira", "image", "of", "alice", "in", "shibuya")
+	h := newCallbackHandler(ctx, irc.NewChunker(make(chan string, 10), 350), ctx.GetConfig())
+	h.watchClaims(map[string]bool{"imagegen__picture": true})
+	if !h.holdClaim("Lol, botty already got that done~ https://files.example.com/x.png") {
+		t.Fatal("a link answering a picture request wasn't held")
+	}
+	if got := h.unbackedClaims(); len(got) != 1 || got[0] != irc.ClaimDraw {
+		t.Fatalf("unbacked = %v", got)
+	}
+	h.toolsRun["imagegen__picture"] = true
+	if h.holdClaim("here it is! https://files.example.com/y.png") {
+		t.Fatal("her own picture's link was held")
+	}
+
+	chat := mocktest.NewMockContext().WithArgs("mizira", "what", "did", "you", "think", "of", "it")
+	h = newCallbackHandler(chat, irc.NewChunker(make(chan string, 10), 350), chat.GetConfig())
+	h.watchClaims(map[string]bool{"imagegen__picture": true})
+	if h.holdClaim("this was cute https://files.example.com/x.png") {
+		t.Fatal("a link held when nobody asked for a picture")
+	}
+}
+
+// A tool that only refused unseen leaves the channel with nothing: the reply counts as silent.
+func TestRefusedUnseenToolIsSilent(t *testing.T) {
+	sys := mocktest.NewMockSystem()
+	sys.ToolRegistry.Register(irc.NewAdminOnlyTool(namedTool{name: "silenttest__picture"}))
+	ctx := mocktest.NewMockContext().WithSystem(sys)
+	cfg := ctx.GetConfig()
+	cfg.Bot.ShowToolActions = true
+	h := newCallbackHandler(ctx, irc.NewChunker(make(chan string, 10), 350), cfg)
+	h.onToolStart([]messages.ChatMessageToolCall{{Name: "silenttest__picture"}})
+	if !h.silent() {
+		t.Fatal("a refused, unannounced tool counted as an answer")
+	}
+	h.onToolStart([]messages.ChatMessageToolCall{{Name: "irc__slap"}})
+	if h.silent() {
+		t.Fatal("a slap is its own answer")
+	}
+}
+
+// Told twice it had already run a once-per-request tool, the model may call no tool at all.
+func TestRepeatsStopToolCalls(t *testing.T) {
+	ctx := mocktest.NewMockContext()
+	h := newCallbackHandler(ctx, irc.NewChunker(make(chan string, 10), 350), ctx.GetConfig())
+	calls := []messages.ChatMessageToolCall{{Name: "imagegen__picture"}, {Name: "memory__recall"}}
+	for i := 0; i < maxRepeats; i++ {
+		if ok := h.approveToolCalls(calls); !ok[0] || !ok[1] {
+			t.Fatalf("denied before %d repeats", maxRepeats)
+		}
+		h.onToolEnd(calls[0], irc.OnceRepeated+" this tool runs once per request", time.Millisecond, nil)
+	}
+	if ok := h.approveToolCalls(calls); ok[0] || ok[1] {
+		t.Fatal("tools still allowed after the repeats")
+	}
+}

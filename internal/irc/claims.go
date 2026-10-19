@@ -15,6 +15,7 @@ const (
 	ClaimIgnore   ClaimKind = "ignore"
 	ClaimForget   ClaimKind = "forget"
 	ClaimSearch   ClaimKind = "search"
+	ClaimDraw     ClaimKind = "draw"
 )
 
 // ClaimTool is the tool that has to run for a claim to be true.
@@ -23,6 +24,7 @@ var ClaimTool = map[ClaimKind]string{
 	ClaimIgnore:   "irc__ignore",
 	ClaimForget:   "memory__forget",
 	ClaimSearch:   "websearch__web_search",
+	ClaimDraw:     "imagegen__picture",
 }
 
 // A claim is a first-person promise or report ("I'll remember", "i've stopped replying to bob"),
@@ -47,6 +49,9 @@ var claimPatterns = []struct {
 	// come. "I searched" and "I was looking it up" report an earlier search, so they don't count.
 	{ClaimSearch, regexp.MustCompile(`\b(?:i'?ll|i will|i'?m|i am|let me)\b` + claimGap +
 		`(?:search|searching|look (?:it|that|this|them|those) up|looking (?:it|that|this|them|those) up|look up|looking up)\b`)},
+	// "Give me a sec to get the prompt right" once ended a turn with no picture.
+	{ClaimDraw, regexp.MustCompile(`\b(?:i'?ll|i will|i'?m|i am|let me)\b` + claimGap +
+		`(?:draw|drawing|sketch|sketching|paint|painting|make (?:it|that|this|one|you one|an? (?:new |fresh )?(?:image|picture|pic|drawing|portrait)))\b`)},
 }
 
 // offerModal in a search claim makes it an offer, not a report: "i can look it up for you".
@@ -70,7 +75,7 @@ func DetectClaim(line string) (ClaimKind, bool) {
 		for _, loc := range p.re.FindAllStringIndex(l, -1) {
 			span := l[loc[0]:loc[1]]
 			if bareRecall(span) || heldNotDone.MatchString(span) || claimNegation.MatchString(span) ||
-				(p.kind == ClaimSearch && offerModal.MatchString(span)) ||
+				((p.kind == ClaimSearch || p.kind == ClaimDraw) && offerModal.MatchString(span)) ||
 				askedNotClaimed(l, loc[0], loc[1]) || describesHoldings.MatchString(l[:loc[0]]) {
 				continue
 			}
@@ -120,4 +125,20 @@ func WithoutClaims(text string) string {
 		}
 	}
 	return strings.Join(kept, " ")
+}
+
+// pictureAsk is a request for a picture anywhere in a message: "draw us at the beach", "make an image
+// of hori", "image of drunk hori in shibuya".
+var pictureAsk = regexp.MustCompile(`(?i)\b(?:draw|sketch|paint)\b|\b(?:make|generate|create|do|give|try)\b[^.!?]{0,40}\b(?:image|picture|pic|portrait|drawing)s?\b|^(?:[\w-]+[,:]?\s+)?(?:an?\s+|another\s+|new\s+|fresh\s+)?(?:image|picture|pic|portrait)s?\s+(?:of|with)\b`)
+
+// AsksForPicture reports a message asking for a picture.
+func AsksForPicture(text string) bool {
+	return pictureAsk.MatchString(strings.TrimSpace(text))
+}
+
+var anyLink = regexp.MustCompile(`(?i)\bhttps?://\S+`)
+
+// HasLink reports a line carrying a web link.
+func HasLink(line string) bool {
+	return anyLink.MatchString(line)
 }
