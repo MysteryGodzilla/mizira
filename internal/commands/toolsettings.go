@@ -38,6 +38,7 @@ var ToolSettings = []ToolSetting{
 	{"IMAGE_GEN_ANNOUNCE_COLD", "Pictures", "text", "her /me when the image server has to start up first"},
 	{"IMAGE_GEN_EXPIRE", "Pictures", "text", "how long pictures stay up, e.g. 30d (empty: the host's default)"},
 	{"IMAGE_EDIT_HOSTS", "Pictures", "text", "hosts whose pictures can be edited, comma-separated (empty: no editing)"},
+	{"VISION_ANNOUNCE", "Looking at pictures", "text", "her /me when she starts looking at a picture someone linked"},
 }
 
 // ToolSettingValue is a tool setting's value now and config.yml's.
