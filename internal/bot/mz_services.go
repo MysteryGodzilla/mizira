@@ -54,12 +54,18 @@ func (c console) pictures(ctx context.Context) []admin.ServiceView {
 			Value: fmt.Sprintf("%d running · %d ready · %d starting", w["running"], w["idle"], w["initializing"])})
 	}
 	now := time.Now()
-	if jobs, err := core.ReadImageJobs(os.Getenv("METALD_TOOL_LOG"), now); err == nil {
+	jobs, jobsErr := core.ReadImageJobs(os.Getenv("METALD_TOOL_LOG"), now)
+	if jobsErr == nil {
 		v.Stats = append(v.Stats,
 			core.ServiceStat{Label: "pictures today", Value: fmt.Sprintf("%d · %.1f GPU min", jobs.TodayJobs, jobs.TodayGPU.Minutes())},
 			core.ServiceStat{Label: "pictures this month", Value: fmt.Sprintf("%d · %.1f GPU min", jobs.MonthJobs, jobs.MonthGPU.Minutes())})
 	}
-	v.Stats = append(v.Stats, billedStats(ctx, key, endpoint, now)...)
+	billed, month, ok := billedStats(ctx, key, endpoint, now)
+	v.Stats = append(v.Stats, billed...)
+	if ok && jobsErr == nil && jobs.MonthJobs > 0 {
+		v.Stats = append(v.Stats, core.ServiceStat{Label: "per picture this month",
+			Value: fmt.Sprintf("≈ $%.3f (rough: tests and idle time included)", month/float64(jobs.MonthJobs))})
+	}
 	if n, err := core.ImageUses(core.DataPath("usage-imagegen.json"), now); err == nil {
 		used := strconv.Itoa(n)
 		if total := os.Getenv("IMAGE_GEN_DAY_TOTAL"); total != "" && total != "0" {
@@ -71,14 +77,14 @@ func (c console) pictures(ctx context.Context) []admin.ServiceView {
 }
 
 // billedStats is what RunPod billed the endpoint, by UTC day as RunPod bills: today and this month,
-// with the billed minutes (workers running, idle time included). The bill covers every job on the
-// endpoint, the other bot's and tests too, so no cost per picture from this bot's count.
-func billedStats(ctx context.Context, key, endpoint string, now time.Time) []core.ServiceStat {
+// with the billed minutes (workers running, idle time included), and the month's total. The bill
+// covers every job on the endpoint, tests too, so a cost per picture from it is only a rough guide.
+func billedStats(ctx context.Context, key, endpoint string, now time.Time) ([]core.ServiceStat, float64, bool) {
 	utc := now.UTC()
 	month := time.Date(utc.Year(), utc.Month(), 1, 0, 0, 0, 0, time.UTC)
 	days, err := core.RunPodBilling(ctx, key, endpoint, month)
 	if err != nil {
-		return []core.ServiceStat{{Label: "billed", Value: "RunPod didn't answer: " + err.Error()}}
+		return []core.ServiceStat{{Label: "billed", Value: "RunPod didn't answer: " + err.Error()}}, 0, false
 	}
 	var today, total float64
 	var todayTime, totalTime time.Duration
@@ -92,7 +98,7 @@ func billedStats(ctx context.Context, key, endpoint string, now time.Time) []cor
 	return []core.ServiceStat{
 		{Label: "billed today (UTC)", Value: fmt.Sprintf("$%.2f · %.0f min", today, todayTime.Minutes())},
 		{Label: "billed this month", Value: fmt.Sprintf("$%.2f · %.0f min", total, totalTime.Minutes())},
-	}
+	}, total, true
 }
 
 func (c console) modelServer(ctx context.Context) admin.ServiceView {
