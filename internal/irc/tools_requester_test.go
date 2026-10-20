@@ -55,6 +55,26 @@ func TestRequesterToolPassesTheSpeaker(t *testing.T) {
 	}
 }
 
+// Admins draw without the per-person caps, so the model must not be able to claim it.
+func TestRequesterToolMarksAdmins(t *testing.T) {
+	for name, tc := range map[string]struct {
+		ctx  *mocktest.MockChatContext
+		want any
+	}{
+		"admin":     {mocktest.NewMockContext().WithSource("alice").WithAdmin(true), true},
+		"non-admin": {mocktest.NewMockContext().WithSource("mallory"), nil},
+	} {
+		rec := &argsRecorder{}
+		args := map[string]any{"requested_by_admin": true}
+		if _, err := NewRequesterTool(rec).Execute(InjectContext(context.Background(), tc.ctx), args); err != nil {
+			t.Fatal(err)
+		}
+		if got := rec.got["requested_by_admin"]; got != tc.want {
+			t.Errorf("%s: requested_by_admin = %v, want %v", name, got, tc.want)
+		}
+	}
+}
+
 // A refusal must not read as a spent limit: the model told the channel a limit "reset failed".
 func TestAdminOnlyToolRefusalSaysWhy(t *testing.T) {
 	ctx := InjectContext(context.Background(), mocktest.NewMockContext().WithSource("alice"))
