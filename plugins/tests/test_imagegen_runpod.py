@@ -32,14 +32,14 @@ class RunPodImageTests(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
 
-    def draw(self, verdict="SAFE - a cat", error=None, who="alice"):
+    def draw(self, verdict="SAFE - a cat", error=None, who="alice", admin=False):
         def run(workflow, timeout, log=None, inputs=None):
             self.sent = workflow
             if error:
                 raise error
             return {"images": [b"png"], "texts": [verdict] if verdict is not None else []}
         with patch.object(runpod, "run", run):
-            return imagegen.generate_image("a cat", 1024, 1024, requested_by=who)
+            return imagegen.generate_image("a cat", 1024, 1024, requested_by=who, admin=admin)
 
     def test_encoder_check_rides_along_and_passes(self):
         self.assertEqual(self.draw(), "url: https://files.example.com/a.png")
@@ -58,6 +58,12 @@ class RunPodImageTests(unittest.TestCase):
         self.assertTrue(self.draw().startswith("url: "), "a failed job gave its use back")
         self.assertTrue(self.draw().startswith("Limit reached:"))
         self.assertTrue(self.draw(who="bob").startswith("url: "))
+
+    def test_admins_are_not_capped_or_counted(self):
+        with patch.object(imagegen, "DAY_TOTAL", 1):
+            for _ in range(3):
+                self.assertTrue(self.draw(who="carol", admin=True).startswith("url: "))
+            self.assertTrue(self.draw().startswith("url: "), "admin pictures used up the day total")
 
     def test_timeout_says_the_server_is_starting(self):
         self.assertEqual(self.draw(error=comfyui.ComfyError("generation timed out")), imagegen.COLD_REPLY)

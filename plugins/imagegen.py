@@ -22,7 +22,8 @@ Configure under env: in config.yml:
                        bot's apitimeout
   IMAGE_GEN_EXPIRE     how long uploaded images stay up, e.g. 30d (default: the host's default)
   IMAGE_GEN_PER_HOUR, IMAGE_GEN_PER_DAY   images one person may have (default: 0, no cap)
-  IMAGE_GEN_DAY_TOTAL  images everyone together may have in 24 hours (default: 0, no cap)
+  IMAGE_GEN_DAY_TOTAL  images everyone together may have in 24 hours (default: 0, no cap); admins'
+                       images are neither capped nor counted
   IMAGE_GEN_ANNOUNCE, IMAGE_GEN_ANNOUNCE_EDIT, IMAGE_GEN_ANNOUNCE_COLD  the /me shown when a picture
                        is started, when an earlier one is edited, and with runpod when no worker is
                        running and the picture takes longer
@@ -319,9 +320,12 @@ def edit_missed(check: str) -> bool:
     return check.strip().upper().startswith("NO")
 
 def generate_image(prompt: str, width: int, height: int, negative: str = "", requested_by: str = "",
-                   image_url: str = "", people: str = "") -> str:
+                   image_url: str = "", people: str = "", admin: bool = False) -> str:
     if SAFETY_CHECK == "encoder" and BACKEND != "runpod":
         return "Error: IMAGE_SAFETY_CHECK encoder needs IMAGE_GEN_BACKEND runpod"
+    # Admins are neither capped nor counted, so the shared day total stays everyone else's.
+    if admin:
+        return draw(prompt, width, height, negative, image_url, people)
     over = usagecap.take("imagegen", requested_by, PER_HOUR, PER_DAY, DAY_TOTAL)
     if over:
         return over
@@ -425,7 +429,8 @@ def main():
         if not isinstance(negative, str):
             negative = ""
         print(generate_image(prompt, width, height, negative, str(input_data.get("requested_by") or ""),
-                             str(input_data.get("image_url") or "").strip(), str(input_data.get("people") or "")))
+                             str(input_data.get("image_url") or "").strip(), str(input_data.get("people") or ""),
+                             input_data.get("requested_by_admin") is True))
         return
 
     print("Usage: image_gen.py [--schema | --announce | --execute <json>]")

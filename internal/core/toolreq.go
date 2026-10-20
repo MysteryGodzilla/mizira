@@ -24,7 +24,8 @@ type ShellToolMeta struct {
 	// Announce false keeps "calling <tool>" out of the channel, for tools whose
 	// output is itself the visible effect.
 	Announce *bool `json:"announce"`
-	// Requester true has the bot pass the asking nick as "requested_by".
+	// Requester true has the bot pass the asking nick as "requested_by", and "requested_by_admin"
+	// true when they are an admin.
 	Requester bool `json:"requester"`
 	// Announcer true has the bot run "<tool> --announce '<arguments>'" when the tool is called and post
 	// the "action: " line it prints instead of "calling <tool>".
