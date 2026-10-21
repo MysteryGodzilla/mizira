@@ -47,9 +47,8 @@ func (p *PicturePeopleTool) Execute(ctx context.Context, args map[string]any) (s
 	edit, _ := args["image_url"].(string)
 	if chatCtx, err := GetIRCContext(ctx); err == nil && strings.TrimSpace(edit) == "" {
 		// The request names them even when the prompt the model wrote doesn't ("draw bob" became "a
-		// girl with silver hair"). Her own name there is how she was addressed, so she is in the
-		// picture only when the prompt names her.
-		named := prompt + "\n" + withoutName(strings.Join(chatCtx.GetArgs(), " "), chatCtx.GetBotNick())
+		// girl with silver hair"). One mention of her own name there is how she was addressed.
+		named := prompt + "\n" + selfNamed(strings.Join(chatCtx.GetArgs(), " "), chatCtx.GetBotNick())
 		if who := PicturePeople(chatCtx.GetNetwork(), named, chatCtx.GetConfig().Bot.LoreFadeDays, time.Now()); who != "" {
 			args["people"] = who
 		}
@@ -57,13 +56,19 @@ func (p *PicturePeopleTool) Execute(ctx context.Context, args map[string]any) (s
 	return p.Tool.Execute(ctx, args)
 }
 
-// withoutName is text with every mention of name removed.
-func withoutName(text, name string) string {
-	if name == "" {
-		return text
+// selfNamed is a request with the bot's name once less, as that one addressed it, and with "yourself"
+// as the bot's name.
+func selfNamed(request, bot string) string {
+	if bot == "" {
+		return request
 	}
-	return regexp.MustCompile(`(?i)\b`+regexp.QuoteMeta(name)+`\b`).ReplaceAllString(text, "")
+	if loc := regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(bot) + `\b`).FindStringIndex(request); loc != nil {
+		request = request[:loc[0]] + request[loc[1]:]
+	}
+	return yourself.ReplaceAllString(request, bot)
 }
+
+var yourself = regexp.MustCompile(`(?i)\byourself\b`)
 
 // PicturePeople describes the people prompt names that memory knows how to draw, one per line:
 // "bob: drawn as female; long silver hair, a red ribbon". "" when it names nobody known.
