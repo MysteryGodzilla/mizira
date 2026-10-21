@@ -53,8 +53,10 @@ func TestPicturePeople(t *testing.T) {
 	if who, _ := rec.got["people"].(string); !strings.HasPrefix(who, "bob: drawn as female") {
 		t.Errorf("a name only in the request was missed: %q", who)
 	}
-	// Every request addressed her by name, so her look went into every picture.
-	asked.BotNick = "bob"
+	// Every request addressed her by name, so her look went into every picture. Live, her nick is the
+	// owner's account and she answers to her trigger.
+	asked.BotNick = "dave"
+	asked.GetConfig().Bot.Trigger = "bob"
 	asked.WithArgs("bob", "draw", "a", "dog", "next", "to", "a", "cat")
 	NewPicturePeopleTool(rec).Execute(InjectContext(context.Background(), asked), map[string]any{"prompt": "a dog next to a cat"})
 	if who, ok := rec.got["people"]; ok {

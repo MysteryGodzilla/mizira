@@ -48,7 +48,12 @@ func (p *PicturePeopleTool) Execute(ctx context.Context, args map[string]any) (s
 	if chatCtx, err := GetIRCContext(ctx); err == nil && strings.TrimSpace(edit) == "" {
 		// The request names them even when the prompt the model wrote doesn't ("draw bob" became "a
 		// girl with silver hair"). One mention of her own name there is how she was addressed.
-		named := prompt + "\n" + selfNamed(strings.Join(chatCtx.GetArgs(), " "), chatCtx.GetBotNick())
+		// The trigger, as her nick can be someone else's account.
+		self := chatCtx.GetConfig().Bot.Trigger
+		if self == "" {
+			self = chatCtx.GetBotNick()
+		}
+		named := prompt + "\n" + selfNamed(strings.Join(chatCtx.GetArgs(), " "), self)
 		if who := PicturePeople(chatCtx.GetNetwork(), named, chatCtx.GetConfig().Bot.LoreFadeDays, time.Now()); who != "" {
 			args["people"] = who
 		}
