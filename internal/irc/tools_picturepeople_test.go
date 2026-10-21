@@ -53,6 +53,24 @@ func TestPicturePeople(t *testing.T) {
 	if who, _ := rec.got["people"].(string); !strings.HasPrefix(who, "bob: drawn as female") {
 		t.Errorf("a name only in the request was missed: %q", who)
 	}
+	// Every request addressed her by name, so her look went into every picture.
+	asked.BotNick = "bob"
+	asked.WithArgs("bob", "draw", "a", "dog", "next", "to", "a", "cat")
+	NewPicturePeopleTool(rec).Execute(InjectContext(context.Background(), asked), map[string]any{"prompt": "a dog next to a cat"})
+	if who, ok := rec.got["people"]; ok {
+		t.Errorf("addressing the bot put it in the picture: %q", who)
+	}
+	for _, request := range [][]string{
+		{"bob", "draw", "bob", "waving"},
+		{"bob", "draw", "yourself", "waving"},
+		{"draw", "yourself", "waving,", "bob"},
+	} {
+		asked.WithArgs(request...)
+		NewPicturePeopleTool(rec).Execute(InjectContext(context.Background(), asked), map[string]any{"prompt": "a girl waving"})
+		if who, _ := rec.got["people"].(string); !strings.HasPrefix(who, "bob: drawn as female") {
+			t.Errorf("%q: the bot asked to be in the picture was missed: %q", request, who)
+		}
+	}
 	NewPicturePeopleTool(rec).Execute(ctx, map[string]any{"prompt": "make bob's ribbon blue", "image_url": "https://files.example.com/a.png"})
 	if _, ok := rec.got["people"]; ok {
 		t.Error("an edit was given people")
