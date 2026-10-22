@@ -232,7 +232,8 @@ def print_schema():
             "someone corrects how a person looks (\"don't forget my glasses are gold\"), redraw it and also save "
             "the correction with memory__remember. the tool itself checks what may be drawn (romance like "
             "hand holding or a kiss is fine, nudity isn't), so don't refuse a picture request yourself: call it "
-            "and pass on its answer."
+            "and pass on its answer. when the picture includes people from the chat, name them rather than "
+            "describing how they look: their looks are added for you."
         ),
         "type": "object",
         "properties": {
@@ -424,12 +425,26 @@ def people_lines(people: list) -> str:
     for p in people:
         sex = p.get("drawn_as") or ""
         if p.get("look"):
-            about = [sex, "look set", f"outfit: {p['outfit']}" if p.get("outfit") else ""]
-            lines.append(f"{p['name']} ({', '.join(x for x in about if x)})")
+            lines.append(f"{p['name']} - outfit: {p.get('outfit') or 'as the request says'}")
         else:
             about = [f"drawn as {sex}" if sex else ""] + list(p.get("notes") or [])
             lines.append(f"{p['name']}: {'; '.join(x for x in about if x)}")
     return "\n".join(lines)
+
+
+def bind_looks(prompt: str, people: list) -> tuple:
+    """(prompt with each set look right after the first mention of its person's name, the people with a
+    look it doesn't name). As a separate list the look drew a second person beside the one described."""
+    unbound = []
+    for p in people:
+        if not p.get("look"):
+            continue
+        m = re.search(r"(?i)(?<![\w-])" + re.escape(p["name"]) + r"(?![\w-])", prompt)
+        if m:
+            prompt = f"{prompt[:m.end()]} ({p['look']}){prompt[m.end():]}"
+        else:
+            unbound.append(p)
+    return prompt, unbound
 
 
 def characters_text(people: list) -> str:
@@ -566,6 +581,7 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
     # An edit is a short instruction about the picture; expanding it would redraw the whole scene.
     named = [] if source else parse_people(people)
     if named:
+        toollog.log_detail("image_gen", f"asked for: {prompt[:300]!r}")
         toollog.log_detail("image_gen", "people: " + ", ".join(
             p["name"] + (f" (look{': ' + p['variant'] if p.get('variant') else ''})" if p.get("look")
                          else " (memories)" if p.get("notes") else "") for p in named))
@@ -588,8 +604,10 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
         final_prompt = refine_prompt(prompt, people, style)
         if style and style["trigger"]:
             final_prompt = f"{style['trigger']}, {final_prompt}"
-        if characters_text(named) and CHARACTER_FRAME.strip():
-            final_prompt += "\n\n" + CHARACTER_FRAME.strip().replace("{characters}", characters_text(named))
+        final_prompt, unbound = bind_looks(final_prompt, named)
+        if characters_text(unbound) and CHARACTER_FRAME.strip():
+            final_prompt += "\n\n" + CHARACTER_FRAME.strip().replace("{characters}", characters_text(unbound))
+        toollog.log_detail("image_gen", f"prompt: {final_prompt[:600]!r}")
     try:
         workflow = lambda: build_workflow(final_prompt, width, height, negative, SOURCE_NAME if source else "",
                                           change, style, REFERENCE_NAME if reference else "", describe)

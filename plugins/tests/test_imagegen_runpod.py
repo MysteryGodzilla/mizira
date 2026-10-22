@@ -356,10 +356,15 @@ class RunPodImageTests(unittest.TestCase):
                 patch.object(runpod, "run", run):
             reply = imagegen.generate_image("hori and remy at a desk", 1024, 1024, requested_by="alice", people=people)
         self.assertTrue(reply.startswith("url: "), reply)
-        self.assertEqual(seen[0], "hori and remy at a desk\n\nPeople: hori (female, look set, outfit: charcoal blazer)\n"
+        self.assertEqual(seen[0], "hori and remy at a desk\n\nPeople: hori - outfit: charcoal blazer\n"
                                   "remy: drawn as male; grey rat with stubble")
+        # Next to her name, not as a list: listed apart, it drew a second woman beside the one described.
         self.assertEqual(sent["workflow"]["4"]["inputs"]["prompt"],
-                         "hori and remy at a desk\n\nCharacters: hori: adult woman, green eyes, short lavender bob")
+                         "hori (adult woman, green eyes, short lavender bob) and remy at a desk")
+        self.assertEqual(imagegen.bind_looks("a woman at a desk", imagegen.parse_people(people)),
+                         ("a woman at a desk", [imagegen.parse_people(people)[0]]))
+        self.assertEqual(imagegen.bind_looks("Hori-chan and HORI", imagegen.parse_people(people))[0],
+                         "Hori-chan and HORI (adult woman, green eyes, short lavender bob)")
 
 
 if __name__ == "__main__":

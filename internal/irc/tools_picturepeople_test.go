@@ -119,3 +119,35 @@ func TestPicturePeopleProfileLook(t *testing.T) {
 		t.Errorf("carol = %+v, want %+v (no look memories)", got[0], want)
 	}
 }
+
+// The model wrote someone's look memories into a picture prompt while their profile look was added
+// too, and the picture had two of them: with a profile look, their look memories stay out of chat.
+func TestWithoutSetLooks(t *testing.T) {
+	const net = "picture-hide-looks"
+	store, _ := core.Memories()
+	store.SetLook(net, "carol", core.Look{Appearance: "adult woman"}, "")
+	look, _ := store.Remember(net, "carol", "carol's avatar has long silver hair", "carol", "#test")
+	store.SetKind(net, look, core.KindLook)
+	lore, _ := store.Remember(net, "carol", "carol runs the pub quiz", "carol", "#test")
+	other, _ := store.Remember(net, "dave", "dave's avatar has a red cap", "dave", "#test")
+	store.SetKind(net, other, core.KindLook)
+	t.Cleanup(func() {
+		store.DeleteProfile(net, "carol")
+		store.Forget(net, look)
+		store.Forget(net, lore)
+		store.Forget(net, other)
+	})
+
+	mems := []core.Memory{{ID: look, Subject: "carol"}, {ID: lore, Subject: "carol"}, {ID: other, Subject: "dave"}}
+	var kept []int64
+	for _, m := range WithoutSetLooks(net, mems) {
+		kept = append(kept, m.ID)
+	}
+	if len(kept) != 2 || kept[0] != lore || kept[1] != other {
+		t.Errorf("kept %v, want carol's lore and dave's look (%d, %d)", kept, lore, other)
+	}
+	people, _ := store.People(net)
+	if line := ProfileLine(people, "carol"); !strings.Contains(line, "look set for pictures") {
+		t.Errorf("profile line = %q", line)
+	}
+}

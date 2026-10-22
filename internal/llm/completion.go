@@ -94,7 +94,7 @@ func recallForSpeaker(ctx irc.ChatContextInterface, known func(string) bool) str
 		ctx.GetLogger().Warn("memory_injection_failed", "error", err.Error())
 		return ""
 	}
-	mems = unseen(mems, known)
+	mems = irc.WithoutSetLooks(ctx.GetNetwork(), unseen(mems, known))
 	profile := ""
 	if people, err := store.People(ctx.GetNetwork()); err == nil {
 		if profile = irc.ProfileLine(people, source); known(profile) {
@@ -177,7 +177,7 @@ func relevantMemories(ctx irc.ChatContextInterface, text string, known func(stri
 			}
 		}
 	}
-	mems = unseen(mems, known)
+	mems = irc.WithoutSetLooks(ctx.GetNetwork(), unseen(mems, known))
 	// Who the people it names are: pronouns, avatars, and which bot is whose.
 	var profiles []string
 	if people, err := store.People(ctx.GetNetwork()); err == nil {

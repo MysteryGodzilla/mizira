@@ -155,6 +155,7 @@ func newMemoryRecallTool() tools.Tool {
 					b.WriteString(line + "\n")
 				}
 			}
+			mems = WithoutSetLooks(chatCtx.GetNetwork(), mems)
 			fmt.Fprintf(&b, "%d memory(ies) about %s:", len(mems), subject)
 			for i, line := range MemoryLines(chatCtx.GetNetwork(), mems) {
 				fmt.Fprintf(&b, "\n  [%d] %s", mems[i].ID, line)
