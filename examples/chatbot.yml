@@ -873,7 +873,7 @@ env:
   # turns a rough image request into a detailed prompt
   # how the people a picture names look (from memory) reach the prompt writer; {people}
   # who is in a new picture, for the prompt writer; {people} is one line each: "name - outfit: ..." for a profile look, or "name: drawn as male; look memories"
-  IMAGE_PROMPT_PEOPLE: "People in the picture. Someone given as \"name - outfit: ...\" is added to the picture as they are: keep their name in your prompt as the one person they are, leave out any description of their face, body or hair (even one the request gives), and dress them in that outfit unless the request asks for other clothes. Draw anyone else as described, including whether they are male or female: {people}"
+  IMAGE_PROMPT_PEOPLE: "People in the picture. Someone given as \"name - outfit: ...\" is added to the picture as they are: keep their name in your prompt as the one person they are, leave out any description of their face, body or hair (even one the request gives), and dress them in that outfit unless the request asks for other clothes, describing only the parts of it the framing shows (no shoes in a close-up). Draw anyone else as described, including whether they are male or female: {people}"
   # profile looks, added word for word after the prompt writer's prompt; {characters}
   IMAGE_PROMPT_CHARACTERS: "Characters, drawn exactly like this: {characters}"
   # a draw style's description, added to the prompt writer's input; {style}
