@@ -35,12 +35,17 @@ Configure under env: in config.yml:
                        (default: the bot's own model)
   IMAGE_EDIT_HOSTS     hosts whose pictures may be edited (image_url), comma-separated, e.g. the
                        hosting backend's own (default: none, editing off)
+  IMAGE_STYLES         named styles (runpod only), one a line: name | draw or edit | strength | trigger |
+                       description | LoRA url (civitai.com or huggingface.co) | sha256. A draw style is
+                       for new pictures, an edit style restyles an earlier one (its trigger is the edit)
+  IMAGE_PROMPT_STYLE   how a draw style's description reaches the prompt writer; {style}
   hosting              see metald_tools/hosting.py (UPLOAD_BACKEND, UPLOAD_HEADERS, ...)
 """
 
 import sys
 import os
 import json
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -91,17 +96,68 @@ PROMPT_POLICY = os.environ.get("IMAGE_PROMPT_POLICY", "")
 PEOPLE_FRAME = os.environ.get("IMAGE_PROMPT_PEOPLE", "")
 # Asked of the finished edit with the encoder check; {change} is the instruction, answer YES or NO.
 EDIT_CHECK = os.environ.get("IMAGE_EDIT_CHECK_PROMPT", "")
+# How a drawing style reaches the prompt writer, so it doesn't describe a photo; {style}.
+STYLE_FRAME = os.environ.get("IMAGE_PROMPT_STYLE", "")
 EDITS_CHECKED = SAFETY_CHECK == "encoder" and bool(EDIT_HOSTS)
 REVIEW_PROMPTS = safetyreview.enabled("IMAGE_PROMPT_REVIEW")
 
 COLD_REPLY = ("Not ready: the image server is still starting up, which can take several minutes the first "
               "time. Tell them to ask again in a few minutes; don't retry now.")
 
+STYLE_LINE = re.compile(r"^(?P<name>[a-z0-9]{2,20})\s*\|\s*(?P<kind>draw|edit)\s*\|\s*(?P<strength>[0-9]+(?:\.[0-9]+)?)"
+                        r"\s*\|(?P<trigger>[^|]*)\|(?P<description>[^|]+)\|\s*(?P<url>https://\S+)\s*\|"
+                        r"\s*(?P<sha256>[0-9a-fA-F]{64})\s*$")
+
+
+def parse_styles(text: str) -> dict:
+    """IMAGE_STYLES, one style a line: name | draw or edit | strength | trigger | description | url | sha256.
+    Blank lines and # comments are skipped; so is a malformed line, with a log line."""
+    styles = {}
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        m = STYLE_LINE.match(line)
+        if not m or not 0 < float(m["strength"]) <= 2:
+            toollog.log_detail("image_gen", f"IMAGE_STYLES line skipped: {line[:80]!r}")
+            continue
+        styles[m["name"]] = {k: v.strip() for k, v in m.groupdict().items()} | {"strength": float(m["strength"])}
+    return styles
+
+
+STYLES = parse_styles(os.environ.get("IMAGE_STYLES", ""))
+
+
+def style_lora(style: dict) -> dict:
+    """The worker's LoRA entry; the file is named by its hash, so a changed style is a new file."""
+    return {"name": f"style-{style['name']}-{style['sha256'][:12].lower()}.safetensors",
+            "url": style["url"], "sha256": style["sha256"].lower()}
+
+
+def check_style(name: str, editing: bool) -> tuple:
+    """(the style, "") or (None, the reply saying why not); ("", "") for no style."""
+    if not name:
+        return None, ""
+    style = STYLES.get(name)
+    if style is None:
+        return None, f"Not drawn: there's no style called {name!r}. Styles: {', '.join(sorted(STYLES)) or 'none'}."
+    if BACKEND != "runpod":
+        return None, "Error: styles need IMAGE_GEN_BACKEND runpod"
+    if style["kind"] == "draw" and editing:
+        return None, (f"Not done: {name} is a style for new pictures. Offer to draw a new picture in it, or "
+                      "call again without image_url.")
+    if style["kind"] == "edit" and not editing:
+        return None, (f"Not done: {name} restyles an existing picture. Call again with that picture's "
+                      "image_url (usually the latest one you posted), or offer to draw one first.")
+    return style, ""
+
 
 def requires() -> list:
     need = ["IMAGE_SAFETY_PROMPT", "IMAGE_PROMPT_REFINER", "IMAGE_PROMPT_PEOPLE"] + hosting.requires()
     if EDITS_CHECKED:
         need.append("IMAGE_EDIT_CHECK_PROMPT")
+    if any(s["kind"] == "draw" for s in STYLES.values()):
+        need.append("IMAGE_PROMPT_STYLE")
     if REVIEW_PROMPTS:
         need += ["IMAGE_PROMPT_POLICY"] + safetyreview.requires("IMAGE_PROMPT_REVIEW")
     if BACKEND == "runpod":
@@ -148,7 +204,7 @@ def print_schema():
             },
             "width": {"type": "integer", "description": f"image width in pixels, {MIN_SIDE}-{MAX_SIDE} (default 1024)"},
             "height": {"type": "integer", "description": f"image height in pixels, {MIN_SIDE}-{MAX_SIDE} (default 1024)"},
-        },
+        } | style_property(),
         "required": ["prompt"],
         "additionalProperties": False,
         # Needs outbound network access (ComfyUI or RunPod, the hosting backend).
@@ -165,6 +221,22 @@ def print_schema():
         "announcer": True,
     }
     print(json.dumps(schema, indent=2))
+
+def style_property() -> dict:
+    """The schema's "style", listing the configured styles; none when there are none."""
+    if not STYLES:
+        return {}
+    listed = lambda kind: ", ".join(f"{n} ({s['description']})" for n, s in sorted(STYLES.items()) if s["kind"] == kind)
+    parts = []
+    if listed("draw"):
+        parts.append(f"for a new picture: {listed('draw')}")
+    if listed("edit"):
+        parts.append(f"to restyle an earlier picture (with its image_url): {listed('edit')}")
+    return {"style": {
+        "type": "string", "enum": sorted(STYLES),
+        "description": "optional: a named art style, only when someone asks for that style by name or plainly "
+                       "asks for that look; leave it out otherwise. " + "; ".join(parts),
+    }}
 
 def announcement(args: dict = None) -> str:
     """The /me for a call: an edit says so, and a cold RunPod endpoint gets the line that warns of a
@@ -188,9 +260,9 @@ def side(value, default: int = 1024) -> int:
     return min(MAX_SIDE, max(MIN_SIDE, n)) // 16 * 16
 
 def build_workflow(prompt: str, width: int, height: int, negative: str = "", source: str = "",
-                   change: str = "") -> dict:
+                   change: str = "", style: dict = None) -> dict:
     """source names an uploaded picture to edit; the result then keeps that picture's size. change is the
-    edit's instruction, checked against the result."""
+    edit's instruction, checked against the result. style adds its LoRA to the model."""
     negative = combined_negative(negative)
     # cfg 1 skips the negative branch entirely, so a negative only takes effect with more guidance.
     cfg = NEGATIVE_CFG if negative else GEN_CFG
@@ -233,6 +305,11 @@ def build_workflow(prompt: str, width: int, height: int, negative: str = "", sou
         nodes["4"]["inputs"].update({"vae": ["3", 0], "images.image_1": ["11", 0]})
         nodes["6"]["inputs"]["latent_image"] = ["4", 2]
         del nodes["5"]
+    if style:
+        nodes["20"] = {"class_type": "LoraLoaderModelOnly", "inputs": {
+            "model": ["1", 0], "lora_name": style_lora(style)["name"], "strength_model": style["strength"],
+        }}
+        nodes["6"]["inputs"]["model"] = ["20", 0]
     if SAFETY_CHECK == "encoder":
         # The Qwen3-VL text encoder already loaded for the prompt looks at the finished image.
         nodes["9"] = {"class_type": "TextGenerate", "inputs": {
@@ -252,10 +329,13 @@ def build_workflow(prompt: str, width: int, height: int, negative: str = "", sou
 def upload_image(image_bytes: bytes) -> str:
     return upload_file(image_bytes, f"metald_{int(time.time() * 1000)}.png", "image/png", EXPIRE)
 
-def refine_prompt(user_prompt: str, people: str = "") -> str:
-    """The detailed prompt; people (from memory, passed by the bot) says how those named look."""
+def refine_prompt(user_prompt: str, people: str = "", style: dict = None) -> str:
+    """The detailed prompt; people (from memory, passed by the bot) says how those named look, and a
+    drawing style what it's drawn in."""
     if people.strip() and PEOPLE_FRAME.strip():
         user_prompt += "\n\n" + PEOPLE_FRAME.strip().replace("{people}", people.strip())
+    if style and STYLE_FRAME.strip():
+        user_prompt += "\n\n" + STYLE_FRAME.strip().replace("{style}", style["description"])
     ep = chat.endpoint("IMAGE_REFINER")
     return _refine(user_prompt, ep["url"], ep["model"], ep["key"])
 
@@ -300,13 +380,14 @@ def fetch_source(url: str) -> tuple:
         return None, "Error: that picture is too large to edit."
     return data, ""
 
-def render(workflow: dict, source: bytes = None) -> tuple:
+def render(workflow: dict, source: bytes = None, style: dict = None) -> tuple:
     """(image bytes, safety verdict or None, edit check or ""). The verdict and the check come with the
     image when the encoder looks at it; the texts arrive in node order, safety first."""
     log = lambda m: toollog.log_detail("image_gen", m)
     if BACKEND == "runpod":
         out = runpod.run(workflow["prompt"], POLL_TIMEOUT, log=log,
-                         inputs={SOURCE_NAME: source} if source else None)
+                         inputs={SOURCE_NAME: source} if source else None,
+                         loras=[style_lora(style)] if style else None)
         texts = out["texts"]
         verdict = texts[0] if texts else ""
         check = texts[1] if "12" in workflow["prompt"] and len(texts) > 1 else ""
@@ -320,22 +401,26 @@ def edit_missed(check: str) -> bool:
     return check.strip().upper().startswith("NO")
 
 def generate_image(prompt: str, width: int, height: int, negative: str = "", requested_by: str = "",
-                   image_url: str = "", people: str = "", admin: bool = False) -> str:
+                   image_url: str = "", people: str = "", admin: bool = False, style: str = "") -> str:
     if SAFETY_CHECK == "encoder" and BACKEND != "runpod":
         return "Error: IMAGE_SAFETY_CHECK encoder needs IMAGE_GEN_BACKEND runpod"
+    chosen, why_not = check_style(style, bool(image_url))
+    if why_not:
+        return why_not
     # Admins are neither capped nor counted, so the shared day total stays everyone else's.
     if admin:
-        return draw(prompt, width, height, negative, image_url, people)
+        return draw(prompt, width, height, negative, image_url, people, chosen)
     over = usagecap.take("imagegen", requested_by, PER_HOUR, PER_DAY, DAY_TOTAL)
     if over:
         return over
-    reply = draw(prompt, width, height, negative, image_url, people)
+    reply = draw(prompt, width, height, negative, image_url, people, chosen)
     if not reply.startswith("url: "):
         # Only a posted picture counts against the caps.
         usagecap.give_back("imagegen", requested_by)
     return reply
 
-def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "", people: str = "") -> str:
+def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "", people: str = "",
+         style: dict = None) -> str:
     refused = review_prompt(prompt, edit=bool(image_url))
     if refused:
         return refused
@@ -348,15 +433,25 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
     if people and not source:
         toollog.log_detail("image_gen", "looks from memory for: " + ", ".join(
             line.split(":", 1)[0] for line in people.splitlines()))
-    final_prompt = edit_prompt(prompt) if source else refine_prompt(prompt, people)
+    if style:
+        toollog.log_detail("image_gen", f"style: {style['name']}")
+    if source:
+        # An edit style's LoRA was trained on its own instruction, so that is the whole edit.
+        change = style["trigger"] if style and style["trigger"] else prompt
+        final_prompt = edit_prompt(change)
+    else:
+        change = ""
+        final_prompt = refine_prompt(prompt, people, style)
+        if style and style["trigger"]:
+            final_prompt = f"{style['trigger']}, {final_prompt}"
     try:
         workflow = lambda: build_workflow(final_prompt, width, height, negative, SOURCE_NAME if source else "",
-                                          prompt if source else "")
-        image_bytes, verdict, check = render(workflow(), source)
+                                          change, style)
+        image_bytes, verdict, check = render(workflow(), source, style)
         if source and edit_missed(check):
             # One more try, with a new seed; the second result stands either way.
             toollog.log_detail("image_gen", f"edit missed ({check.strip()[:40]!r}), trying again")
-            image_bytes, verdict, check = render(workflow(), source)
+            image_bytes, verdict, check = render(workflow(), source, style)
     except comfyui.ComfyCancelled:
         return comfyui.CANCELLED_REPLY
     except comfyui.ComfyError as e:
@@ -430,7 +525,8 @@ def main():
             negative = ""
         print(generate_image(prompt, width, height, negative, str(input_data.get("requested_by") or ""),
                              str(input_data.get("image_url") or "").strip(), str(input_data.get("people") or ""),
-                             input_data.get("requested_by_admin") is True))
+                             input_data.get("requested_by_admin") is True,
+                             str(input_data.get("style") or "").strip().lower()))
         return
 
     print("Usage: image_gen.py [--schema | --announce | --execute <json>]")

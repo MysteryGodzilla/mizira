@@ -46,7 +46,7 @@ export interface SettingChange { key: string; value: string; warning?: string }
 
 /** A tool setting (env: in config.yml) the console may change; it applies from the tool's next call. */
 export interface ToolSetting {
-  key: string; group: string; kind: "number" | "text"; help: string; value: string; default: string; overridden: boolean;
+  key: string; group: string; kind: "number" | "text" | "lines"; help: string; value: string; default: string; overridden: boolean;
 }
 
 export interface Tool {

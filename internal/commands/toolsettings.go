@@ -24,7 +24,7 @@ import (
 type ToolSetting struct {
 	Key   string
 	Group string
-	Kind  string // "number" or "text"
+	Kind  string // "number", "text" or "lines"
 	Help  string
 }
 
@@ -38,6 +38,7 @@ var ToolSettings = []ToolSetting{
 	{"IMAGE_GEN_ANNOUNCE_COLD", "Pictures", "text", "her /me when the image server has to start up first"},
 	{"IMAGE_GEN_EXPIRE", "Pictures", "text", "how long pictures stay up, e.g. 30d (empty: the host's default)"},
 	{"IMAGE_EDIT_HOSTS", "Pictures", "text", "hosts whose pictures can be edited, comma-separated (empty: no editing)"},
+	{"IMAGE_STYLES", "Pictures", "lines", "named styles, one a line: name | draw or edit | strength | trigger | description | LoRA url | sha256"},
 	{"VISION_ANNOUNCE", "Looking at pictures", "text", "her /me when she starts looking at a picture someone linked"},
 }
 
@@ -48,7 +49,10 @@ type ToolSettingValue struct {
 	Overridden     bool
 }
 
-const maxToolSetting = 500
+const (
+	maxToolSetting      = 500
+	maxToolSettingLines = 12000
+)
 
 var (
 	toolDefaultsMu sync.Mutex
@@ -105,6 +109,9 @@ func ToolSettingValues() []ToolSettingValue {
 // checkToolSetting returns the value to store, or why it can't be.
 func checkToolSetting(s ToolSetting, value string) (string, error) {
 	value = strings.TrimSpace(value)
+	if s.Kind == "lines" {
+		return checkToolLines(s, value)
+	}
 	if len(value) > maxToolSetting {
 		return "", fmt.Errorf("at most %d characters", maxToolSetting)
 	}
@@ -135,6 +142,24 @@ func checkToolSetting(s ToolSetting, value string) (string, error) {
 			hosts = append(hosts, h)
 		}
 		return strings.Join(hosts, ","), nil
+	}
+	return value, nil
+}
+
+// checkToolLines checks a several-line setting: no control characters but line breaks, and for
+// IMAGE_STYLES every line a valid style.
+func checkToolLines(s ToolSetting, value string) (string, error) {
+	value = strings.ReplaceAll(value, "\r\n", "\n")
+	if len(value) > maxToolSettingLines {
+		return "", fmt.Errorf("at most %d characters", maxToolSettingLines)
+	}
+	if strings.IndexFunc(value, func(r rune) bool { return r != '\n' && unicode.IsControl(r) }) >= 0 {
+		return "", fmt.Errorf("no control characters")
+	}
+	if s.Key == "IMAGE_STYLES" {
+		if _, err := core.ParseImageStyles(value); err != nil {
+			return "", err
+		}
 	}
 	return value, nil
 }

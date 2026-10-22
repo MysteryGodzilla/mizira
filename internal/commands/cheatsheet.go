@@ -81,8 +81,9 @@ var commandHelp = map[string]CommandHelp{
 	"+schedule": {Group: "Background work", Usage: []string{"+schedule in <30m|2h|1d> <what to do>", "+schedule every <2h> <what to do>", "+schedule daily <HH:MM> <what to do>", "+schedule cancel <id>"},
 		Text: "Run something once later, or on repeat (repeats are admin-only; times are UTC).", Feature: "work"},
 
-	"+np":   {Group: "Radio", Usage: []string{"+np"}, Text: "What the web radio is playing.", Feature: "radio"},
-	"+skip": {Group: "Radio", Usage: []string{"+skip"}, Text: "Skip the radio's current track (one skip per 20 seconds, for everyone).", Feature: "radio"},
+	"+np":    {Group: "Radio", Usage: []string{"+np"}, Text: "What the web radio is playing.", Feature: "radio"},
+	"+skip":  {Group: "Radio", Usage: []string{"+skip"}, Text: "Skip the radio's current track (one skip per 20 seconds, for everyone).", Feature: "radio"},
+	"+image": {Group: "Other", Usage: []string{"+image styles"}, Text: "List the picture styles people can ask her for (IMAGE_STYLES)."},
 }
 
 // CheatEntry is one command on the cheatsheet.
