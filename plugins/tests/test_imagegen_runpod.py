@@ -181,13 +181,19 @@ class RunPodImageTests(unittest.TestCase):
         self.assertEqual(sent["loras"][0]["sha256"], "b" * 64)
 
     def test_styles_are_kept_to_their_kind(self):
-        for style, url, start in (("soyuz", "https://files.example.com/a.png", "Not done: soyuz is a style for new"),
-                                  ("clay", "", "Not done: clay restyles an existing picture"),
-                                  ("vaporwave", "", "Not drawn: there's no style called 'vaporwave'. Styles: clay, soyuz")):
+        for style, url, start in (("clay", "", "Not done: clay restyles an existing picture"),
+                                  ("vaporwave", "", "Not done: there's no style called 'vaporwave'. Styles: clay, soyuz")):
             reply, sent = self.styled(style, url)
             self.assertTrue(reply.startswith(start), reply)
             self.assertEqual(sent, {}, "nothing was rendered")
         self.assertTrue(self.draw().startswith("url: "), "a refused style doesn't use up the cap")
+
+    def test_draw_style_on_an_edit_is_dropped(self):
+        # The model carried "painterly" from drawing a picture onto editing it, and every edit was refused.
+        reply, sent = self.styled("soyuz", "https://files.example.com/a.png")
+        self.assertTrue(reply.startswith("url: "), reply)
+        self.assertNotIn("20", sent["workflow"])
+        self.assertIsNone(sent["loras"])
 
     GUIDED = ("ck3 | draw | 1 | ckiiistyle | CK3 portrait | https://civitai.com/x | " + "a" * 64 +
               " | write it as: a 3d render of [subject], painterly backdrop\n"
@@ -205,6 +211,7 @@ class RunPodImageTests(unittest.TestCase):
         refined = []
         with patch.object(imagegen, "STYLES", imagegen.parse_styles(self.GUIDED)), \
                 patch.object(imagegen, "STYLE_FRAME", "Art style: {style}"), \
+                patch.object(imagegen, "REFERENCE_PROMPT", "What clothes?"), \
                 patch.object(imagegen, "EDIT_HOSTS", ["files.example.com"]), \
                 patch.object(imagegen, "EDIT_CHECK", "Does it show: {change}?"), \
                 patch.object(imagegen.vision, "fetch_image", lambda url: (url.encode(), "image/png")), \
@@ -250,6 +257,21 @@ class RunPodImageTests(unittest.TestCase):
                                   ("", "https://x.example.net/b.png", "Not done: reference_url only goes")):
             reply, _, _ = self.guided(style, "x", "https://files.example.com/a.png", ref, admin=True)
             self.assertTrue(reply.startswith(start), reply)
+
+    def test_unnamed_outfit_is_described_from_the_second_picture(self):
+        args = ("https://files.example.com/a.png", "https://shop.example.net/jacket.jpg")
+        reply, sent, _ = self.guided("outfit", "the outfit in that picture", *args, admin=True)
+        self.assertTrue(reply.startswith("url: "), reply)
+        wf = sent["workflow"]
+        self.assertEqual(wf["15"]["inputs"]["image"], ["14", 0])
+        self.assertEqual(wf["15"]["inputs"]["prompt"], "What clothes?")
+        self.assertEqual(wf["17"]["inputs"]["string"],
+                         "Dress the person in image 1 in the {prompt} shown in image 2. Keep their face.")
+        self.assertEqual(wf["4"]["inputs"]["prompt"], ["17", 0])
+        reply, sent, _ = self.guided("outfit", "red leather jacket", *args, admin=True)
+        self.assertNotIn("15", sent["workflow"], "named clothes aren't described again")
+        self.assertTrue(imagegen.says_nothing("put her in that outfit from image 2"))
+        self.assertFalse(imagegen.says_nothing("the green coat"))
 
     def test_schema_lists_the_styles(self):
         import io, json

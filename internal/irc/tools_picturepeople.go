@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"maps"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -53,7 +54,8 @@ func (p *PicturePeopleTool) Execute(ctx context.Context, args map[string]any) (s
 		if self == "" {
 			self = chatCtx.GetBotNick()
 		}
-		named := prompt + "\n" + selfNamed(strings.Join(chatCtx.GetArgs(), " "), self)
+		request := speakerNamed(selfNamed(strings.Join(chatCtx.GetArgs(), " "), self), chatCtx.GetSource())
+		named := prompt + "\n" + request
 		if who := PicturePeople(chatCtx.GetNetwork(), named, chatCtx.GetConfig().Bot.LoreFadeDays, time.Now()); who != "" {
 			args["people"] = who
 		}
@@ -74,6 +76,25 @@ func selfNamed(request, bot string) string {
 }
 
 var yourself = regexp.MustCompile(`(?i)\byourself\b`)
+
+// meWord is "me" or "myself" with the word before and after it, if any.
+var meWord = regexp.MustCompile(`(?i)(\b\w+\s+)?\b(me|myself)\b(\s+\w+)?`)
+
+// speakerNamed is a request with "me"/"myself" as the speaker's name when they are in the picture:
+// "do me in yamamoto style" drew the bot. Not "draw me a cat" or "make one for me".
+func speakerNamed(request, speaker string) string {
+	if speaker == "" {
+		return request
+	}
+	return meWord.ReplaceAllStringFunc(request, func(m string) string {
+		parts := meWord.FindStringSubmatch(m)
+		before, after := strings.ToLower(strings.TrimSpace(parts[1])), strings.ToLower(strings.TrimSpace(parts[3]))
+		if before == "for" || before == "to" || slices.Contains([]string{"a", "an", "some", "one", "another"}, after) {
+			return m
+		}
+		return parts[1] + speaker + parts[3]
+	})
+}
 
 // PicturePeople describes the people prompt names that memory knows how to draw, one per line:
 // "bob: drawn as female; long silver hair, a red ribbon". "" when it names nobody known.

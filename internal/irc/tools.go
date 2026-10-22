@@ -7,6 +7,7 @@ package irc
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -162,12 +163,19 @@ type OncePerRequestTool struct {
 }
 
 type onceCall struct {
-	at     time.Time
-	result string // the first call's result, first line
+	at        time.Time
+	result    string // the first call's result, first line
+	retryable bool   // that result was a fixable refusal and no retry has run yet
+	retried   bool
 }
 
 // OnceRepeated starts the answer to a second call in the same request.
 const OnceRepeated = "Already done:"
+
+// onceFixable start a refusal that drew nothing and says how to call the tool right (an edit link on a
+// new picture, a style of the wrong kind). The model may correct it once: without that, it told the
+// channel the picture was done.
+var onceFixable = []string{"Not done:", "Not edited:"}
 
 // NewOncePerRequestTool wraps tool so each request may run it once.
 func NewOncePerRequestTool(tool tools.Tool) *OncePerRequestTool {
@@ -203,6 +211,11 @@ func (o *OncePerRequestTool) first(request string, now time.Time) (earlier strin
 		}
 	}
 	if c, seen := o.used[request]; seen {
+		if c.retryable {
+			c.retryable, c.retried = false, true
+			o.used[request] = c
+			return "", false
+		}
 		return c.result, true
 	}
 	o.used[request] = onceCall{at: now}
@@ -218,6 +231,7 @@ func (o *OncePerRequestTool) record(request, result string) {
 	defer o.mu.Unlock()
 	if c, ok := o.used[request]; ok {
 		c.result = first
+		c.retryable = !c.retried && slices.ContainsFunc(onceFixable, func(p string) bool { return strings.HasPrefix(first, p) })
 		o.used[request] = c
 	}
 }

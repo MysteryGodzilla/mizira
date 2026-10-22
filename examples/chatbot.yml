@@ -869,12 +869,15 @@ env:
     - hate symbols or imagery meant to demean a group of people, or a picture made to hurt or humiliate someone in the chat
     - a well-known copyrighted character from films, TV, anime, games, comics or books, by name. For these answer exactly: DENY: character <the character's name>
 
-    ALLOW everything else, including romance between adults: hand holding, hugging, cuddling, kissing, blushing, "will they or won't they" moments, and swimwear or towels at a beach or hot spring with nothing explicit showing. Also original characters, including ones "in the style of" a franchise or an era of art, animals, places, objects, memes, fantasy battles without gore, spooky or dark themes, and pictures of people in the chat drawn kindly. A "change to an existing picture" is a short instruction about a picture you can't see ("make her hair pink", "add a hat", "make it night"): ALLOW it unless the change itself asks for something above.
+    ALLOW everything else, including romance between adults: hand holding, hugging, cuddling, kissing, blushing, "will they or won't they" moments, and swimwear or towels at a beach or hot spring with nothing explicit showing. Also original characters, including ones "in the style of" a franchise or an era of art, animals, places, objects, memes, fantasy battles without gore, spooky or dark themes, and pictures of people in the chat drawn kindly. Playful rude gestures and cheeky expressions are fine too: flipping someone off, sticking a tongue out, a smug or evil grin, an over-the-top villain pose. A "change to an existing picture" is a short instruction about a picture you can't see ("make her hair pink", "add a hat", "make it night"): ALLOW it unless the change itself asks for something above.
   # turns a rough image request into a detailed prompt
   # how the people a picture names look (from memory) reach the prompt writer; {people}
   IMAGE_PROMPT_PEOPLE: "People in the picture and how they look (draw them like this, including whether each one is male or female): {people}"
   # a draw style's description, added to the prompt writer's input; {style}
   IMAGE_PROMPT_STYLE: "Art style (keep to it; don't describe a photo or a different medium): {style}"
+  # asked of an edit2 style's second picture when the request doesn't say what to take from it ("put her in
+  # that outfit"); the answer fills the style's {prompt}
+  IMAGE_REFERENCE_PROMPT: "Describe only the clothes and shoes worn in this picture, with their colours, as one short phrase of under 25 words. Do not mention the person, pose or background."
   # named styles (runpod only), one a line: name | draw, edit or edit2 | strength | trigger | description |
   # LoRA url | sha256 [| guide]. draw: a new picture in that style; edit: restyles an earlier picture, the
   # trigger being the edit ({prompt} is filled with the request); edit2: an edit with a second picture
