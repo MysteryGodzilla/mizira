@@ -26,6 +26,7 @@ type Profile struct {
 	AvatarPronouns string // only when the avatar's differ from the person's
 	Aliases        []string
 	Timezone       string // an IANA name, e.g. Australia/Brisbane; "" when not known
+	Look           Look   // how they are drawn; set with SetLook, which SetProfile leaves alone
 	By             string
 	Updated        time.Time
 }
@@ -54,7 +55,12 @@ func createProfiles(db *sql.DB) error {
 		return err
 	}
 	if !hasColumn(db, "memory_profiles", "timezone") {
-		_, err = db.Exec(`ALTER TABLE memory_profiles ADD COLUMN timezone TEXT NOT NULL DEFAULT ''`)
+		if _, err = db.Exec(`ALTER TABLE memory_profiles ADD COLUMN timezone TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !hasColumn(db, "memory_profiles", "look") {
+		_, err = db.Exec(`ALTER TABLE memory_profiles ADD COLUMN look TEXT NOT NULL DEFAULT ''`)
 	}
 	return err
 }
@@ -171,7 +177,7 @@ func (m *MemoryStore) DeleteProfile(network, subject string) (bool, error) {
 func (m *MemoryStore) Profiles(network string) ([]Profile, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	rows, err := m.db.Query(`SELECT subject, bot, run_by, pronouns, avatar_pronouns, aliases, timezone, by, updated
+	rows, err := m.db.Query(`SELECT subject, bot, run_by, pronouns, avatar_pronouns, aliases, timezone, look, by, updated
 		FROM memory_profiles WHERE network = ? ORDER BY subject`, network)
 	if err != nil {
 		return nil, err
@@ -180,11 +186,12 @@ func (m *MemoryStore) Profiles(network string) ([]Profile, error) {
 	var out []Profile
 	for rows.Next() {
 		var p Profile
-		var aliases string
+		var aliases, look string
 		var updated int64
-		if err := rows.Scan(&p.Subject, &p.Bot, &p.RunBy, &p.Pronouns, &p.AvatarPronouns, &aliases, &p.Timezone, &p.By, &updated); err != nil {
+		if err := rows.Scan(&p.Subject, &p.Bot, &p.RunBy, &p.Pronouns, &p.AvatarPronouns, &aliases, &p.Timezone, &look, &p.By, &updated); err != nil {
 			return nil, err
 		}
+		p.Look = decodeLook(look)
 		if aliases != "" {
 			p.Aliases = strings.Split(aliases, ",")
 		}

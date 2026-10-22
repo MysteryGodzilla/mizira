@@ -96,6 +96,8 @@ type Mizira interface {
 	// Profiles: pronouns, avatar pronouns, other names, and who runs a bot.
 	Profiles(network string) ([]ProfileView, error)
 	SetProfile(network string, p ProfileView, by string) error
+	// SetLook sets how someone is drawn; an empty look removes it.
+	SetLook(network, subject string, look LookView, by string) error
 	DeleteProfile(network, subject, by string) (bool, error)
 	// Compaction: a model-proposed shorter list (nothing changes), then the operator's reviewed list
 	// replaces the memories the preview was based on, or ErrMemoriesChanged.

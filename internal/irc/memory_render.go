@@ -65,6 +65,9 @@ func ProfileLine(people core.People, subject string) string {
 	if len(p.Aliases) > 0 {
 		parts = append(parts, "also called "+strings.Join(p.Aliases, ", "))
 	}
+	if p.Look.Set() {
+		parts = append(parts, "look set for pictures")
+	}
 	// No time zone: it says where someone lives, and profile__localtime gives the time when needed.
 	for _, bot := range bots {
 		parts = append(parts, "runs the bot "+bot)
@@ -73,6 +76,35 @@ func ProfileLine(people core.People, subject string) string {
 		return ""
 	}
 	return p.Subject + ": " + strings.Join(parts, "; ")
+}
+
+// WithoutSetLooks drops the look memories of people whose profile sets their look: the model wrote
+// them into picture prompts, and the picture had a second person beside the one the look describes.
+func WithoutSetLooks(network string, mems []core.Memory) []core.Memory {
+	store, err := core.Memories()
+	if err != nil || len(mems) == 0 {
+		return mems
+	}
+	people, err := store.People(network)
+	if err != nil {
+		return mems
+	}
+	ids := make([]int64, len(mems))
+	for i, m := range mems {
+		ids[i] = m.ID
+	}
+	meta, err := store.Meta(network, ids)
+	if err != nil {
+		return mems
+	}
+	out := mems[:0:0]
+	for _, m := range mems {
+		if p, ok := people.Get(m.Subject); ok && p.Look.Set() && meta[m.ID].Kind == core.KindLook {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 // MemoryLines renders memories with their kinds, others and profiles looked up once. On a lookup

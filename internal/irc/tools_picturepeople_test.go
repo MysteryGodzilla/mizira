@@ -6,6 +6,7 @@ package irc
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,8 @@ import (
 	"B4reMetal/metald/internal/core"
 	mocktest "B4reMetal/metald/internal/testing"
 )
+
+const bobFemale = `[{"name":"bob","drawn_as":"female"`
 
 // With only a name in the prompt, women were drawn as men: the picture is told how they look.
 func TestPicturePeople(t *testing.T) {
@@ -32,7 +35,7 @@ func TestPicturePeople(t *testing.T) {
 	})
 
 	got := PicturePeople(net, "bobby and carol at the beach, dave waving", 45, time.Now())
-	if got != "bob: drawn as female; bob's avatar has long silver hair and a red ribbon" {
+	if got != `[{"name":"bob","drawn_as":"female","notes":["bob's avatar has long silver hair and a red ribbon"]}]` {
 		t.Errorf("people = %q", got)
 	}
 	if got := PicturePeople(net, "a cat on a windowsill", 45, time.Now()); got != "" {
@@ -43,14 +46,14 @@ func TestPicturePeople(t *testing.T) {
 	mock := mocktest.NewMockContext()
 	mock.GetConfig().Server.Name = net
 	ctx := InjectContext(context.Background(), mock)
-	NewPicturePeopleTool(rec).Execute(ctx, map[string]any{"prompt": "bob reading", "people": "bob: drawn as male"})
-	if who, _ := rec.got["people"].(string); !strings.HasPrefix(who, "bob: drawn as female") {
+	NewPicturePeopleTool(rec).Execute(ctx, map[string]any{"prompt": "bob reading", "people": `[{"name":"bob","drawn_as":"male"}]`})
+	if who, _ := rec.got["people"].(string); !strings.HasPrefix(who, bobFemale) {
 		t.Errorf("the model's people weren't replaced: %q", who)
 	}
 	asked := mocktest.NewMockContext().WithArgs("mizira", "draw", "bob", "in", "a", "cafe")
 	asked.GetConfig().Server.Name = net
 	NewPicturePeopleTool(rec).Execute(InjectContext(context.Background(), asked), map[string]any{"prompt": "a girl in a cafe"})
-	if who, _ := rec.got["people"].(string); !strings.HasPrefix(who, "bob: drawn as female") {
+	if who, _ := rec.got["people"].(string); !strings.HasPrefix(who, bobFemale) {
 		t.Errorf("a name only in the request was missed: %q", who)
 	}
 	// Every request addressed her by name, so her look went into every picture. Live, her nick is the
@@ -69,7 +72,7 @@ func TestPicturePeople(t *testing.T) {
 	} {
 		asked.WithArgs(request...)
 		NewPicturePeopleTool(rec).Execute(InjectContext(context.Background(), asked), map[string]any{"prompt": "a girl waving"})
-		if who, _ := rec.got["people"].(string); !strings.HasPrefix(who, "bob: drawn as female") {
+		if who, _ := rec.got["people"].(string); !strings.HasPrefix(who, bobFemale) {
 			t.Errorf("%q: the bot asked to be in the picture was missed: %q", request, who)
 		}
 	}
@@ -92,5 +95,59 @@ func TestSpeakerNamed(t *testing.T) {
 		if got := speakerNamed(in, "alice"); got != want {
 			t.Errorf("speakerNamed(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// The prompt writer described people afresh each time (glasses she doesn't wear, children for adults):
+// a profile look goes in as set, and a variant named in the request picks its hair and outfit.
+func TestPicturePeopleProfileLook(t *testing.T) {
+	const net = "picture-looks"
+	store, _ := core.Memories()
+	store.SetProfile(net, core.Profile{Subject: "carol", Pronouns: "she/her"})
+	mem, _ := store.Remember(net, "carol", "carol's avatar wears round glasses", "carol", "#test")
+	store.SetKind(net, mem, core.KindLook)
+	store.SetLook(net, "carol", core.Look{Appearance: "adult woman, green eyes", Hair: "short lavender bob", Outfit: "lilac cardigan",
+		Variants: []core.LookVariant{{Name: "business", Outfit: "charcoal blazer"}}}, "")
+	t.Cleanup(func() { store.DeleteProfile(net, "carol"); store.Forget(net, mem) })
+
+	var got []PicturePerson
+	if err := json.Unmarshal([]byte(PicturePeople(net, "carol in her business look at a desk", 45, time.Now())), &got); err != nil || len(got) != 1 {
+		t.Fatalf("people = %v, %v", got, err)
+	}
+	want := PicturePerson{Name: "carol", DrawnAs: "female", Look: "adult woman, green eyes, short lavender bob", Outfit: "charcoal blazer", Variant: "business"}
+	if got[0].Name != want.Name || got[0].Look != want.Look || got[0].Outfit != want.Outfit || got[0].Variant != want.Variant || len(got[0].Notes) != 0 {
+		t.Errorf("carol = %+v, want %+v (no look memories)", got[0], want)
+	}
+}
+
+// The model wrote someone's look memories into a picture prompt while their profile look was added
+// too, and the picture had two of them: with a profile look, their look memories stay out of chat.
+func TestWithoutSetLooks(t *testing.T) {
+	const net = "picture-hide-looks"
+	store, _ := core.Memories()
+	store.SetLook(net, "carol", core.Look{Appearance: "adult woman"}, "")
+	look, _ := store.Remember(net, "carol", "carol's avatar has long silver hair", "carol", "#test")
+	store.SetKind(net, look, core.KindLook)
+	lore, _ := store.Remember(net, "carol", "carol runs the pub quiz", "carol", "#test")
+	other, _ := store.Remember(net, "dave", "dave's avatar has a red cap", "dave", "#test")
+	store.SetKind(net, other, core.KindLook)
+	t.Cleanup(func() {
+		store.DeleteProfile(net, "carol")
+		store.Forget(net, look)
+		store.Forget(net, lore)
+		store.Forget(net, other)
+	})
+
+	mems := []core.Memory{{ID: look, Subject: "carol"}, {ID: lore, Subject: "carol"}, {ID: other, Subject: "dave"}}
+	var kept []int64
+	for _, m := range WithoutSetLooks(net, mems) {
+		kept = append(kept, m.ID)
+	}
+	if len(kept) != 2 || kept[0] != lore || kept[1] != other {
+		t.Errorf("kept %v, want carol's lore and dave's look (%d, %d)", kept, lore, other)
+	}
+	people, _ := store.People(net)
+	if line := ProfileLine(people, "carol"); !strings.Contains(line, "look set for pictures") {
+		t.Errorf("profile line = %q", line)
 	}
 }

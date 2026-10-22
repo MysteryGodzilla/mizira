@@ -266,7 +266,7 @@ func TestMiziraEndpointsNeedTheToken(t *testing.T) {
 		{"GET", "/api/v1/toolsettings"}, {"PUT", "/api/v1/toolsettings/IMAGE_GEN_PER_HOUR"}, {"DELETE", "/api/v1/toolsettings/IMAGE_GEN_PER_HOUR"},
 		{"GET", "/api/v1/memories/subjects?network=net"}, {"GET", "/api/v1/memories?network=net"}, {"POST", "/api/v1/memories"},
 		{"PUT", "/api/v1/memories/1?network=net"}, {"DELETE", "/api/v1/memories/1?network=net"},
-		{"PUT", "/api/v1/memories/1/meta?network=net"}, {"GET", "/api/v1/memories/history?network=net&subject=bob"}, {"GET", "/api/v1/memories/history?network=net&subject=bob"}, {"POST", "/api/v1/memories/sort/preview"}, {"POST", "/api/v1/memories/sort/apply"}, {"GET", "/api/v1/profiles/hints?network=net&subject=bob"}, {"GET", "/api/v1/profiles?network=net"}, {"PUT", "/api/v1/profiles"}, {"DELETE", "/api/v1/profiles?network=net&subject=bob"},
+		{"PUT", "/api/v1/memories/1/meta?network=net"}, {"GET", "/api/v1/memories/history?network=net&subject=bob"}, {"GET", "/api/v1/memories/history?network=net&subject=bob"}, {"POST", "/api/v1/memories/sort/preview"}, {"POST", "/api/v1/memories/sort/apply"}, {"GET", "/api/v1/profiles/hints?network=net&subject=bob"}, {"GET", "/api/v1/profiles?network=net"}, {"PUT", "/api/v1/profiles"}, {"PUT", "/api/v1/profiles/look"}, {"DELETE", "/api/v1/profiles?network=net&subject=bob"},
 		{"GET", "/api/v1/selfnotes?network=net"}, {"POST", "/api/v1/selfnotes/1/approve?network=net"}, {"POST", "/api/v1/selfnotes/1/deny?network=net"},
 		{"POST", "/api/v1/memories/compact/preview"}, {"POST", "/api/v1/memories/compact/apply"},
 		{"GET", "/api/v1/safety"}} {
@@ -887,6 +887,19 @@ func (f *fakeMizira) SetProfile(network string, p ProfileView, by string) error 
 	f.profiles = append(slices.DeleteFunc(f.profiles, func(o ProfileView) bool { return o.Subject == p.Subject }), p)
 	return nil
 }
+func (f *fakeMizira) SetLook(network, subject string, look LookView, by string) error {
+	if look.Appearance == "" && len(look.Variants) > 0 {
+		return errors.New("a look needs its appearance")
+	}
+	for i := range f.profiles {
+		if f.profiles[i].Subject == subject {
+			f.profiles[i].Look = &look
+			return nil
+		}
+	}
+	f.profiles = append(f.profiles, ProfileView{Subject: subject, Look: &look})
+	return nil
+}
 func (f *fakeMizira) DeleteProfile(network, subject, by string) (bool, error) {
 	n := len(f.profiles)
 	f.profiles = slices.DeleteFunc(f.profiles, func(o ProfileView) bool { return o.Subject == subject })
@@ -911,6 +924,19 @@ func TestMemoryKindsAndProfilesFromTheConsole(t *testing.T) {
 	if code, _ := r.call(t, "PUT", "/api/v1/memories/9/meta?network=net", "s3cret", `{"kind":"look"}`); code != http.StatusNotFound {
 		t.Errorf("missing memory = %d, want 404", code)
 	}
+
+	look := `{"network":"net","subject":"carol","look":{"appearance":"adult woman, green eyes","hair":"short bob","variants":[{"name":"business","outfit":"blazer"}]}}`
+	if code, out := r.call(t, "PUT", "/api/v1/profiles/look", "s3cret", look); code != http.StatusOK ||
+		len(m.profiles) != 1 || m.profiles[0].Look.Variants[0].Name != "business" {
+		t.Fatalf("set look = %d %v %+v", code, out, m.profiles)
+	}
+	if code, _ := r.call(t, "PUT", "/api/v1/profiles/look", "s3cret", `{"network":"net","subject":"carol","look":{"variants":[{"name":"x"}]}}`); code != http.StatusBadRequest {
+		t.Errorf("look without appearance = %d, want 400", code)
+	}
+	if code, _ := r.call(t, "PUT", "/api/v1/profiles/look", "s3cret", `{"network":"net","subject":"two words","look":{}}`); code != http.StatusBadRequest {
+		t.Errorf("look for a bad nick = %d, want 400", code)
+	}
+	m.profiles = nil
 
 	p := `{"network":"net","subject":"botty","runBy":"bob","pronouns":"she/her","aliases":["bot"]}`
 	if code, out := r.call(t, "PUT", "/api/v1/profiles", "s3cret", p); code != http.StatusOK {

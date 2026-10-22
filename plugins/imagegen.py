@@ -41,6 +41,8 @@ Configure under env: in config.yml:
                        {prompt} for the request); edit2: an edit with a second picture (reference_url,
                        admins only). guide: the LoRA's own prompt advice
   IMAGE_PROMPT_STYLE   how a draw style's description reaches the prompt writer; {style}
+  IMAGE_PROMPT_PEOPLE  who is in a new picture, for the prompt writer; {people}
+  IMAGE_PROMPT_CHARACTERS  profile looks, added as they are after the prompt writer's prompt; {characters}
   IMAGE_REFERENCE_PROMPT  asked of an edit2 style's second picture when the request names nothing to
                        take from it; the answer fills the style's {prompt}
   hosting              see metald_tools/hosting.py (UPLOAD_BACKEND, UPLOAD_HEADERS, ...)
@@ -99,6 +101,8 @@ REFERENCE_NAME = "metald_reference.png"
 PROMPT_POLICY = os.environ.get("IMAGE_PROMPT_POLICY", "")
 # How the people a prompt names look ("people", passed by the bot) reach the prompt writer; {people}.
 PEOPLE_FRAME = os.environ.get("IMAGE_PROMPT_PEOPLE", "")
+# Profile looks, added word for word after the prompt writer's prompt; {characters}.
+CHARACTER_FRAME = os.environ.get("IMAGE_PROMPT_CHARACTERS", "")
 # Asked of the finished edit with the encoder check; {change} is the instruction, answer YES or NO.
 EDIT_CHECK = os.environ.get("IMAGE_EDIT_CHECK_PROMPT", "")
 # How a drawing style reaches the prompt writer, so it doesn't describe a photo; {style}.
@@ -195,7 +199,7 @@ def style_change(style: dict, prompt: str) -> str:
 
 
 def requires() -> list:
-    need = ["IMAGE_SAFETY_PROMPT", "IMAGE_PROMPT_REFINER", "IMAGE_PROMPT_PEOPLE"] + hosting.requires()
+    need = ["IMAGE_SAFETY_PROMPT", "IMAGE_PROMPT_REFINER", "IMAGE_PROMPT_PEOPLE", "IMAGE_PROMPT_CHARACTERS"] + hosting.requires()
     if EDITS_CHECKED:
         need.append("IMAGE_EDIT_CHECK_PROMPT")
     if any(s["kind"] == "draw" for s in STYLES.values()):
@@ -228,7 +232,8 @@ def print_schema():
             "someone corrects how a person looks (\"don't forget my glasses are gold\"), redraw it and also save "
             "the correction with memory__remember. the tool itself checks what may be drawn (romance like "
             "hand holding or a kiss is fine, nudity isn't), so don't refuse a picture request yourself: call it "
-            "and pass on its answer."
+            "and pass on its answer. when the picture includes people from the chat, name them rather than "
+            "describing how they look: their looks are added for you."
         ),
         "type": "object",
         "properties": {
@@ -401,11 +406,58 @@ def build_workflow(prompt: str, width: int, height: int, negative: str = "", sou
 def upload_image(image_bytes: bytes) -> str:
     return upload_file(image_bytes, f"metald_{int(time.time() * 1000)}.png", "image/png", EXPIRE)
 
+def parse_people(people: str) -> list:
+    """The bot's "people": [{name, drawn_as, look, outfit, variant, notes}]; [] when there are none."""
+    try:
+        found = json.loads(people) if people.strip() else []
+    except ValueError:
+        toollog.log_detail("image_gen", f"people unreadable: {people[:80]!r}")
+        return []
+    if not isinstance(found, list):
+        return []
+    return [p for p in found if isinstance(p, dict) and isinstance(p.get("name"), str)]
+
+
+def people_lines(people: list) -> str:
+    """The prompt writer's view: someone with a set look is named, with their outfit; anyone else is
+    described from their look memories."""
+    lines = []
+    for p in people:
+        sex = p.get("drawn_as") or ""
+        if p.get("look"):
+            lines.append(f"{p['name']} - outfit: {p.get('outfit') or 'as the request says'}")
+        else:
+            about = [f"drawn as {sex}" if sex else ""] + list(p.get("notes") or [])
+            lines.append(f"{p['name']}: {'; '.join(x for x in about if x)}")
+    return "\n".join(lines)
+
+
+def bind_looks(prompt: str, people: list) -> tuple:
+    """(prompt with each set look right after the first mention of its person's name, the people with a
+    look it doesn't name). As a separate list the look drew a second person beside the one described."""
+    unbound = []
+    for p in people:
+        if not p.get("look"):
+            continue
+        m = re.search(r"(?i)(?<![\w-])" + re.escape(p["name"]) + r"(?![\w-])", prompt)
+        if m:
+            prompt = f"{prompt[:m.end()]} ({p['look']}){prompt[m.end():]}"
+        else:
+            unbound.append(p)
+    return prompt, unbound
+
+
+def characters_text(people: list) -> str:
+    """The set looks, added to the final prompt as they are."""
+    return "; ".join(f"{p['name']}: {p['look']}" for p in people if p.get("look"))
+
+
 def refine_prompt(user_prompt: str, people: str = "", style: dict = None) -> str:
-    """The detailed prompt; people (from memory, passed by the bot) says how those named look, and a
+    """The detailed prompt; people (passed by the bot) says who is in it and how they look, and a
     drawing style what it's drawn in."""
-    if people.strip() and PEOPLE_FRAME.strip():
-        user_prompt += "\n\n" + PEOPLE_FRAME.strip().replace("{people}", people.strip())
+    lines = people_lines(parse_people(people))
+    if lines and PEOPLE_FRAME.strip():
+        user_prompt += "\n\n" + PEOPLE_FRAME.strip().replace("{people}", lines)
     if style and STYLE_FRAME.strip():
         about = style["description"] + (f". {style['guide']}" if style["guide"] else "")
         user_prompt += "\n\n" + STYLE_FRAME.strip().replace("{style}", about)
@@ -527,9 +579,12 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
         if reference is None:
             return why_not
     # An edit is a short instruction about the picture; expanding it would redraw the whole scene.
-    if people and not source:
-        toollog.log_detail("image_gen", "looks from memory for: " + ", ".join(
-            line.split(":", 1)[0] for line in people.splitlines()))
+    named = [] if source else parse_people(people)
+    if named:
+        toollog.log_detail("image_gen", f"asked for: {prompt[:300]!r}")
+        toollog.log_detail("image_gen", "people: " + ", ".join(
+            p["name"] + (f" (look{': ' + p['variant'] if p.get('variant') else ''})" if p.get("look")
+                         else " (memories)" if p.get("notes") else "") for p in named))
     if style:
         toollog.log_detail("image_gen", f"style: {style['name']}")
     describe = False
@@ -549,6 +604,10 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
         final_prompt = refine_prompt(prompt, people, style)
         if style and style["trigger"]:
             final_prompt = f"{style['trigger']}, {final_prompt}"
+        final_prompt, unbound = bind_looks(final_prompt, named)
+        if characters_text(unbound) and CHARACTER_FRAME.strip():
+            final_prompt += "\n\n" + CHARACTER_FRAME.strip().replace("{characters}", characters_text(unbound))
+        toollog.log_detail("image_gen", f"prompt: {final_prompt[:600]!r}")
     try:
         workflow = lambda: build_workflow(final_prompt, width, height, negative, SOURCE_NAME if source else "",
                                           change, style, REFERENCE_NAME if reference else "", describe)
