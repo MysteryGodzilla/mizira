@@ -8,6 +8,7 @@
   import SelfNotes from "./SelfNotes.svelte";
   import Compact from "./Compact.svelte";
   import Profile from "./Profile.svelte";
+  import LookCard from "./Look.svelte";
   import Sort from "./Sort.svelte";
   let { mz, board }: { mz: MzConsole; board: Dashboard } = $props();
 
@@ -174,6 +175,7 @@
     {/if}
     {#if selected && !isRoom && net !== null}
       <Profile {mz} network={net} subject={selected} {profile} onchange={() => void reload()} />
+      <LookCard {mz} network={net} subject={selected} look={profile?.look ?? null} onchange={() => void reload()} />
     {/if}
     {#if compacting && selected && net !== null && list}
       <Compact {mz} network={net} subject={selected} current={list} {perSubject}

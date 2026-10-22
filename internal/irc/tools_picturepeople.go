@@ -6,7 +6,7 @@ package irc
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"maps"
 	"regexp"
 	"slices"
@@ -19,8 +19,8 @@ import (
 )
 
 // PicturePeopleTool passes a picture tool how the people its prompt names look, as "people": the
-// gender their avatar is drawn as and their look memories. With only a name in the prompt, women
-// were drawn as men. The value comes from memory, never from the model: any "people" it wrote is
+// gender their avatar is drawn as, and their profile look or else their look memories. With only a
+// name in the prompt, women were drawn as men. The value comes from memory, never from the model: any "people" it wrote is
 // replaced. Edits (an image_url) get none, as the picture already shows them.
 type PicturePeopleTool struct {
 	tools.Tool
@@ -96,14 +96,27 @@ func speakerNamed(request, speaker string) string {
 	})
 }
 
-// PicturePeople describes the people prompt names that memory knows how to draw, one per line:
-// "bob: drawn as female; long silver hair, a red ribbon". "" when it names nobody known.
-func PicturePeople(network, prompt string, fadeDays int, now time.Time) string {
+// PicturePerson is one person a picture names, as the picture tool gets them (JSON in "people").
+// Look is set from their profile and goes into the picture word for word; without one, Notes are
+// their look memories, for the prompt writer to use.
+type PicturePerson struct {
+	Name    string   `json:"name"`
+	DrawnAs string   `json:"drawn_as,omitempty"`
+	Look    string   `json:"look,omitempty"`
+	Outfit  string   `json:"outfit,omitempty"`
+	Variant string   `json:"variant,omitempty"`
+	Notes   []string `json:"notes,omitempty"`
+}
+
+// PicturePeople describes the people text names that memory knows how to draw, as a JSON list; ""
+// when it names nobody known. A profile look wins over look memories, and a variant named in text
+// picks its hair and outfit.
+func PicturePeople(network, text string, fadeDays int, now time.Time) string {
 	store, err := core.Memories()
-	if err != nil || strings.TrimSpace(prompt) == "" {
+	if err != nil || strings.TrimSpace(text) == "" {
 		return ""
 	}
-	names, err := store.Mentioned(network, prompt, nil)
+	names, err := store.Mentioned(network, text, nil)
 	if err != nil {
 		return ""
 	}
@@ -111,35 +124,40 @@ func PicturePeople(network, prompt string, fadeDays int, now time.Time) string {
 	if err != nil {
 		return ""
 	}
-	var lines []string
+	var out []PicturePerson
 	for _, name := range names {
-		if len(lines) == maxPicturePeople {
+		if len(out) == maxPicturePeople {
 			break
 		}
-		var parts []string
-		if g := drawnAs(people, name); g != "" {
-			parts = append(parts, "drawn as "+g)
-		}
-		mems, meta, err := store.RankedFor(network, name, fadeDays, 50, now)
-		if err == nil {
-			n := 0
+		p := PicturePerson{Name: name, DrawnAs: drawnAs(people, name)}
+		if pr, ok := people.Get(name); ok && pr.Look.Set() {
+			hair, outfit, variant := pr.Look.For(text)
+			p.Look = strings.TrimSuffix(pr.Look.Appearance, ".")
+			if hair != "" {
+				p.Look += ", " + hair
+			}
+			p.Outfit, p.Variant = outfit, variant
+		} else if mems, meta, err := store.RankedFor(network, name, fadeDays, 50, now); err == nil {
 			for _, m := range core.OfKind(mems, meta, core.KindLook) {
-				if m.Subject != name || n == maxLooks {
+				if m.Subject != name || len(p.Notes) == maxLooks {
 					continue
 				}
 				fact := m.Fact
 				if r := []rune(fact); len(r) > maxLookChars {
 					fact = string(r[:maxLookChars]) + "…"
 				}
-				parts = append(parts, fact)
-				n++
+				p.Notes = append(p.Notes, fact)
 			}
 		}
-		if len(parts) > 0 {
-			lines = append(lines, fmt.Sprintf("%s: %s", name, strings.Join(parts, "; ")))
+		if p.DrawnAs != "" || p.Look != "" || len(p.Notes) > 0 {
+			out = append(out, p)
 		}
 	}
-	return strings.Join(lines, "\n")
+	if len(out) == 0 {
+		return ""
+	}
+	b, _ := json.Marshal(out)
+	return string(b)
 }
 
 // drawnAs is the gender a person's picture shows, from the first of their avatar's pronouns, or their

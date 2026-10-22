@@ -332,9 +332,34 @@ class RunPodImageTests(unittest.TestCase):
         seen = []
         with patch.object(imagegen, "PEOPLE_FRAME", "People: {people}"), \
                 patch.object(imagegen, "_refine", lambda text, *a: seen.append(text) or text):
-            REFINE_PROMPT("bob at the beach", "bob: drawn as female")
+            REFINE_PROMPT("bob at the beach", '[{"name": "bob", "drawn_as": "female", "notes": ["silver hair"]}]')
             REFINE_PROMPT("a cat", "")
-        self.assertEqual(seen, ["bob at the beach\n\nPeople: bob: drawn as female", "a cat"])
+            REFINE_PROMPT("a dog", "not json")
+        self.assertEqual(seen, ["bob at the beach\n\nPeople: bob: drawn as female; silver hair", "a cat", "a dog"])
+
+    def test_set_looks_go_in_as_they_are(self):
+        # The prompt writer gave a woman glasses she doesn't wear and drew adults as children: someone
+        # with a profile look is only named to it, and their look is added to the final prompt as set.
+        people = ('[{"name": "hori", "drawn_as": "female", "look": "adult woman, green eyes, short lavender bob",'
+                  ' "outfit": "charcoal blazer", "variant": "business"},'
+                  ' {"name": "remy", "drawn_as": "male", "notes": ["grey rat with stubble"]}]')
+        seen, sent = [], {}
+
+        def run(workflow, timeout, log=None, inputs=None, loras=None):
+            sent.update(workflow=workflow)
+            return {"images": [b"png"], "texts": ["SAFE"]}
+        with patch.object(imagegen, "PEOPLE_FRAME", "People: {people}"), \
+                patch.object(imagegen, "CHARACTER_FRAME", "Characters: {characters}"), \
+                patch.object(imagegen, "refine_prompt", REFINE_PROMPT), \
+                patch.object(imagegen.chat, "endpoint", lambda name: {"url": "", "model": "", "key": ""}), \
+                patch.object(imagegen, "_refine", lambda text, *a: seen.append(text) or "hori and remy at a desk"), \
+                patch.object(runpod, "run", run):
+            reply = imagegen.generate_image("hori and remy at a desk", 1024, 1024, requested_by="alice", people=people)
+        self.assertTrue(reply.startswith("url: "), reply)
+        self.assertEqual(seen[0], "hori and remy at a desk\n\nPeople: hori (female, look set, outfit: charcoal blazer)\n"
+                                  "remy: drawn as male; grey rat with stubble")
+        self.assertEqual(sent["workflow"]["4"]["inputs"]["prompt"],
+                         "hori and remy at a desk\n\nCharacters: hori: adult woman, green eyes, short lavender bob")
 
 
 if __name__ == "__main__":

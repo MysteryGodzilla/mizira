@@ -590,11 +590,32 @@ func (c console) Profiles(network string) ([]admin.ProfileView, error) {
 	}
 	var out []admin.ProfileView
 	for _, p := range list {
-		out = append(out, admin.ProfileView{Subject: p.Subject, Bot: p.Bot, RunBy: p.RunBy, Pronouns: p.Pronouns,
+		v := admin.ProfileView{Subject: p.Subject, Bot: p.Bot, RunBy: p.RunBy, Pronouns: p.Pronouns,
 			AvatarPronouns: p.AvatarPronouns, Aliases: p.Aliases, Timezone: p.Timezone, Runs: people.Bots(p.Subject), By: p.By,
-			Updated: p.Updated.Unix()})
+			Updated: p.Updated.Unix()}
+		if p.Look.Set() {
+			look := admin.LookView{Appearance: p.Look.Appearance, Hair: p.Look.Hair, Outfit: p.Look.Outfit,
+				Reference: p.Look.Reference, Variants: []admin.LookVariantView{}}
+			for _, lv := range p.Look.Variants {
+				look.Variants = append(look.Variants, admin.LookVariantView{Name: lv.Name, Hair: lv.Hair, Outfit: lv.Outfit})
+			}
+			v.Look = &look
+		}
+		out = append(out, v)
 	}
 	return out, nil
+}
+
+func (c console) SetLook(network, subject string, l admin.LookView, by string) error {
+	store, err := core.Memories()
+	if err != nil {
+		return err
+	}
+	look := core.Look{Appearance: l.Appearance, Hair: l.Hair, Outfit: l.Outfit, Reference: l.Reference}
+	for _, v := range l.Variants {
+		look.Variants = append(look.Variants, core.LookVariant{Name: v.Name, Hair: v.Hair, Outfit: v.Outfit})
+	}
+	return store.SetLook(network, subject, look, by)
 }
 
 func (c console) SetProfile(network string, p admin.ProfileView, by string) error {

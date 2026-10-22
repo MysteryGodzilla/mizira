@@ -1,0 +1,101 @@
+<script lang="ts">
+  import type { MzConsole } from "./console.svelte";
+  import type { Look, LookVariant } from "./types";
+  import Card from "../components/Card.svelte";
+  let { mz, network, subject, look, onchange }:
+    { mz: MzConsole; network: string; subject: string; look: Look | null; onchange: () => void } = $props();
+
+  let editing = $state(false);
+  let appearance = $state("");
+  let hair = $state("");
+  let outfit = $state("");
+  let reference = $state("");
+  let variants = $state<LookVariant[]>([]);
+
+  $effect(() => {
+    void subject; void look; editing = false;
+  });
+
+  function edit() {
+    appearance = look?.appearance ?? "";
+    hair = look?.hair ?? "";
+    outfit = look?.outfit ?? "";
+    reference = look?.reference ?? "";
+    variants = (look?.variants ?? []).map((v) => ({ ...v }));
+    editing = true;
+  }
+
+  const current = (): Look => ({
+    appearance: appearance.trim(), hair: hair.trim(), outfit: outfit.trim(), reference: reference.trim(),
+    variants: variants.filter((v) => v.name.trim() || v.hair.trim() || v.outfit.trim())
+      .map((v) => ({ name: v.name.trim(), hair: v.hair.trim(), outfit: v.outfit.trim() })),
+  });
+
+  async function save(e: SubmitEvent) {
+    e.preventDefault();
+    if (await mz.act(() => mz.api.setLook(network, subject, current()), `look saved for ${subject}`)) { editing = false; onchange(); }
+  }
+
+  async function remove() {
+    const empty: Look = { appearance: "", hair: "", outfit: "", reference: "", variants: [] };
+    if (confirm(`Remove ${subject}'s look? Pictures go back to their look memories.`) &&
+      await mz.act(() => mz.api.setLook(network, subject, empty), `look removed for ${subject}`)) onchange();
+  }
+</script>
+
+<Card title={`Look for pictures: ${subject}`}>
+  {#snippet actions()}
+    {#if !editing}<button onclick={edit}>{look ? "Edit" : "Add look"}</button>{/if}
+    {#if look && !editing}<button class="danger" onclick={remove}>Remove</button>{/if}
+  {/snippet}
+  {#if editing}
+    <form onsubmit={save}>
+      <label class="wide">Appearance, always used word for word (age, build, face, eyes, ears, skin)
+        <textarea bind:value={appearance} rows="2" maxlength="400" placeholder="adult woman in her mid-20s, slim, green eyes, pointed elf ears, fair skin"></textarea></label>
+      <label class="wide">Hair (default)
+        <input bind:value={hair} maxlength="400" placeholder="short lavender bob with a black flower hairpin" /></label>
+      <label class="wide">Outfit (default; used unless the request names other clothes)
+        <textarea bind:value={outfit} rows="2" maxlength="400" placeholder="lilac cardigan over a cream shirt, pleated skirt"></textarea></label>
+      <label class="wide">Reference picture (a link, kept for later)
+        <input bind:value={reference} maxlength="300" placeholder="https://…" /></label>
+      <div class="wide">
+        <div class="sub">Variants: named in a request ("in her business look", "hair in a bun"), they swap the hair and/or the outfit.</div>
+        {#each variants as v, i (i)}
+          <div class="variant">
+            <input bind:value={v.name} maxlength="20" placeholder="name, e.g. business" aria-label="variant name" />
+            <input bind:value={v.hair} maxlength="400" placeholder="hair (blank: default)" aria-label="variant hair" />
+            <input bind:value={v.outfit} maxlength="400" placeholder="outfit (blank: default)" aria-label="variant outfit" />
+            <button type="button" onclick={() => variants.splice(i, 1)} title="remove this variant">✕</button>
+          </div>
+        {/each}
+        {#if variants.length < 8}<button type="button" onclick={() => variants.push({ name: "", hair: "", outfit: "" })}>Add variant</button>{/if}
+      </div>
+      <div class="row"><button type="submit">Save</button><button type="button" onclick={() => (editing = false)}>Cancel</button></div>
+    </form>
+  {:else if look}
+    <dl>
+      <dt>Appearance</dt><dd>{look.appearance}</dd>
+      {#if look.hair}<dt>Hair</dt><dd>{look.hair}</dd>{/if}
+      {#if look.outfit}<dt>Outfit</dt><dd>{look.outfit}</dd>{/if}
+      {#each look.variants as v (v.name)}
+        <dt>{v.name}</dt><dd>{[v.hair && `hair: ${v.hair}`, v.outfit && `outfit: ${v.outfit}`].filter(Boolean).join(" · ")}</dd>
+      {/each}
+      {#if look.reference}<dt>Reference</dt><dd><a href={look.reference} target="_blank" rel="noreferrer">{look.reference}</a></dd>{/if}
+    </dl>
+    <p class="sub">Used for every new picture that names {subject}, instead of their look memories.</p>
+  {:else}
+    <p class="empty">No look set: pictures use {subject}'s look memories, if any.</p>
+  {/if}
+</Card>
+
+<style>
+  form { display: grid; gap: 8px; }
+  label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+  textarea, input { font: inherit; }
+  .variant { display: grid; grid-template-columns: minmax(80px, 1fr) minmax(120px, 2fr) minmax(120px, 2fr) auto; gap: 6px; margin: 4px 0; }
+  .row { display: flex; gap: 6px; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 0 0 6px; }
+  dt { color: var(--muted); font-size: 12px; }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  @media (max-width: 600px) { .variant { grid-template-columns: 1fr; } }
+</style>
