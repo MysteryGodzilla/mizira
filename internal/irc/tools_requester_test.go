@@ -25,6 +25,18 @@ func (a *argsRecorder) Execute(_ context.Context, args map[string]any) (string, 
 	return "ok", nil
 }
 
+// scriptedTool answers each call with the next reply.
+type scriptedTool struct {
+	tools.Tool
+	replies []string
+	n       int
+}
+
+func (s *scriptedTool) Execute(context.Context, map[string]any) (string, error) {
+	s.n++
+	return s.replies[s.n-1], nil
+}
+
 func TestRequesterToolPassesTheSpeaker(t *testing.T) {
 	cases := []struct {
 		name string
@@ -133,6 +145,22 @@ func TestOncePerRequestTool(t *testing.T) {
 	if !strings.HasPrefix(out, OnceRepeated) || !strings.Contains(out, `"ok"`) {
 		t.Fatalf("second call in the same request = %q", out)
 	}
+	// A fixable refusal (an edit link on a new picture) may be corrected once, and only once.
+	fix := &scriptedTool{replies: []string{"Not edited: only pictures on files.example.com can be changed.", "Not done: wrong style.", "ok"}}
+	once2 := NewOncePerRequestTool(fix)
+	ctx2 := InjectContext(context.Background(), mocktest.NewMockContext())
+	for i, want := range []string{"Not edited:", "Not done:", OnceRepeated} {
+		if out, _ := once2.Execute(ctx2, map[string]any{}); !strings.HasPrefix(out, want) {
+			t.Errorf("call %d = %q, want %s", i+1, out, want)
+		}
+	}
+	safety := &scriptedTool{replies: []string{"Error: refused - can't be drawn", "url: x"}}
+	once3 := NewOncePerRequestTool(safety)
+	once3.Execute(ctx2, map[string]any{})
+	if out, _ := once3.Execute(ctx2, map[string]any{}); !strings.HasPrefix(out, OnceRepeated) {
+		t.Errorf("a refusal that isn't fixable was retried: %q", out)
+	}
+
 	now := time.Now()
 	if _, again := once.first("another-request", now); again {
 		t.Fatal("a new request was refused")

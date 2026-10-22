@@ -78,3 +78,19 @@ func TestPicturePeople(t *testing.T) {
 		t.Error("an edit was given people")
 	}
 }
+
+func TestSpeakerNamed(t *testing.T) {
+	for in, want := range map[string]string{
+		"do me in yamamoto style":        "do alice in yamamoto style",
+		"draw hori and me on a sofa":     "draw hori and alice on a sofa",
+		"a picture of myself as a pilot": "a picture of alice as a pilot",
+		"draw me a cat":                  "draw me a cat",
+		"make one for me please":         "make one for me please",
+		"send it to me":                  "send it to me",
+		"a fox in the snow":              "a fox in the snow",
+	} {
+		if got := speakerNamed(in, "alice"); got != want {
+			t.Errorf("speakerNamed(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

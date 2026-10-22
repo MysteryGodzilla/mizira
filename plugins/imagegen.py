@@ -41,6 +41,8 @@ Configure under env: in config.yml:
                        {prompt} for the request); edit2: an edit with a second picture (reference_url,
                        admins only). guide: the LoRA's own prompt advice
   IMAGE_PROMPT_STYLE   how a draw style's description reaches the prompt writer; {style}
+  IMAGE_REFERENCE_PROMPT  asked of an edit2 style's second picture when the request names nothing to
+                       take from it; the answer fills the style's {prompt}
   hosting              see metald_tools/hosting.py (UPLOAD_BACKEND, UPLOAD_HEADERS, ...)
 """
 
@@ -101,6 +103,9 @@ PEOPLE_FRAME = os.environ.get("IMAGE_PROMPT_PEOPLE", "")
 EDIT_CHECK = os.environ.get("IMAGE_EDIT_CHECK_PROMPT", "")
 # How a drawing style reaches the prompt writer, so it doesn't describe a photo; {style}.
 STYLE_FRAME = os.environ.get("IMAGE_PROMPT_STYLE", "")
+# Asked of an edit2 style's second picture when the request doesn't say what to take from it ("put her
+# in that outfit"): the encoder's answer fills the style's {prompt}.
+REFERENCE_PROMPT = os.environ.get("IMAGE_REFERENCE_PROMPT", "")
 EDITS_CHECKED = SAFETY_CHECK == "encoder" and bool(EDIT_HOSTS)
 REVIEW_PROMPTS = safetyreview.enabled("IMAGE_PROMPT_REVIEW")
 
@@ -148,12 +153,13 @@ def check_style(name: str, editing: bool, reference: bool = False, admin: bool =
         return None, ""
     style = STYLES.get(name)
     if style is None:
-        return None, f"Not drawn: there's no style called {name!r}. Styles: {', '.join(sorted(STYLES)) or 'none'}."
+        return None, f"Not done: there's no style called {name!r}. Styles: {', '.join(sorted(STYLES)) or 'none'}."
     if BACKEND != "runpod":
         return None, "Error: styles need IMAGE_GEN_BACKEND runpod"
     if style["kind"] == "draw" and editing:
-        return None, (f"Not done: {name} is a style for new pictures. Offer to draw a new picture in it, or "
-                      "call again without image_url.")
+        # The picture already has its look; the model carried the style over from drawing it.
+        toollog.log_detail("image_gen", f"style {name} dropped: it's for new pictures, this is an edit")
+        return None, ""
     if style["kind"] != "draw" and not editing:
         return None, (f"Not done: {name} restyles an existing picture. Call again with that picture's "
                       "image_url (usually the latest one you posted), or offer to draw one first.")
@@ -167,6 +173,22 @@ def check_style(name: str, editing: bool, reference: bool = False, admin: bool =
     return style, ""
 
 
+# Clothes a request can name. One that names none ("now wearing the outfit from the second image", as
+# the model wrote it) leaves the swap nothing to go on.
+GARMENTS = set("""jacket jackets coat coats blazer blazers suit suits dress dresses gown skirt skirts shirt shirts
+    blouse top tops tee t-shirt tshirt hoodie hoodies sweater sweaters jumper cardigan cardigans vest waistcoat
+    turtleneck pants trousers jeans shorts leggings tights stockings socks shoes shoe boots boot heels sneakers
+    trainers sandals slippers hat hats cap beanie scarf gloves tie bowtie uniform kimono yukata hanbok qipao
+    cheongsam apron overalls jumpsuit robe cloak cape armour armor bikini swimsuit pajamas pyjamas pjs lingerie
+    corset belt bag backpack glasses sunglasses necklace earrings bracelet costume onesie kigurumi tracksuit
+    raincoat parka poncho""".split())
+
+
+def says_nothing(prompt: str) -> bool:
+    """Whether a request names no clothes to take from the second picture."""
+    return not any(w in GARMENTS for w in re.findall(r"[a-z0-9'-]+", prompt.lower()))
+
+
 def style_change(style: dict, prompt: str) -> str:
     """An edit style's instruction: its trigger, with the request in place of {prompt}."""
     return style["trigger"].replace("{prompt}", prompt.strip().rstrip(".")) if style["trigger"] else prompt
@@ -178,6 +200,8 @@ def requires() -> list:
         need.append("IMAGE_EDIT_CHECK_PROMPT")
     if any(s["kind"] == "draw" for s in STYLES.values()):
         need.append("IMAGE_PROMPT_STYLE")
+    if any(s["kind"] == "edit2" for s in STYLES.values()):
+        need.append("IMAGE_REFERENCE_PROMPT")
     if REVIEW_PROMPTS:
         need += ["IMAGE_PROMPT_POLICY"] + safetyreview.requires("IMAGE_PROMPT_REVIEW")
     if BACKEND == "runpod":
@@ -292,7 +316,7 @@ def side(value, default: int = 1024) -> int:
     return min(MAX_SIDE, max(MIN_SIDE, n)) // 16 * 16
 
 def build_workflow(prompt: str, width: int, height: int, negative: str = "", source: str = "",
-                   change: str = "", style: dict = None, reference: str = "") -> dict:
+                   change: str = "", style: dict = None, reference: str = "", describe: bool = False) -> dict:
     """source names an uploaded picture to edit; the result then keeps that picture's size. change is the
     edit's instruction, checked against the result. style adds its LoRA to the model; reference names a
     second uploaded picture, the encoder's image 2."""
@@ -341,6 +365,18 @@ def build_workflow(prompt: str, width: int, height: int, negative: str = "", sou
         if reference:
             nodes["14"] = {"class_type": "LoadImage", "inputs": {"image": reference}}
             nodes["4"]["inputs"]["images.image_2"] = ["14", 0]
+        if reference and describe:
+            # The encoder says what the second picture shows, and that fills the prompt's {prompt}
+            # before it is encoded, in the same job.
+            nodes["15"] = {"class_type": "TextGenerate", "inputs": {
+                "clip": ["2", 0], "prompt": REFERENCE_PROMPT, "image": ["14", 0],
+                "max_length": 60, "sampling_mode": "off",
+            }}
+            nodes["16"] = {"class_type": "PreviewAny", "inputs": {"source": ["15", 0]}}
+            nodes["17"] = {"class_type": "StringReplace", "inputs": {
+                "string": prompt, "find": "{prompt}", "replace": ["15", 0],
+            }}
+            nodes["4"]["inputs"]["prompt"] = ["17", 0]
     if style:
         nodes["20"] = {"class_type": "LoraLoaderModelOnly", "inputs": {
             "model": ["1", 0], "lora_name": style_lora(style)["name"], "strength_model": style["strength"],
@@ -444,6 +480,8 @@ def render(workflow: dict, source: bytes = None, style: dict = None, reference: 
         texts = out["texts"]
         verdict = texts[0] if texts else ""
         check = texts[1] if "12" in workflow["prompt"] and len(texts) > 1 else ""
+        if "16" in workflow["prompt"] and len(texts) > 1:
+            log(f"second picture described as: {texts[1][:200]!r}")
         return out["images"][0], (verdict if SAFETY_CHECK == "encoder" else None), check
     if source:
         workflow["prompt"]["11"]["inputs"]["image"] = comfyui.upload(source, SOURCE_NAME, log=log)
@@ -494,10 +532,14 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
             line.split(":", 1)[0] for line in people.splitlines()))
     if style:
         toollog.log_detail("image_gen", f"style: {style['name']}")
+    describe = False
     if source and style and "{prompt}" in style["trigger"]:
         # The LoRA's own wording with the request in it (a camera angle, an outfit), as it was trained;
         # the encoder can't judge those, so no edit check.
         change, final_prompt = "", style_change(style, prompt)
+        if reference and says_nothing(prompt) and REFERENCE_PROMPT:
+            # "Put her in that outfit" left the swap nothing to go on; the encoder describes it instead.
+            describe, final_prompt = True, style["trigger"]
     elif source:
         # An edit style's LoRA was trained on its own instruction, so that is the whole edit.
         change = style["trigger"] if style and style["trigger"] else prompt
@@ -509,7 +551,7 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
             final_prompt = f"{style['trigger']}, {final_prompt}"
     try:
         workflow = lambda: build_workflow(final_prompt, width, height, negative, SOURCE_NAME if source else "",
-                                          change, style, REFERENCE_NAME if reference else "")
+                                          change, style, REFERENCE_NAME if reference else "", describe)
         image_bytes, verdict, check = render(workflow(), source, style, reference)
         if source and edit_missed(check):
             # One more try, with a new seed; the second result stands either way.
