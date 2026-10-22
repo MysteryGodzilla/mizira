@@ -408,6 +408,7 @@ func newCommandRegistry() *commands.Registry {
 	r.Register(&commands.SelfNotesCommand{})
 	r.Register(&commands.SuspicionCommand{})
 	r.Register(&commands.NowPlayingCommand{})
+	r.Register(&commands.ImageCommand{})
 	r.Register(&commands.SkipCommand{})
 	r.Register(&commands.TaskCommand{})
 	r.Register(&commands.TasksCommand{})

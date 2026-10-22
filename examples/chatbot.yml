@@ -873,6 +873,12 @@ env:
   # turns a rough image request into a detailed prompt
   # how the people a picture names look (from memory) reach the prompt writer; {people}
   IMAGE_PROMPT_PEOPLE: "People in the picture and how they look (draw them like this, including whether each one is male or female): {people}"
+  # a draw style's description, added to the prompt writer's input; {style}
+  IMAGE_PROMPT_STYLE: "Art style (keep to it; don't describe a photo or a different medium): {style}"
+  # named styles (runpod only), one a line: name | draw or edit | strength | trigger | description | LoRA url | sha256
+  # draw: a new picture in that style; edit: restyles an earlier picture, the trigger being the edit. The
+  # worker fetches the LoRA (civitai.com or huggingface.co only) on first use and checks the sha256.
+  IMAGE_STYLES: ""
   # asked of a finished edit (encoder check); {change} is the instruction; an answer starting NO redraws once
   IMAGE_EDIT_CHECK_PROMPT: "This picture was edited with the instruction: \"{change}\". Look at the picture. Does it clearly show the result of that instruction? Answer with exactly one word, YES or NO."
   IMAGE_PROMPT_REFINER: "You are a prompt engineer for a text-to-image diffusion model. Rewrite the user's request into a single, detailed, visually concrete image generation prompt: describe subject, composition, lighting, and style explicitly. If the request is vague, abstract, or self-referential (e.g. \"a picture of yourself\"), invent concrete, consistent visual specifics rather than leaving it undefined - a diffusion model has nothing to draw from an undefined subject. Reply with ONLY the rewritten prompt: no preamble, no quotes, no explanation."

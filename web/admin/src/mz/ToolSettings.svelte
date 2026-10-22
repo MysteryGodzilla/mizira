@@ -56,10 +56,15 @@
             <div><strong>{s.key}</strong>{#if s.overridden} <Badge text="changed" tone="busy" />{/if}</div>
             <div class="sub">{s.help}{#if s.overridden}{" · config.yml: "}<code>{s.default || "empty"}</code>{/if}</div>
           </div>
-          <div class="edit">
+          <div class="edit" class:full={s.kind === "lines"}>
             <form onsubmit={(e) => { e.preventDefault(); void save(s); }}>
-              <input class:wide={s.kind === "text"} value={shown(s)} oninput={(e) => (draft[s.key] = e.currentTarget.value)}
-                aria-label={s.key} inputmode={s.kind === "number" ? "numeric" : undefined} />
+              {#if s.kind === "lines"}
+                <textarea rows="6" spellcheck="false" value={shown(s)} oninput={(e) => (draft[s.key] = e.currentTarget.value)}
+                  aria-label={s.key}></textarea>
+              {:else}
+                <input class:wide={s.kind === "text"} value={shown(s)} oninput={(e) => (draft[s.key] = e.currentTarget.value)}
+                  aria-label={s.key} inputmode={s.kind === "number" ? "numeric" : undefined} />
+              {/if}
               <button type="submit" disabled={!dirty(s)}>Save</button>
             </form>
             {#if s.overridden}<button onclick={() => reset(s)} title="back to config.yml's value">Reset</button>{/if}
@@ -79,6 +84,9 @@
   form { display: flex; gap: 6px; }
   form input { width: 90px; }
   form input.wide { width: min(420px, 70vw); }
+  .edit.full { flex-basis: 100%; }
+  .edit.full form { flex: 1; align-items: flex-start; }
+  textarea { flex: 1; min-width: 0; font: 12px/1.4 ui-monospace, monospace; white-space: pre; overflow-x: auto; }
   code { font-size: 12px; }
   li { flex-wrap: wrap; }
 </style>

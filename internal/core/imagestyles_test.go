@@ -1,0 +1,37 @@
+// Copyright (C) 2026 MysteryGodzilla
+// Part of Mizira, a fork of metald (github.com/B4reMetal/metald)
+// SPDX-License-Identifier: GPL-3.0-only
+
+package core
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestParseImageStyles(t *testing.T) {
+	sha := strings.Repeat("A", 64)
+	good := "soyuz | draw | 0.9 | soyuzmult | Soviet cartoon | https://civitai.com/api/download/models/1 | " + sha + "\n" +
+		"# comment\n\n" +
+		"clay | edit | 1 | Transform the image into a clay sculpture style | clay figure | https://huggingface.co/x/y/resolve/r/c.safetensors | " + sha
+	styles, err := ParseImageStyles(good)
+	if err != nil || len(styles) != 2 {
+		t.Fatalf("styles = %+v, err = %v", styles, err)
+	}
+	if s := styles[0]; s.Name != "soyuz" || s.Kind != "draw" || s.Strength != 0.9 || s.Trigger != "soyuzmult" ||
+		s.Description != "Soviet cartoon" || s.SHA256 != strings.Repeat("a", 64) {
+		t.Errorf("soyuz = %+v", s)
+	}
+	for name, bad := range map[string]string{
+		"missing fields": "soyuz | draw | 1 | Soviet cartoon",
+		"other host":     "x1 | draw | 1 | | d | https://evil.example.com/x | " + sha,
+		"too strong":     "x1 | draw | 3 | | d | https://civitai.com/x | " + sha,
+		"bad kind":       "x1 | both | 1 | | d | https://civitai.com/x | " + sha,
+		"capital name":   "Soyuz | draw | 1 | | d | https://civitai.com/x | " + sha,
+		"twice":          good + "\nsoyuz | draw | 1 | | d | https://civitai.com/x | " + sha,
+	} {
+		if _, err := ParseImageStyles(bad); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}
