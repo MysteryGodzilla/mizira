@@ -271,7 +271,11 @@ class RunPodImageTests(unittest.TestCase):
         reply, sent, _ = self.guided("outfit", "red leather jacket", *args, admin=True)
         self.assertNotIn("15", sent["workflow"], "named clothes aren't described again")
         self.assertTrue(imagegen.says_nothing("put her in that outfit from image 2"))
+        # As the model wrote it live: a whole sentence, still no clothes named.
+        self.assertTrue(imagegen.says_nothing("The girl with short black hair from the first image is now wearing "
+                                              "the outfit from the second image. She is still standing on the street."))
         self.assertFalse(imagegen.says_nothing("the green coat"))
+        self.assertFalse(imagegen.says_nothing("a t-shirt and jeans"))
 
     def test_schema_lists_the_styles(self):
         import io, json

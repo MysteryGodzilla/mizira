@@ -173,15 +173,20 @@ def check_style(name: str, editing: bool, reference: bool = False, admin: bool =
     return style, ""
 
 
-# Words that don't say what to take from a second picture.
-VAGUE_WORDS = set("""a an the this that these those it its her his their them him she he they one same new
-    outfit outfits clothes clothing look looks style from in of on into with to and as like image picture pic
-    photo link one 2 two second shown above below there here wear wearing wears put dress swap switch change""".split())
+# Clothes a request can name. One that names none ("now wearing the outfit from the second image", as
+# the model wrote it) leaves the swap nothing to go on.
+GARMENTS = set("""jacket jackets coat coats blazer blazers suit suits dress dresses gown skirt skirts shirt shirts
+    blouse top tops tee t-shirt tshirt hoodie hoodies sweater sweaters jumper cardigan cardigans vest waistcoat
+    turtleneck pants trousers jeans shorts leggings tights stockings socks shoes shoe boots boot heels sneakers
+    trainers sandals slippers hat hats cap beanie scarf gloves tie bowtie uniform kimono yukata hanbok qipao
+    cheongsam apron overalls jumpsuit robe cloak cape armour armor bikini swimsuit pajamas pyjamas pjs lingerie
+    corset belt bag backpack glasses sunglasses necklace earrings bracelet costume onesie kigurumi tracksuit
+    raincoat parka poncho""".split())
 
 
 def says_nothing(prompt: str) -> bool:
-    """Whether a request names nothing to take from the second picture ("the outfit in image 2")."""
-    return not [w for w in re.findall(r"[a-z0-9']+", prompt.lower()) if w not in VAGUE_WORDS]
+    """Whether a request names no clothes to take from the second picture."""
+    return not any(w in GARMENTS for w in re.findall(r"[a-z0-9'-]+", prompt.lower()))
 
 
 def style_change(style: dict, prompt: str) -> str:
