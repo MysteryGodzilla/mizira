@@ -15,7 +15,8 @@ func TestImageStylesCommand(t *testing.T) {
 	sha := strings.Repeat("a", 64)
 	t.Setenv("IMAGE_STYLES", "soyuz | draw | 1 | soyuzmult | Soviet cartoon | https://civitai.com/x | "+sha+"\n"+
 		"disco | draw | 1 | | painted game art | https://civitai.com/y | "+sha+"\n"+
-		"clay | edit | 1 | Transform the image into a clay sculpture style | clay figure | https://huggingface.co/z | "+sha)
+		"clay | edit | 1 | Transform the image into a clay sculpture style | clay figure | https://huggingface.co/z | "+sha+"\n"+
+		"outfit | edit2 | 1 | Dress the person in image 1 in the {prompt} shown in image 2. | outfit swap | https://huggingface.co/o | "+sha+" | say the outfit in a few words")
 	cmd := &ImageCommand{}
 	if !cmd.Available(mocktest.NewMockContext()) {
 		t.Fatal("not offered with styles set")
@@ -25,6 +26,7 @@ func TestImageStylesCommand(t *testing.T) {
 	want := []string{
 		"new picture styles: soyuz (Soviet cartoon), disco (painted game art)",
 		"restyle a picture she drew: clay (clay figure)",
+		"with a second picture (admins only): outfit (outfit swap)",
 		`ask e.g. "draw a fox in the snow, soyuz style" or "make that picture clay"`,
 	}
 	if strings.Join(ctx.Replies, "\n") != strings.Join(want, "\n") {

@@ -189,6 +189,68 @@ class RunPodImageTests(unittest.TestCase):
             self.assertEqual(sent, {}, "nothing was rendered")
         self.assertTrue(self.draw().startswith("url: "), "a refused style doesn't use up the cap")
 
+    GUIDED = ("ck3 | draw | 1 | ckiiistyle | CK3 portrait | https://civitai.com/x | " + "a" * 64 +
+              " | write it as: a 3d render of [subject], painterly backdrop\n"
+              "angle | edit | 1 | <qma> {prompt} | camera moved | https://huggingface.co/x | " + "b" * 64 +
+              " | prompt: '<view> <height> <distance>', e.g. 'back view elevated shot wide shot'\n"
+              "outfit | edit2 | 1 | Dress the person in image 1 in the {prompt} shown in image 2. Keep their face. | "
+              "outfit swap | https://huggingface.co/y | " + "c" * 64)
+
+    def guided(self, style, prompt="a knight", image_url="", reference_url="", admin=False):
+        sent = {}
+
+        def run(workflow, timeout, log=None, inputs=None, loras=None):
+            sent.update(workflow=workflow, inputs=inputs)
+            return {"images": [b"png"], "texts": ["SAFE"]}
+        refined = []
+        with patch.object(imagegen, "STYLES", imagegen.parse_styles(self.GUIDED)), \
+                patch.object(imagegen, "STYLE_FRAME", "Art style: {style}"), \
+                patch.object(imagegen, "EDIT_HOSTS", ["files.example.com"]), \
+                patch.object(imagegen, "EDIT_CHECK", "Does it show: {change}?"), \
+                patch.object(imagegen.vision, "fetch_image", lambda url: (url.encode(), "image/png")), \
+                patch.object(imagegen.vision, "fit_for_model", lambda b, m: (b, m)), \
+                patch.object(imagegen.chat, "endpoint", lambda name: {"url": "", "model": "", "key": ""}), \
+                patch.object(imagegen, "_refine", lambda p, *a: refined.append(p) or "refined"), \
+                patch.object(imagegen, "refine_prompt", REFINE_PROMPT), \
+                patch.object(imagegen, "PER_HOUR", 0), \
+                patch.object(runpod, "run", run):
+            reply = imagegen.generate_image(prompt, 1024, 1024, requested_by="alice", image_url=image_url,
+                                            style=style, reference_url=reference_url, admin=admin)
+        return reply, sent, refined
+
+    def test_draw_guide_goes_to_the_prompt_writer(self):
+        reply, sent, refined = self.guided("ck3")
+        self.assertTrue(reply.startswith("url: "), reply)
+        self.assertIn("Art style: CK3 portrait. write it as: a 3d render of [subject], painterly backdrop", refined[0])
+        self.assertEqual(sent["workflow"]["4"]["inputs"]["prompt"], "ckiiistyle, refined")
+
+    def test_edit_trigger_takes_the_request(self):
+        reply, sent, _ = self.guided("angle", "back view elevated shot wide shot.", "https://files.example.com/a.png")
+        self.assertTrue(reply.startswith("url: "), reply)
+        wf = sent["workflow"]
+        self.assertEqual(wf["4"]["inputs"]["prompt"], "<qma> back view elevated shot wide shot")
+        self.assertNotIn("12", wf, "a camera move isn't edit-checked")
+
+    def test_second_picture_is_for_admins_and_reaches_image_2(self):
+        args = ("outfit", "red leather jacket", "https://files.example.com/a.png", "https://shop.example.net/jacket.jpg")
+        reply, sent, _ = self.guided(*args)
+        self.assertTrue(reply.startswith("Not allowed: outfit is for admins only"), reply)
+        self.assertEqual(sent, {})
+        reply, sent, _ = self.guided(*args, admin=True)
+        self.assertTrue(reply.startswith("url: "), reply)
+        wf = sent["workflow"]
+        self.assertEqual(wf["4"]["inputs"]["prompt"],
+                         "Dress the person in image 1 in the red leather jacket shown in image 2. Keep their face.")
+        self.assertEqual(wf["14"], {"class_type": "LoadImage", "inputs": {"image": imagegen.REFERENCE_NAME}})
+        self.assertEqual(wf["4"]["inputs"]["images.image_2"], ["14", 0])
+        self.assertEqual(sent["inputs"], {imagegen.SOURCE_NAME: b"https://files.example.com/a.png",
+                                          imagegen.REFERENCE_NAME: b"https://shop.example.net/jacket.jpg"})
+        for style, ref, start in (("outfit", "", "Not done: outfit needs a second picture"),
+                                  ("angle", "https://x.example.net/b.png", "Not done: angle takes one picture"),
+                                  ("", "https://x.example.net/b.png", "Not done: reference_url only goes")):
+            reply, _, _ = self.guided(style, "x", "https://files.example.com/a.png", ref, admin=True)
+            self.assertTrue(reply.startswith(start), reply)
+
     def test_schema_lists_the_styles(self):
         import io, json
         from contextlib import redirect_stdout

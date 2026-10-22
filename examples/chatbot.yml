@@ -875,9 +875,11 @@ env:
   IMAGE_PROMPT_PEOPLE: "People in the picture and how they look (draw them like this, including whether each one is male or female): {people}"
   # a draw style's description, added to the prompt writer's input; {style}
   IMAGE_PROMPT_STYLE: "Art style (keep to it; don't describe a photo or a different medium): {style}"
-  # named styles (runpod only), one a line: name | draw or edit | strength | trigger | description | LoRA url | sha256
-  # draw: a new picture in that style; edit: restyles an earlier picture, the trigger being the edit. The
-  # worker fetches the LoRA (civitai.com or huggingface.co only) on first use and checks the sha256.
+  # named styles (runpod only), one a line: name | draw, edit or edit2 | strength | trigger | description |
+  # LoRA url | sha256 [| guide]. draw: a new picture in that style; edit: restyles an earlier picture, the
+  # trigger being the edit ({prompt} is filled with the request); edit2: an edit with a second picture
+  # (reference_url), admins only. guide: the LoRA's own prompt advice. The worker fetches the LoRA
+  # (civitai.com or huggingface.co only) on first use and checks the sha256.
   IMAGE_STYLES: ""
   # asked of a finished edit (encoder check); {change} is the instruction; an answer starting NO redraws once
   IMAGE_EDIT_CHECK_PROMPT: "This picture was edited with the instruction: \"{change}\". Look at the picture. Does it clearly show the result of that instruction? Answer with exactly one word, YES or NO."

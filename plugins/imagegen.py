@@ -35,9 +35,11 @@ Configure under env: in config.yml:
                        (default: the bot's own model)
   IMAGE_EDIT_HOSTS     hosts whose pictures may be edited (image_url), comma-separated, e.g. the
                        hosting backend's own (default: none, editing off)
-  IMAGE_STYLES         named styles (runpod only), one a line: name | draw or edit | strength | trigger |
-                       description | LoRA url (civitai.com or huggingface.co) | sha256. A draw style is
-                       for new pictures, an edit style restyles an earlier one (its trigger is the edit)
+  IMAGE_STYLES         named styles (runpod only), one a line: name | draw, edit or edit2 | strength |
+                       trigger | description | LoRA url (civitai.com or huggingface.co) | sha256 [| guide].
+                       draw: a new picture; edit: restyles an earlier one (the trigger is the edit, with
+                       {prompt} for the request); edit2: an edit with a second picture (reference_url,
+                       admins only). guide: the LoRA's own prompt advice
   IMAGE_PROMPT_STYLE   how a draw style's description reaches the prompt writer; {style}
   hosting              see metald_tools/hosting.py (UPLOAD_BACKEND, UPLOAD_HEADERS, ...)
 """
@@ -90,6 +92,7 @@ EDIT_HOSTS = [h.strip().lower() for h in os.environ.get("IMAGE_EDIT_HOSTS", "").
 # A RunPod request body is capped at 10 MB and the picture goes in it as base64.
 MAX_SOURCE = 6 * 1024 * 1024
 SOURCE_NAME = "metald_source.png"
+REFERENCE_NAME = "metald_reference.png"
 
 PROMPT_POLICY = os.environ.get("IMAGE_PROMPT_POLICY", "")
 # How the people a prompt names look ("people", passed by the bot) reach the prompt writer; {people}.
@@ -104,13 +107,16 @@ REVIEW_PROMPTS = safetyreview.enabled("IMAGE_PROMPT_REVIEW")
 COLD_REPLY = ("Not ready: the image server is still starting up, which can take several minutes the first "
               "time. Tell them to ask again in a few minutes; don't retry now.")
 
-STYLE_LINE = re.compile(r"^(?P<name>[a-z0-9]{2,20})\s*\|\s*(?P<kind>draw|edit)\s*\|\s*(?P<strength>[0-9]+(?:\.[0-9]+)?)"
+STYLE_LINE = re.compile(r"^(?P<name>[a-z0-9]{2,20})\s*\|\s*(?P<kind>draw|edit2|edit)\s*\|\s*(?P<strength>[0-9]+(?:\.[0-9]+)?)"
                         r"\s*\|(?P<trigger>[^|]*)\|(?P<description>[^|]+)\|\s*(?P<url>https://\S+)\s*\|"
-                        r"\s*(?P<sha256>[0-9a-fA-F]{64})\s*$")
+                        r"\s*(?P<sha256>[0-9a-fA-F]{64})\s*(?:\|(?P<guide>[^|]*))?$")
 
 
 def parse_styles(text: str) -> dict:
-    """IMAGE_STYLES, one style a line: name | draw or edit | strength | trigger | description | url | sha256.
+    """IMAGE_STYLES, one style a line: name | kind | strength | trigger | description | url | sha256 [| guide].
+    kind: draw (a new picture), edit (restyles an earlier one) or edit2 (also takes a second picture,
+    reference_url, admins only). An edit trigger with {prompt} is filled with the request. guide is the
+    LoRA's own advice: told to the prompt writer for a draw style, shown in the tool for an edit one.
     Blank lines and # comments are skipped; so is a malformed line, with a log line."""
     styles = {}
     for line in (text or "").splitlines():
@@ -121,7 +127,7 @@ def parse_styles(text: str) -> dict:
         if not m or not 0 < float(m["strength"]) <= 2:
             toollog.log_detail("image_gen", f"IMAGE_STYLES line skipped: {line[:80]!r}")
             continue
-        styles[m["name"]] = {k: v.strip() for k, v in m.groupdict().items()} | {"strength": float(m["strength"])}
+        styles[m["name"]] = {k: (v or "").strip() for k, v in m.groupdict().items()} | {"strength": float(m["strength"])}
     return styles
 
 
@@ -134,9 +140,11 @@ def style_lora(style: dict) -> dict:
             "url": style["url"], "sha256": style["sha256"].lower()}
 
 
-def check_style(name: str, editing: bool) -> tuple:
-    """(the style, "") or (None, the reply saying why not); ("", "") for no style."""
+def check_style(name: str, editing: bool, reference: bool = False, admin: bool = False) -> tuple:
+    """(the style, "") or (None, the reply saying why not); (None, "") for no style."""
     if not name:
+        if reference:
+            return None, "Not done: reference_url only goes with a style that takes a second picture."
         return None, ""
     style = STYLES.get(name)
     if style is None:
@@ -146,10 +154,22 @@ def check_style(name: str, editing: bool) -> tuple:
     if style["kind"] == "draw" and editing:
         return None, (f"Not done: {name} is a style for new pictures. Offer to draw a new picture in it, or "
                       "call again without image_url.")
-    if style["kind"] == "edit" and not editing:
+    if style["kind"] != "draw" and not editing:
         return None, (f"Not done: {name} restyles an existing picture. Call again with that picture's "
                       "image_url (usually the latest one you posted), or offer to draw one first.")
+    if style["kind"] == "edit2" and not admin:
+        # The second picture is fetched from wherever its link points, which shows the bot's address.
+        return None, f"Not allowed: {name} is for admins only right now. It isn't a usage limit."
+    if style["kind"] == "edit2" and not reference:
+        return None, f"Not done: {name} needs a second picture. Call again with its link as reference_url."
+    if style["kind"] != "edit2" and reference:
+        return None, f"Not done: {name} takes one picture; call again without reference_url."
     return style, ""
+
+
+def style_change(style: dict, prompt: str) -> str:
+    """An edit style's instruction: its trigger, with the request in place of {prompt}."""
+    return style["trigger"].replace("{prompt}", prompt.strip().rstrip(".")) if style["trigger"] else prompt
 
 
 def requires() -> list:
@@ -226,17 +246,29 @@ def style_property() -> dict:
     """The schema's "style", listing the configured styles; none when there are none."""
     if not STYLES:
         return {}
-    listed = lambda kind: ", ".join(f"{n} ({s['description']})" for n, s in sorted(STYLES.items()) if s["kind"] == kind)
+    # An edit style's guide says what to put in prompt, so the model sees it; a draw style's goes to
+    # the prompt writer instead.
+    about = lambda s: s["description"] + (f"; {s['guide']}" if s["guide"] and s["kind"] != "draw" else "")
+    listed = lambda kind: ", ".join(f"{n} ({about(s)})" for n, s in sorted(STYLES.items()) if s["kind"] == kind)
     parts = []
     if listed("draw"):
         parts.append(f"for a new picture: {listed('draw')}")
     if listed("edit"):
         parts.append(f"to restyle an earlier picture (with its image_url): {listed('edit')}")
-    return {"style": {
+    if listed("edit2"):
+        parts.append(f"with an earlier picture (image_url) and a second one (reference_url), admins only: {listed('edit2')}")
+    props = {"style": {
         "type": "string", "enum": sorted(STYLES),
         "description": "optional: a named art style, only when someone asks for that style by name or plainly "
                        "asks for that look; leave it out otherwise. " + "; ".join(parts),
     }}
+    if listed("edit2"):
+        props["reference_url"] = {
+            "type": "string",
+            "description": "optional, only with a style that takes a second picture: the link of that second "
+                           "picture (e.g. the outfit to put on), exactly as someone posted it",
+        }
+    return props
 
 def announcement(args: dict = None) -> str:
     """The /me for a call: an edit says so, and a cold RunPod endpoint gets the line that warns of a
@@ -260,9 +292,10 @@ def side(value, default: int = 1024) -> int:
     return min(MAX_SIDE, max(MIN_SIDE, n)) // 16 * 16
 
 def build_workflow(prompt: str, width: int, height: int, negative: str = "", source: str = "",
-                   change: str = "", style: dict = None) -> dict:
+                   change: str = "", style: dict = None, reference: str = "") -> dict:
     """source names an uploaded picture to edit; the result then keeps that picture's size. change is the
-    edit's instruction, checked against the result. style adds its LoRA to the model."""
+    edit's instruction, checked against the result. style adds its LoRA to the model; reference names a
+    second uploaded picture, the encoder's image 2."""
     negative = combined_negative(negative)
     # cfg 1 skips the negative branch entirely, so a negative only takes effect with more guidance.
     cfg = NEGATIVE_CFG if negative else GEN_CFG
@@ -305,6 +338,9 @@ def build_workflow(prompt: str, width: int, height: int, negative: str = "", sou
         nodes["4"]["inputs"].update({"vae": ["3", 0], "images.image_1": ["11", 0]})
         nodes["6"]["inputs"]["latent_image"] = ["4", 2]
         del nodes["5"]
+        if reference:
+            nodes["14"] = {"class_type": "LoadImage", "inputs": {"image": reference}}
+            nodes["4"]["inputs"]["images.image_2"] = ["14", 0]
     if style:
         nodes["20"] = {"class_type": "LoraLoaderModelOnly", "inputs": {
             "model": ["1", 0], "lora_name": style_lora(style)["name"], "strength_model": style["strength"],
@@ -335,7 +371,8 @@ def refine_prompt(user_prompt: str, people: str = "", style: dict = None) -> str
     if people.strip() and PEOPLE_FRAME.strip():
         user_prompt += "\n\n" + PEOPLE_FRAME.strip().replace("{people}", people.strip())
     if style and STYLE_FRAME.strip():
-        user_prompt += "\n\n" + STYLE_FRAME.strip().replace("{style}", style["description"])
+        about = style["description"] + (f". {style['guide']}" if style["guide"] else "")
+        user_prompt += "\n\n" + STYLE_FRAME.strip().replace("{style}", about)
     ep = chat.endpoint("IMAGE_REFINER")
     return _refine(user_prompt, ep["url"], ep["model"], ep["key"])
 
@@ -380,13 +417,29 @@ def fetch_source(url: str) -> tuple:
         return None, "Error: that picture is too large to edit."
     return data, ""
 
-def render(workflow: dict, source: bytes = None, style: dict = None) -> tuple:
+def fetch_reference(url: str) -> tuple:
+    """(picture bytes, "") for an edit2 style's second picture, from any public link (admins only, so
+    checked by urlguard rather than IMAGE_EDIT_HOSTS), or (None, the reply saying why not)."""
+    try:
+        data, mime = vision.fetch_image(url)
+    except (urllib.error.URLError, ValueError, OSError) as e:
+        toollog.log_detail("image_gen", f"reference unreadable: {e}")
+        return None, "Error: couldn't fetch the second picture; check its link."
+    if not mime.startswith("image/"):
+        return None, "Error: the second link isn't a picture."
+    data, _ = vision.fit_for_model(data, mime)
+    if len(data) > MAX_SOURCE:
+        return None, "Error: the second picture is too large."
+    return data, ""
+
+def render(workflow: dict, source: bytes = None, style: dict = None, reference: bytes = None) -> tuple:
     """(image bytes, safety verdict or None, edit check or ""). The verdict and the check come with the
     image when the encoder looks at it; the texts arrive in node order, safety first."""
     log = lambda m: toollog.log_detail("image_gen", m)
     if BACKEND == "runpod":
         out = runpod.run(workflow["prompt"], POLL_TIMEOUT, log=log,
-                         inputs={SOURCE_NAME: source} if source else None,
+                         inputs=({SOURCE_NAME: source} | ({REFERENCE_NAME: reference} if reference else {}))
+                         if source else None,
                          loras=[style_lora(style)] if style else None)
         texts = out["texts"]
         verdict = texts[0] if texts else ""
@@ -401,26 +454,27 @@ def edit_missed(check: str) -> bool:
     return check.strip().upper().startswith("NO")
 
 def generate_image(prompt: str, width: int, height: int, negative: str = "", requested_by: str = "",
-                   image_url: str = "", people: str = "", admin: bool = False, style: str = "") -> str:
+                   image_url: str = "", people: str = "", admin: bool = False, style: str = "",
+                   reference_url: str = "") -> str:
     if SAFETY_CHECK == "encoder" and BACKEND != "runpod":
         return "Error: IMAGE_SAFETY_CHECK encoder needs IMAGE_GEN_BACKEND runpod"
-    chosen, why_not = check_style(style, bool(image_url))
+    chosen, why_not = check_style(style, bool(image_url), bool(reference_url), admin)
     if why_not:
         return why_not
     # Admins are neither capped nor counted, so the shared day total stays everyone else's.
     if admin:
-        return draw(prompt, width, height, negative, image_url, people, chosen)
+        return draw(prompt, width, height, negative, image_url, people, chosen, reference_url)
     over = usagecap.take("imagegen", requested_by, PER_HOUR, PER_DAY, DAY_TOTAL)
     if over:
         return over
-    reply = draw(prompt, width, height, negative, image_url, people, chosen)
+    reply = draw(prompt, width, height, negative, image_url, people, chosen, reference_url)
     if not reply.startswith("url: "):
         # Only a posted picture counts against the caps.
         usagecap.give_back("imagegen", requested_by)
     return reply
 
 def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "", people: str = "",
-         style: dict = None) -> str:
+         style: dict = None, reference_url: str = "") -> str:
     refused = review_prompt(prompt, edit=bool(image_url))
     if refused:
         return refused
@@ -429,13 +483,22 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
         source, why_not = fetch_source(image_url)
         if source is None:
             return why_not
+    reference = None
+    if reference_url:
+        reference, why_not = fetch_reference(reference_url)
+        if reference is None:
+            return why_not
     # An edit is a short instruction about the picture; expanding it would redraw the whole scene.
     if people and not source:
         toollog.log_detail("image_gen", "looks from memory for: " + ", ".join(
             line.split(":", 1)[0] for line in people.splitlines()))
     if style:
         toollog.log_detail("image_gen", f"style: {style['name']}")
-    if source:
+    if source and style and "{prompt}" in style["trigger"]:
+        # The LoRA's own wording with the request in it (a camera angle, an outfit), as it was trained;
+        # the encoder can't judge those, so no edit check.
+        change, final_prompt = "", style_change(style, prompt)
+    elif source:
         # An edit style's LoRA was trained on its own instruction, so that is the whole edit.
         change = style["trigger"] if style and style["trigger"] else prompt
         final_prompt = edit_prompt(change)
@@ -446,12 +509,12 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
             final_prompt = f"{style['trigger']}, {final_prompt}"
     try:
         workflow = lambda: build_workflow(final_prompt, width, height, negative, SOURCE_NAME if source else "",
-                                          change, style)
-        image_bytes, verdict, check = render(workflow(), source, style)
+                                          change, style, REFERENCE_NAME if reference else "")
+        image_bytes, verdict, check = render(workflow(), source, style, reference)
         if source and edit_missed(check):
             # One more try, with a new seed; the second result stands either way.
             toollog.log_detail("image_gen", f"edit missed ({check.strip()[:40]!r}), trying again")
-            image_bytes, verdict, check = render(workflow(), source, style)
+            image_bytes, verdict, check = render(workflow(), source, style, reference)
     except comfyui.ComfyCancelled:
         return comfyui.CANCELLED_REPLY
     except comfyui.ComfyError as e:
@@ -526,7 +589,8 @@ def main():
         print(generate_image(prompt, width, height, negative, str(input_data.get("requested_by") or ""),
                              str(input_data.get("image_url") or "").strip(), str(input_data.get("people") or ""),
                              input_data.get("requested_by_admin") is True,
-                             str(input_data.get("style") or "").strip().lower()))
+                             str(input_data.get("style") or "").strip().lower(),
+                             str(input_data.get("reference_url") or "").strip()))
         return
 
     print("Usage: image_gen.py [--schema | --announce | --execute <json>]")

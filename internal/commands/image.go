@@ -61,6 +61,9 @@ func styleLines(styles []core.ImageStyle) []string {
 		out = append(out, "restyle a picture she drew: "+edit)
 		asks = append(asks, `"make that picture `+first["edit"]+`"`)
 	}
+	if edit2 := listed("edit2"); edit2 != "" {
+		out = append(out, "with a second picture (admins only): "+edit2)
+	}
 	if len(out) == 0 {
 		return []string{"no picture styles are set up"}
 	}
