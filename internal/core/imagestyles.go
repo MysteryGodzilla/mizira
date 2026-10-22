@@ -13,12 +13,12 @@ import (
 
 // ImageStyle is one named picture style from IMAGE_STYLES, read the same way by plugins/imagegen.py.
 type ImageStyle struct {
-	Name, Kind, Trigger, Description, URL, SHA256 string
-	Strength                                      float64
+	Name, Kind, Trigger, Description, URL, SHA256, Guide string
+	Strength                                             float64
 }
 
-// One style a line: name | draw or edit | strength | trigger | description | url | sha256.
-var styleLine = regexp.MustCompile(`^([a-z0-9]{2,20})\s*\|\s*(draw|edit)\s*\|\s*([0-9]+(?:\.[0-9]+)?)\s*\|([^|]*)\|([^|]+)\|\s*(https://\S+)\s*\|\s*([0-9a-fA-F]{64})\s*$`)
+// One style a line: name | draw, edit or edit2 | strength | trigger | description | url | sha256 [| guide].
+var styleLine = regexp.MustCompile(`^([a-z0-9]{2,20})\s*\|\s*(draw|edit2|edit)\s*\|\s*([0-9]+(?:\.[0-9]+)?)\s*\|([^|]*)\|([^|]+)\|\s*(https://\S+)\s*\|\s*([0-9a-fA-F]{64})\s*(?:\|([^|]*))?$`)
 
 // styleHosts are where the worker may fetch a style's LoRA from (the worker checks this too).
 var styleHosts = []string{"https://civitai.com/", "https://huggingface.co/"}
@@ -35,7 +35,7 @@ func ParseImageStyles(text string) ([]ImageStyle, error) {
 		}
 		m := styleLine.FindStringSubmatch(line)
 		if m == nil {
-			return out, fmt.Errorf("line %d: want name | draw or edit | strength | trigger | description | url | sha256", i+1)
+			return out, fmt.Errorf("line %d: want name | draw, edit or edit2 | strength | trigger | description | url | sha256 [| guide]", i+1)
 		}
 		strength, _ := strconv.ParseFloat(m[3], 64)
 		switch {
@@ -48,7 +48,7 @@ func ParseImageStyles(text string) ([]ImageStyle, error) {
 		}
 		seen[m[1]] = true
 		out = append(out, ImageStyle{Name: m[1], Kind: m[2], Strength: strength, Trigger: strings.TrimSpace(m[4]),
-			Description: strings.TrimSpace(m[5]), URL: m[6], SHA256: strings.ToLower(m[7])})
+			Description: strings.TrimSpace(m[5]), URL: m[6], SHA256: strings.ToLower(m[7]), Guide: strings.TrimSpace(m[8])})
 	}
 	return out, nil
 }

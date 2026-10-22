@@ -22,6 +22,11 @@ func TestParseImageStyles(t *testing.T) {
 		s.Description != "Soviet cartoon" || s.SHA256 != strings.Repeat("a", 64) {
 		t.Errorf("soyuz = %+v", s)
 	}
+	guided, err := ParseImageStyles("angle | edit | 1 | <qma> {prompt} | camera moved | https://huggingface.co/x | " + sha + " | '<view> <height> <distance>'\n" +
+		"outfit | edit2 | 1 | Dress the person in image 1 in the {prompt} shown in image 2. | outfit swap | https://huggingface.co/y | " + sha)
+	if err != nil || len(guided) != 2 || guided[0].Guide != "'<view> <height> <distance>'" || guided[1].Kind != "edit2" || guided[1].Guide != "" {
+		t.Errorf("guided = %+v, err = %v", guided, err)
+	}
 	for name, bad := range map[string]string{
 		"missing fields": "soyuz | draw | 1 | Soviet cartoon",
 		"other host":     "x1 | draw | 1 | | d | https://evil.example.com/x | " + sha,
