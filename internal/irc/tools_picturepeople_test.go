@@ -150,9 +150,36 @@ func TestWithoutSetLooks(t *testing.T) {
 	}
 	// Left with neither, she couldn't say what carol looks like and drew someone else as her.
 	people, _ := store.People(net)
-	want := "carol: looks like adult woman, a lavender bob (added to pictures for you: name them); " +
+	want := "carol: looks like adult woman, a lavender bob (added to pictures for you: in a picture prompt write only their name); " +
 		"usually wears a white t-shirt; alt looks (put the alt's name in a picture prompt to use it): office, wedding"
 	if line := ProfileLine(people, "carol"); line != want {
 		t.Errorf("profile line = %q", line)
+	}
+}
+
+// "draw baremetal" came out in pc98 because the last picture was: a drawing style needs asking for.
+func TestPictureStyleNeedsAsking(t *testing.T) {
+	sha := strings.Repeat("a", 64)
+	t.Setenv("IMAGE_STYLES", "pc98 | draw | 0.8 cfg 2.5 | pc98dither | PC-98 art | https://civitai.com/p | "+sha+"\n"+
+		"clay | edit | 1 | Turn it into clay | clay figure | https://huggingface.co/c | "+sha)
+	rec := &argsRecorder{}
+	for _, c := range []struct {
+		request []string
+		style   string
+		kept    bool
+	}{
+		{[]string{"mizira", "draw", "bob", "in", "a", "library"}, "pc98", false},
+		{[]string{"mizira", "draw", "bob,", "PC-98", "style"}, "pc98", true},
+		{[]string{"mizira", "pc98", "bob", "please"}, "pc98", true},
+		{[]string{"mizira", "make", "it", "look", "like", "a", "sculpture"}, "clay", true},
+	} {
+		asked := mocktest.NewMockContext().WithArgs(c.request...)
+		NewPicturePeopleTool(rec).Execute(InjectContext(context.Background(), asked), map[string]any{"prompt": "bob reading", "style": c.style})
+		if _, kept := rec.got["style"]; kept != c.kept {
+			t.Errorf("%q with style %s: kept = %v", c.request, c.style, kept)
+		}
+		if got := rec.got["request"]; got != strings.Join(c.request, " ") {
+			t.Errorf("request passed on = %q", got)
+		}
 	}
 }

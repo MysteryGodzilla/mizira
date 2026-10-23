@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"maps"
+	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -21,7 +22,8 @@ import (
 // PicturePeopleTool passes a picture tool how the people its prompt names look, as "people": the
 // gender their avatar is drawn as, and their profile look or else their look memories. With only a
 // name in the prompt, women were drawn as men. The value comes from memory, never from the model: any "people" it wrote is
-// replaced. Edits (an image_url) get them too, for "back in her default outfit".
+// replaced. Edits (an image_url) get them too, for "back in her default outfit". A drawing style the
+// request doesn't name is dropped, and the request itself is passed on ("request").
 type PicturePeopleTool struct {
 	tools.Tool
 }
@@ -44,6 +46,7 @@ func (p *PicturePeopleTool) Execute(ctx context.Context, args map[string]any) (s
 		args = map[string]any{}
 	}
 	delete(args, "people")
+	delete(args, "request")
 	prompt, _ := args["prompt"].(string)
 	if chatCtx, err := GetIRCContext(ctx); err == nil {
 		// The request names them even when the prompt the model wrote doesn't ("draw bob" became "a
@@ -53,13 +56,33 @@ func (p *PicturePeopleTool) Execute(ctx context.Context, args map[string]any) (s
 		if self == "" {
 			self = chatCtx.GetBotNick()
 		}
-		request := speakerNamed(selfNamed(strings.Join(chatCtx.GetArgs(), " "), self), chatCtx.GetSource())
+		asked := strings.Join(chatCtx.GetArgs(), " ")
+		// The asker's own words, so the tool can tell clothes they asked for from ones the model made up.
+		args["request"] = asked
+		if style, _ := args["style"].(string); style != "" && unaskedDrawStyle(style, asked) {
+			delete(args, "style")
+			chatCtx.GetLogger().Info("picture_style_dropped", "style", style, "reason", "not in the request")
+		}
+		request := speakerNamed(selfNamed(asked, self), chatCtx.GetSource())
 		named := prompt + "\n" + request
 		if who := PicturePeople(chatCtx.GetNetwork(), named, chatCtx.GetConfig().Bot.LoreFadeDays, time.Now()); who != "" {
 			args["people"] = who
 		}
 	}
 	return p.Tool.Execute(ctx, args)
+}
+
+// unaskedDrawStyle reports whether style is a drawing style the request doesn't name ("pc-98" names
+// pc98): she put the last picture's style on "draw baremetal". Edit styles are left to the tool.
+func unaskedDrawStyle(style, request string) bool {
+	styles, _ := core.ParseImageStyles(os.Getenv("IMAGE_STYLES"))
+	for _, s := range styles {
+		if s.Name == style && s.Kind == "draw" {
+			said := strings.ReplaceAll(strings.ToLower(request), "-", "")
+			return !regexp.MustCompile(`\b` + regexp.QuoteMeta(s.Name) + `\b`).MatchString(said)
+		}
+	}
+	return false
 }
 
 // selfNamed is a request with the bot's name once less, as that one addressed it, and with "yourself"

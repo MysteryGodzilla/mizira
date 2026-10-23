@@ -72,7 +72,7 @@ func ProfileLine(people core.People, subject string) string {
 		if p.Look.Hair != "" {
 			look += ", " + p.Look.Hair
 		}
-		parts = append(parts, "looks like "+look+" (added to pictures for you: name them)")
+		parts = append(parts, "looks like "+look+" (added to pictures for you: in a picture prompt write only their name)")
 		if p.Look.Outfit != "" {
 			parts = append(parts, "usually wears "+p.Look.Outfit)
 		}
