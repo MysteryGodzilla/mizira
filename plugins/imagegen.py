@@ -188,7 +188,8 @@ GARMENTS = set("""jacket jackets coat coats blazer blazers suit suits dress dres
     trainers sandals slippers hat hats cap beanie scarf gloves tie bowtie uniform kimono yukata hanbok qipao
     cheongsam apron overalls jumpsuit robe cloak cape armour armor bikini swimsuit pajamas pyjamas pjs lingerie
     corset belt bag backpack glasses sunglasses necklace earrings bracelet costume onesie kigurumi tracksuit
-    raincoat parka poncho""".split())
+    raincoat parka poncho loafers stilettos pumps sweatshirt sweatpants joggers slacks tunic pinafore camisole
+    bodysuit leotard windbreaker overcoat obi high-top high-tops""".split())
 
 
 def says_nothing(prompt: str) -> bool:
@@ -433,7 +434,9 @@ def people_lines(people: list) -> str:
     for p in people:
         sex = p.get("drawn_as") or ""
         if p.get("look"):
-            lines.append(f"{p['name']} - outfit: {p.get('outfit') or 'as the request says'}")
+            # Without "drawn as", "MysteryGodzilla" in a dinosaur onesie became "he ... massive reptilian form".
+            drawn = f"; drawn as {sex}" if sex else ""
+            lines.append(f"{p['name']} - outfit: {p.get('outfit') or 'as the request says'}{drawn}")
         else:
             about = [f"drawn as {sex}" if sex else ""] + list(p.get("notes") or [])
             lines.append(f"{p['name']}: {'; '.join(x for x in about if x)}")
