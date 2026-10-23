@@ -6,7 +6,10 @@ package core
 
 import (
 	"fmt"
+	"net/url"
+	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -20,14 +23,24 @@ type ImageStyle struct {
 // One style a line: name | draw, edit or edit2 | strength | trigger | description | url | sha256 [| guide].
 var styleLine = regexp.MustCompile(`^([a-z0-9]{2,20})\s*\|\s*(draw|edit2|edit)\s*\|\s*([0-9]+(?:\.[0-9]+)?)\s*\|([^|]*)\|([^|]+)\|\s*(https://\S+)\s*\|\s*([0-9a-fA-F]{64})\s*(?:\|([^|]*))?$`)
 
-// styleHosts are where the worker may fetch a style's LoRA from (the worker checks this too).
-var styleHosts = []string{"https://civitai.com/", "https://huggingface.co/"}
+// styleHosts are where the worker may fetch a style's LoRA from: Civitai, Hugging Face and any in
+// IMAGE_STYLE_HOSTS (the worker checks this too, against its own EXTRA_LORA_HOSTS).
+func styleHosts() []string {
+	hosts := []string{"civitai.com", "huggingface.co"}
+	for _, h := range strings.Split(os.Getenv("IMAGE_STYLE_HOSTS"), ",") {
+		if h = strings.ToLower(strings.TrimSpace(h)); h != "" {
+			hosts = append(hosts, h)
+		}
+	}
+	return hosts
+}
 
 // ParseImageStyles reads IMAGE_STYLES, skipping blank lines and # comments. A malformed line is an
 // error naming its line number; the styles before it are still returned.
 func ParseImageStyles(text string) ([]ImageStyle, error) {
 	var out []ImageStyle
 	seen := map[string]bool{}
+	hosts := styleHosts()
 	for i, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -41,8 +54,8 @@ func ParseImageStyles(text string) ([]ImageStyle, error) {
 		switch {
 		case strength <= 0 || strength > 2:
 			return out, fmt.Errorf("line %d: strength must be above 0 and at most 2", i+1)
-		case !hasAnyPrefix(m[6], styleHosts):
-			return out, fmt.Errorf("line %d: the LoRA must come from civitai.com or huggingface.co", i+1)
+		case !slices.Contains(hosts, urlHost(m[6])):
+			return out, fmt.Errorf("line %d: the LoRA must come from %s", i+1, strings.Join(hosts, ", "))
 		case seen[m[1]]:
 			return out, fmt.Errorf("line %d: %s is listed twice", i+1, m[1])
 		}
@@ -53,11 +66,10 @@ func ParseImageStyles(text string) ([]ImageStyle, error) {
 	return out, nil
 }
 
-func hasAnyPrefix(s string, prefixes []string) bool {
-	for _, p := range prefixes {
-		if strings.HasPrefix(s, p) {
-			return true
-		}
+func urlHost(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
 	}
-	return false
+	return strings.ToLower(u.Hostname())
 }

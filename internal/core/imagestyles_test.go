@@ -39,4 +39,16 @@ func TestParseImageStyles(t *testing.T) {
 			t.Errorf("%s: accepted", name)
 		}
 	}
+
+	// A friend's LoRA on their own host: listed, it's allowed; look-alikes still aren't.
+	t.Setenv("IMAGE_STYLE_HOSTS", " Files.Example.com ,")
+	if _, err := ParseImageStyles("x1 | draw | 1 | | d | https://files.example.com/u/x.safetensors | " + sha); err != nil {
+		t.Errorf("listed host refused: %v", err)
+	}
+	for _, url := range []string{"https://files.example.com.evil.example/x", "https://files.example.com@evil.example/x",
+		"https://civitai.com.evil.example/x"} {
+		if _, err := ParseImageStyles("x1 | draw | 1 | | d | " + url + " | " + sha); err == nil {
+			t.Errorf("%s: accepted", url)
+		}
+	}
 }

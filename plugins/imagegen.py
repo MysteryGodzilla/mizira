@@ -36,7 +36,7 @@ Configure under env: in config.yml:
   IMAGE_EDIT_HOSTS     hosts whose pictures may be edited (image_url), comma-separated, e.g. the
                        hosting backend's own (default: none, editing off)
   IMAGE_STYLES         named styles (runpod only), one a line: name | draw, edit or edit2 | strength |
-                       trigger | description | LoRA url (civitai.com or huggingface.co) | sha256 [| guide].
+                       trigger | description | LoRA url (civitai.com, huggingface.co or IMAGE_STYLE_HOSTS) | sha256 [| guide].
                        draw: a new picture; edit: restyles an earlier one (the trigger is the edit, with
                        {prompt} for the request); edit2: an edit with a second picture (reference_url,
                        admins only). guide: the LoRA's own prompt advice
