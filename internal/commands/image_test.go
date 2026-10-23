@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"B4reMetal/metald/internal/core"
 	mocktest "B4reMetal/metald/internal/testing"
 )
 
@@ -36,5 +37,44 @@ func TestImageStylesCommand(t *testing.T) {
 	t.Setenv("IMAGE_STYLES", "")
 	if cmd.Available(mocktest.NewMockContext()) {
 		t.Error("offered with no styles")
+	}
+}
+
+// A variant named "office" was missed when asked for as "business": people can list the names.
+func TestImageLooksCommand(t *testing.T) {
+	const net = "image-looks"
+	store, _ := core.Memories()
+	store.SetProfile(net, core.Profile{Subject: "carol", Pronouns: "she/her", Aliases: []string{"caz"}})
+	store.SetLook(net, "carol", core.Look{Appearance: "adult woman", Outfit: "a white t-shirt and grey shorts",
+		Variants: []core.LookVariant{{Name: "office", Outfit: "a charcoal blazer"}, {Name: "bun", Hair: "a messy bun"}}}, "")
+	store.SetLook(net, "dave", core.Look{Appearance: "adult man"}, "")
+	store.SetProfile(net, core.Profile{Subject: "erin", Pronouns: "she/her"})
+	t.Cleanup(func() {
+		for _, s := range []string{"carol", "dave", "erin"} {
+			store.DeleteProfile(net, s)
+		}
+	})
+
+	for args, want := range map[string][]string{
+		"": {
+			"picture looks: carol (office, bun), dave",
+			`name a look when asking, e.g. "draw carol in the office look"; ~image looks <name> shows what each one is`,
+		},
+		"Caz": {
+			"carol, default: a white t-shirt and grey shorts",
+			"office: a charcoal blazer",
+			"bun: hair: a messy bun",
+			`ask e.g. "draw carol in the office look"`,
+		},
+		"dave": {"dave, default: no set outfit, dressed as asked"},
+		"erin": {"erin has no picture look set; pictures of them go by their look memories"},
+	} {
+		ctx := mocktest.NewMockContext().WithArgs(append([]string{"~image", "looks"}, strings.Fields(args)...)...)
+		ctx.GetConfig().Server.Name = net
+		ctx.GetConfig().Bot.CommandPrefix = "~"
+		(&ImageCommand{}).Execute(ctx)
+		if strings.Join(ctx.Replies, "\n") != strings.Join(want, "\n") {
+			t.Errorf("looks %q:\n%s", args, strings.Join(ctx.Replies, "\n"))
+		}
 	}
 }
