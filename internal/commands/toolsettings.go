@@ -38,7 +38,7 @@ var ToolSettings = []ToolSetting{
 	{"IMAGE_GEN_ANNOUNCE_COLD", "Pictures", "text", "her /me when the image server has to start up first"},
 	{"IMAGE_GEN_EXPIRE", "Pictures", "text", "how long pictures stay up, e.g. 30d (empty: the host's default)"},
 	{"IMAGE_EDIT_HOSTS", "Pictures", "text", "hosts whose pictures can be edited, comma-separated (empty: no editing)"},
-	{"IMAGE_STYLES", "Pictures", "lines", "named styles, one a line: name | draw, edit or edit2 | strength | trigger | description | LoRA url | sha256 [| guide]"},
+	{"IMAGE_STYLES", "Pictures", "lines", "named styles, one a line: name | draw, edit or edit2 | strength [cfg N] | trigger | description | LoRA url | sha256 [| guide]"},
 	{"IMAGE_STYLE_HOSTS", "Pictures", "text", "more hosts a style's LoRA may come from besides civitai.com and huggingface.co, comma-separated (the worker's EXTRA_LORA_HOSTS must list them too)"},
 	{"VISION_ANNOUNCE", "Looking at pictures", "text", "her /me when she starts looking at a picture someone linked"},
 }

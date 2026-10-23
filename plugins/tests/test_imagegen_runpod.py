@@ -141,6 +141,18 @@ class RunPodImageTests(unittest.TestCase):
                          ("draw", 0.9, "soyuzmult"))
         self.assertEqual(imagegen.style_lora(styles["clay"])["name"], "style-clay-bbbbbbbbbbbb.safetensors")
 
+    def test_style_cfg_overrides_the_usual(self):
+        # The PC-98 LoRA at cfg 1 drew retro anime without its palette or dithering; it needs 2.5.
+        styles = imagegen.parse_styles(
+            "pc98 | draw | 0.8 cfg 2.5 | pc98dither | PC-98 art | https://files.example.com/p.safetensors | " + "d" * 64 + "\n"
+            "wild | draw | 1 cfg 40 | | too much | https://civitai.com/x | " + "e" * 64 + "\n" + self.STYLES)
+        self.assertEqual(sorted(styles), ["clay", "pc98", "soyuz"])
+        self.assertEqual((styles["pc98"]["strength"], styles["pc98"]["cfg"], styles["soyuz"]["cfg"]), (0.8, 2.5, 0))
+        with patch.object(imagegen, "GEN_CFG", 1.0), patch.object(imagegen, "NEGATIVE_CFG", 1.5):
+            cfg = lambda style, negative="": imagegen.build_workflow("a fox", 1024, 1024, negative, style=style)["prompt"]["6"]["inputs"]["cfg"]
+            self.assertEqual([cfg(styles["pc98"]), cfg(styles["pc98"], "text"), cfg(styles["soyuz"]), cfg(styles["soyuz"], "text")],
+                             [2.5, 2.5, 1.0, 1.5])
+
     def styled(self, style, image_url=""):
         sent = {}
 
