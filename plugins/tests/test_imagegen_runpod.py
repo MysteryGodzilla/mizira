@@ -395,6 +395,24 @@ class RunPodImageTests(unittest.TestCase):
         ]:
             self.assertEqual(imagegen.unasked_clothes_dropped(prompt, request, people), want, request)
 
+    def test_request_outfit_replaces_the_set_one(self):
+        # "me wearing a baltimore ravens jersey": given her set outfit too, the prompt writer kept her
+        # thigh-high socks under the jersey and once drew two people on the couch.
+        me = {"name": "alice", "look": "adult woman", "outfit": "a lilac cardigan and pleated skirt"}
+        office = dict(me, outfit="a charcoal blazer", variant="office")
+        for request, people, outfits in [
+            ("draw me wearing a baltimore ravens jersey", [me], [""]),
+            ("me wearing a ravens jeresy on the couch", [me], [""]),
+            ("draw me in a hat at the beach", [me], [me["outfit"]]),
+            ("draw me in my office look in a jersey", [office], [office["outfit"]]),
+            ("draw me at a press conference", [me], [me["outfit"]]),
+        ]:
+            self.assertEqual([p["outfit"] for p in imagegen.outfit_from_request(people, request)], outfits, request)
+        self.assertEqual(imagegen.unasked_clothes_dropped("alice on a couch, the jersey fits snugly", "alice in a jeresy",
+                                                          [me]), "alice on a couch, the jersey fits snugly")
+        # With nothing to say, her line made the prompt writer add "the second person ... from their entry".
+        self.assertEqual(imagegen.people_lines(imagegen.outfit_from_request([me], "me in a jersey")), "")
+
     def test_name_tucked_in_brackets_comes_first(self):
         # "adult woman mid-20s (baremetal) with ..." drew the woman and "another person named baremetal".
         people = [{"name": "baremetal"}]
