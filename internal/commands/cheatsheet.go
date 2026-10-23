@@ -83,7 +83,7 @@ var commandHelp = map[string]CommandHelp{
 
 	"+np":    {Group: "Radio", Usage: []string{"+np"}, Text: "What the web radio is playing.", Feature: "radio"},
 	"+skip":  {Group: "Radio", Usage: []string{"+skip"}, Text: "Skip the radio's current track (one skip per 20 seconds, for everyone).", Feature: "radio"},
-	"+image": {Group: "Other", Usage: []string{"+image styles"}, Text: "List the picture styles people can ask her for (IMAGE_STYLES)."},
+	"+image": {Group: "Other", Usage: []string{"+image styles", "+image looks [name]"}, Text: "List the picture styles people can ask her for (IMAGE_STYLES), and the looks set for people with each one's alts."},
 }
 
 // CheatEntry is one command on the cheatsheet.

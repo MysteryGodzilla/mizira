@@ -12,7 +12,8 @@ import (
 	"B4reMetal/metald/internal/irc"
 )
 
-// ImageCommand lists the picture styles (IMAGE_STYLES) by the names people can ask for.
+// ImageCommand lists the picture styles (IMAGE_STYLES) and the looks set for people, by the names people
+// can ask for.
 type ImageCommand struct{}
 
 func (c *ImageCommand) Name() string    { return "+image" }
@@ -24,8 +25,27 @@ func (c *ImageCommand) Available(irc.ChatContextInterface) bool {
 
 func (c *ImageCommand) Execute(ctx irc.ChatContextInterface) {
 	prefix := ctx.GetConfig().Bot.CommandPrefix
-	if args := ctx.GetArgs(); len(args) > 1 && !strings.EqualFold(args[1], "styles") {
-		ctx.Reply("Usage: " + prefix + "image styles")
+	args := ctx.GetArgs()
+	if len(args) > 1 && strings.EqualFold(args[1], "looks") {
+		store, err := core.Memories()
+		if err != nil {
+			ctx.GetLogger().Error("memory_store_unavailable", "error", err.Error())
+			ctx.Reply("memory is unavailable")
+			return
+		}
+		profiles, err := store.Profiles(ctx.GetNetwork())
+		if err != nil {
+			ctx.Reply("memory is unavailable")
+			return
+		}
+		people, _ := store.People(ctx.GetNetwork())
+		for _, line := range lookLines(profiles, people, strings.Join(args[2:], " "), prefix) {
+			ctx.Reply(line)
+		}
+		return
+	}
+	if len(args) > 1 && !strings.EqualFold(args[1], "styles") {
+		ctx.Reply("Usage: " + prefix + "image styles | " + prefix + "image looks [name]")
 		return
 	}
 	styles, err := core.ParseImageStyles(os.Getenv("IMAGE_STYLES"))
@@ -68,4 +88,61 @@ func styleLines(styles []core.ImageStyle) []string {
 		return []string{"no picture styles are set up"}
 	}
 	return append(out, "ask e.g. "+strings.Join(asks, " or "))
+}
+
+// lookLines is the reply to "looks": everyone with a set look and their variants' names, or what each
+// of one person's looks wears, so a variant can be asked for by its name ("office", not "business").
+func lookLines(profiles []core.Profile, people core.People, name, prefix string) []string {
+	if name == "" {
+		var parts []string
+		example := ""
+		for _, p := range profiles {
+			if !p.Look.Set() {
+				continue
+			}
+			var names []string
+			for _, v := range p.Look.Variants {
+				names = append(names, v.Name)
+			}
+			if len(names) == 0 {
+				parts = append(parts, p.Subject)
+				continue
+			}
+			parts = append(parts, p.Subject+" ("+strings.Join(names, ", ")+")")
+			if example == "" {
+				example = `"draw ` + p.Subject + ` in the ` + names[0] + ` look"`
+			}
+		}
+		if len(parts) == 0 {
+			return []string{"no picture looks are set up"}
+		}
+		out := []string{"picture looks: " + strings.Join(parts, ", ")}
+		if example != "" {
+			out = append(out, "name a look when asking, e.g. "+example+"; "+prefix+"image looks <name> shows what each one is")
+		}
+		return out
+	}
+	p, ok := people.Get(people.Resolve(name))
+	if !ok || !p.Look.Set() {
+		return []string{name + " has no picture look set; pictures of them go by their look memories"}
+	}
+	outfit := p.Look.Outfit
+	if outfit == "" {
+		outfit = "no set outfit, dressed as asked"
+	}
+	out := []string{p.Subject + ", default: " + truncateText(outfit, 200)}
+	for _, v := range p.Look.Variants {
+		var about []string
+		if v.Outfit != "" {
+			about = append(about, v.Outfit)
+		}
+		if v.Hair != "" {
+			about = append(about, "hair: "+v.Hair)
+		}
+		out = append(out, v.Name+": "+truncateText(strings.Join(about, "; "), 200))
+	}
+	if len(p.Look.Variants) > 0 {
+		out = append(out, `ask e.g. "draw `+p.Subject+` in the `+p.Look.Variants[0].Name+` look"`)
+	}
+	return out
 }
