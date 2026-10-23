@@ -62,10 +62,14 @@
         <div class="sub">Variants: named in a request ("in her business look", "hair in a bun"), they swap the hair and/or the outfit.</div>
         {#each variants as v, i (i)}
           <div class="variant">
-            <input bind:value={v.name} maxlength="20" placeholder="name, e.g. business" aria-label="variant name" />
-            <input bind:value={v.hair} maxlength="400" placeholder="hair (blank: default)" aria-label="variant hair" />
-            <input bind:value={v.outfit} maxlength="400" placeholder="outfit (blank: default)" aria-label="variant outfit" />
-            <button type="button" onclick={() => variants.splice(i, 1)} title="remove this variant">✕</button>
+            <div class="head">
+              <input bind:value={v.name} maxlength="20" placeholder="name, e.g. business" aria-label="variant name" />
+              <button type="button" onclick={() => variants.splice(i, 1)} title="remove this variant">✕</button>
+            </div>
+            <label>Hair (blank: the default)
+              <textarea bind:value={v.hair} rows="2" maxlength="400" aria-label="variant hair"></textarea></label>
+            <label>Outfit (blank: the default)
+              <textarea bind:value={v.outfit} rows="3" maxlength="400" aria-label="variant outfit"></textarea></label>
           </div>
         {/each}
         {#if variants.length < 8}<button type="button" onclick={() => variants.push({ name: "", hair: "", outfit: "" })}>Add variant</button>{/if}
@@ -92,10 +96,12 @@
   form { display: grid; gap: 8px; }
   label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
   textarea, input { font: inherit; }
-  .variant { display: grid; grid-template-columns: minmax(80px, 1fr) minmax(120px, 2fr) minmax(120px, 2fr) auto; gap: 6px; margin: 4px 0; }
+  textarea { width: 100%; box-sizing: border-box; resize: vertical; min-height: 2.6em; }
+  .variant { display: grid; gap: 6px; margin: 6px 0; padding: 8px; border: 1px solid var(--line); border-radius: 6px; }
+  .variant .head { display: flex; gap: 6px; }
+  .variant .head input { flex: 1; max-width: 240px; }
   .row { display: flex; gap: 6px; }
   dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 0 0 6px; }
   dt { color: var(--muted); font-size: 12px; }
   dd { margin: 0; overflow-wrap: anywhere; }
-  @media (max-width: 600px) { .variant { grid-template-columns: 1fr; } }
 </style>
