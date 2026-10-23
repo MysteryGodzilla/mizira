@@ -374,10 +374,54 @@ class RunPodImageTests(unittest.TestCase):
         # Next to her name, not as a list: listed apart, it drew a second woman beside the one described.
         self.assertEqual(sent["workflow"]["4"]["inputs"]["prompt"],
                          "hori (adult woman, green eyes, short lavender bob) and remy at a desk")
-        self.assertEqual(imagegen.bind_looks("a woman at a desk", imagegen.parse_people(people)),
-                         ("a woman at a desk", [imagegen.parse_people(people)[0]]))
         self.assertEqual(imagegen.bind_looks("Hori-chan and HORI", imagegen.parse_people(people))[0],
                          "Hori-chan and HORI (adult woman, green eyes, short lavender bob)")
+
+    def test_clothes_nobody_asked_for_are_left_out(self):
+        # The chat model dressed baremetal in "a modern tech outfit" when her sysadmin alt was asked for,
+        # and the prompt writer drew a second woman in the alt's clothes.
+        alt = [{"name": "baremetal", "look": "adult woman", "outfit": "a white lab coat", "variant": "sysadmin"}]
+        made_up = ("baremetal (adult woman mid-20s) with very long blue hair. She's wearing a modern tech outfit: "
+                   "dark blue fitted turtleneck sweater, grey cargo pants, white sneakers. She stands in a server room.")
+        for prompt, request, people, want in [
+            (made_up, "mizira new image of sysadmin baremetal looking at servers", alt,
+             "baremetal (adult woman mid-20s) with very long blue hair. She stands in a server room."),
+            ("hori wearing a red dress, at the top of the steps, with sandals", "draw hori in a red dress on the steps",
+             [{"name": "hori", "look": "adult woman", "outfit": "a white t-shirt"}],
+             "hori wearing a red dress, at the top of the steps"),
+            (made_up, "", alt, made_up),
+            (made_up, "draw remy", [{"name": "remy", "notes": ["grey rat"]}], made_up),
+        ]:
+            self.assertEqual(imagegen.unasked_clothes_dropped(prompt, request, people), want, request)
+
+    def test_name_tucked_in_brackets_comes_first(self):
+        # "adult woman mid-20s (baremetal) with ..." drew the woman and "another person named baremetal".
+        people = [{"name": "baremetal"}]
+        for prompt, want in {
+            "adult woman mid-20s (baremetal) with long blue hair": "baremetal (adult woman mid-20s) with long blue hair",
+            "anime style illustration of adult woman mid-20s (BareMetal) reading":
+                "anime style illustration of baremetal (adult woman mid-20s) reading",
+            "a woman (baremetal), smiling": "baremetal (woman), smiling",
+            "baremetal at a desk": "baremetal at a desk",
+            "alice (adult woman) at a desk": "alice (adult woman) at a desk",
+        }.items():
+            self.assertEqual(imagegen.named_first(prompt, people), want, prompt)
+
+    def test_unnamed_look_goes_on_their_person(self):
+        # The prompt writer dropped the name and the look, listed apart, drew a second woman.
+        hori = {"name": "hori", "drawn_as": "female", "look": "adult woman, lavender bob"}
+        bob = {"name": "bob", "drawn_as": "male", "look": "adult man, red cap"}
+        carol = {"name": "carol", "look": "adult, green coat"}
+        for prompt, people, want in [
+            ("A clean anime illustration of a young adult woman with long hair in a server room", [hori],
+             ("A clean anime illustration of a young adult woman named hori (adult woman, lavender bob) with long hair "
+              "in a server room", [])),
+            ("an old man feeding pigeons", [hori], ("an old man feeding pigeons", [hori])),
+            ("a lone figure on a hill", [carol], ("a lone figure named carol (adult, green coat) on a hill", [])),
+            ("a woman and a man at a desk", [hori, bob], ("a woman and a man at a desk", [hori, bob])),
+            ("a manager at a desk", [bob], ("a manager at a desk", [bob])),
+        ]:
+            self.assertEqual(imagegen.bind_looks(prompt, people), want, prompt)
 
     def test_other_names_are_one_person(self):
         # "alice Ally sitting": the look went in after alice and Ally was drawn as a second woman.

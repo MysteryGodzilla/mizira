@@ -452,7 +452,21 @@ def bind_looks(prompt: str, people: list) -> tuple:
             prompt = f"{prompt[:m.end()]} ({p['look']}){prompt[m.end():]}"
         else:
             unbound.append(p)
+    if len(unbound) == 1:
+        # The prompt writer dropped the name ("a young adult woman with long blue hair"), and listed
+        # apart, the look was drawn as a second woman: it goes on the first one of theirs instead.
+        p = unbound[0]
+        m = re.search(r"(?i)\b(?:a|an|one|the)\s+(?:[\w-]+\s+){0,4}?" + PERSON_WORDS[p.get("drawn_as") or ""] + r"\b", prompt)
+        if m:
+            toollog.log_detail("image_gen", f"look of {p['name']} put on {m.group(0)!r}")
+            prompt = f"{prompt[:m.end()]} named {p['name']} ({p['look']}){prompt[m.end():]}"
+            unbound = []
     return prompt, unbound
+
+
+# Words for one person, by how they're drawn, that an unnamed look can go on.
+PERSON_WORDS = {"female": "(?:woman|girl|lady|heroine)", "male": "(?:man|boy|guy|hero)",
+                "": "(?:person|figure|character)"}
 
 
 def one_name(prompt: str, people: list) -> str:
@@ -465,6 +479,43 @@ def one_name(prompt: str, people: list) -> str:
         n = re.escape(name)
         prompt = re.sub(rf"(?i)(?<![\w-])({n})(?:\s*\(\s*{n}\s*\)|\s+{n})+(?![\w'’-])", lambda m: m.group(1), prompt)
     return prompt
+
+
+def named_first(prompt: str, people: list) -> str:
+    """The prompt with "adult woman mid-20s (alice)" as "alice (adult woman mid-20s)": with the name
+    tucked in brackets after a description, the prompt writer drew the woman and "another person named
+    alice" beside her."""
+    for p in people:
+        n = re.escape(p["name"])
+        prompt = re.sub(rf"(?i)(?<![\w'-])(?:(?:an?|the)\s+)?((?:(?!(?:of|in|on|at|with|for|and|the|an?|to|from|by|as)\b)[\w'-]+\s+){{1,4}})"
+                        rf"\(\s*{n}\s*\)", lambda m: f"{p['name']} ({m.group(1).strip()})", prompt)
+    return prompt
+
+
+def unasked_clothes_dropped(prompt: str, request: str, people: list) -> str:
+    """The prompt without its parts that dress people in clothes the asker never named, when someone in
+    it has a set outfit: the chat model made up "a modern tech outfit: turtleneck, cargo pants", and the
+    prompt writer drew a second woman to wear the set one. A part naming someone stays."""
+    if not request or not any(p.get("look") and p.get("outfit") for p in people):
+        return prompt
+    asked = set(re.findall(r"[a-z0-9'-]+", request.lower()))
+    names = [p["name"].lower() for p in people]
+    kept, dropped = [], []
+    for part in re.split(r"(?<=[,.;:])\s+", prompt):
+        words = set(re.findall(r"[a-z0-9'-]+", part.lower()))
+        if (words & WORN) - asked and not any(n in words for n in names):
+            dropped.append(part)
+        else:
+            kept.append(part)
+    if not dropped or not kept:
+        return prompt
+    toollog.log_detail("image_gen", f"clothes nobody asked for left out: {' '.join(dropped)[:200]!r}")
+    return " ".join(kept).rstrip(",;: ")
+
+
+# Words that dress someone; "top", "cap" and "glasses" are left out as they're scenery as often.
+WORN = (GARMENTS - {"top", "tops", "cap", "tie", "bag", "backpack", "belt", "glasses", "sunglasses", "necklace",
+                    "earrings", "bracelet"}) | {"outfit", "outfits", "clothes", "clothing", "attire", "dressed"}
 
 
 # What an edit calls someone's clothes without saying what they are ("back in her default outfit").
@@ -586,7 +637,7 @@ def edit_missed(check: str) -> bool:
 
 def generate_image(prompt: str, width: int, height: int, negative: str = "", requested_by: str = "",
                    image_url: str = "", people: str = "", admin: bool = False, style: str = "",
-                   reference_url: str = "") -> str:
+                   reference_url: str = "", request: str = "") -> str:
     if SAFETY_CHECK == "encoder" and BACKEND != "runpod":
         return "Error: IMAGE_SAFETY_CHECK encoder needs IMAGE_GEN_BACKEND runpod"
     chosen, why_not = check_style(style, bool(image_url), bool(reference_url), admin)
@@ -594,18 +645,18 @@ def generate_image(prompt: str, width: int, height: int, negative: str = "", req
         return why_not
     # Admins are neither capped nor counted, so the shared day total stays everyone else's.
     if admin:
-        return draw(prompt, width, height, negative, image_url, people, chosen, reference_url)
+        return draw(prompt, width, height, negative, image_url, people, chosen, reference_url, request)
     over = usagecap.take("imagegen", requested_by, PER_HOUR, PER_DAY, DAY_TOTAL)
     if over:
         return over
-    reply = draw(prompt, width, height, negative, image_url, people, chosen, reference_url)
+    reply = draw(prompt, width, height, negative, image_url, people, chosen, reference_url, request)
     if not reply.startswith("url: "):
         # Only a posted picture counts against the caps.
         usagecap.give_back("imagegen", requested_by)
     return reply
 
 def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "", people: str = "",
-         style: dict = None, reference_url: str = "") -> str:
+         style: dict = None, reference_url: str = "", request: str = "") -> str:
     refused = review_prompt(prompt, edit=bool(image_url))
     if refused:
         return refused
@@ -620,7 +671,9 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
         if reference is None:
             return why_not
     named = parse_people(people)
-    prompt = one_name(prompt, named)
+    prompt = named_first(one_name(prompt, named), named)
+    if not source:
+        prompt = unasked_clothes_dropped(prompt, request, named)
     if named:
         toollog.log_detail("image_gen", f"asked for: {prompt[:300]!r}")
         toollog.log_detail("image_gen", "people: " + ", ".join(
@@ -734,7 +787,8 @@ def main():
                              str(input_data.get("image_url") or "").strip(), str(input_data.get("people") or ""),
                              input_data.get("requested_by_admin") is True,
                              str(input_data.get("style") or "").strip().lower(),
-                             str(input_data.get("reference_url") or "").strip()))
+                             str(input_data.get("reference_url") or "").strip(),
+                             str(input_data.get("request") or "")))
         return
 
     print("Usage: image_gen.py [--schema | --announce | --execute <json>]")
