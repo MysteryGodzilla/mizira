@@ -881,12 +881,15 @@ env:
   # asked of an edit2 style's second picture when the request doesn't say what to take from it ("put her in
   # that outfit"); the answer fills the style's {prompt}
   IMAGE_REFERENCE_PROMPT: "Describe only the clothes and shoes worn in this picture, with their colours, as one short phrase of under 25 words. Do not mention the person, pose or background."
-  # named styles (runpod only), one a line: name | draw, edit or edit2 | strength | trigger | description |
-  # LoRA url | sha256 [| guide]. draw: a new picture in that style; edit: restyles an earlier picture, the
+  # named styles (runpod only), one a line: name | draw, edit or edit2 | strength [cfg N] | trigger |
+  # description | LoRA url | sha256 [| guide]. cfg: the guidance a LoRA needs when not IMAGE_GEN_CFG ("0.8 cfg
+  # 2.5"). draw: a new picture in that style; edit: restyles an earlier picture, the
   # trigger being the edit ({prompt} is filled with the request); edit2: an edit with a second picture
   # (reference_url), admins only. guide: the LoRA's own prompt advice. The worker fetches the LoRA
-  # (civitai.com or huggingface.co only) on first use and checks the sha256.
+  # (civitai.com, huggingface.co or IMAGE_STYLE_HOSTS) on first use and checks the sha256.
   IMAGE_STYLES: ""
+  # more hosts a style's LoRA may come from, comma-separated; the worker's EXTRA_LORA_HOSTS must list them too
+  IMAGE_STYLE_HOSTS: ""
   # asked of a finished edit (encoder check); {change} is the instruction; an answer starting NO redraws once
   IMAGE_EDIT_CHECK_PROMPT: "This picture was edited with the instruction: \"{change}\". Look at the picture. Does it clearly show the result of that instruction? Answer with exactly one word, YES or NO."
   IMAGE_PROMPT_REFINER: "You are a prompt engineer for a text-to-image diffusion model. Rewrite the user's request into a single, detailed, visually concrete image generation prompt: describe subject, composition, lighting, and style explicitly. If the request is vague, abstract, or self-referential (e.g. \"a picture of yourself\"), invent concrete, consistent visual specifics rather than leaving it undefined - a diffusion model has nothing to draw from an undefined subject. Reply with ONLY the rewritten prompt: no preamble, no quotes, no explanation."

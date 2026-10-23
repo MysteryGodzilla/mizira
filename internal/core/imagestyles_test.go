@@ -39,4 +39,25 @@ func TestParseImageStyles(t *testing.T) {
 			t.Errorf("%s: accepted", name)
 		}
 	}
+
+	// The PC-98 LoRA needs cfg 2.5 where every other style runs at the usual 1.
+	cfg, err := ParseImageStyles("pc98 | draw | 0.8 cfg 2.5 | pc98dither | PC-98 art | https://civitai.com/p | " + sha)
+	if err != nil || len(cfg) != 1 || cfg[0].Strength != 0.8 || cfg[0].CFG != 2.5 || cfg[0].Trigger != "pc98dither" || styles[0].CFG != 0 {
+		t.Errorf("cfg = %+v, err = %v", cfg, err)
+	}
+	if _, err := ParseImageStyles("pc98 | draw | 0.8 cfg 40 | | d | https://civitai.com/p | " + sha); err == nil {
+		t.Error("cfg 40 accepted")
+	}
+
+	// A friend's LoRA on their own host: listed, it's allowed; look-alikes still aren't.
+	t.Setenv("IMAGE_STYLE_HOSTS", " Files.Example.com ,")
+	if _, err := ParseImageStyles("x1 | draw | 1 | | d | https://files.example.com/u/x.safetensors | " + sha); err != nil {
+		t.Errorf("listed host refused: %v", err)
+	}
+	for _, url := range []string{"https://files.example.com.evil.example/x", "https://files.example.com@evil.example/x",
+		"https://civitai.com.evil.example/x"} {
+		if _, err := ParseImageStyles("x1 | draw | 1 | | d | " + url + " | " + sha); err == nil {
+			t.Errorf("%s: accepted", url)
+		}
+	}
 }

@@ -35,8 +35,8 @@ Configure under env: in config.yml:
                        (default: the bot's own model)
   IMAGE_EDIT_HOSTS     hosts whose pictures may be edited (image_url), comma-separated, e.g. the
                        hosting backend's own (default: none, editing off)
-  IMAGE_STYLES         named styles (runpod only), one a line: name | draw, edit or edit2 | strength |
-                       trigger | description | LoRA url (civitai.com or huggingface.co) | sha256 [| guide].
+  IMAGE_STYLES         named styles (runpod only), one a line: name | draw, edit or edit2 | strength
+                       [cfg N] | trigger | description | LoRA url (civitai.com, huggingface.co or IMAGE_STYLE_HOSTS) | sha256 [| guide].
                        draw: a new picture; edit: restyles an earlier one (the trigger is the edit, with
                        {prompt} for the request); edit2: an edit with a second picture (reference_url,
                        admins only). guide: the LoRA's own prompt advice
@@ -117,26 +117,29 @@ COLD_REPLY = ("Not ready: the image server is still starting up, which can take 
               "time. Tell them to ask again in a few minutes; don't retry now.")
 
 STYLE_LINE = re.compile(r"^(?P<name>[a-z0-9]{2,20})\s*\|\s*(?P<kind>draw|edit2|edit)\s*\|\s*(?P<strength>[0-9]+(?:\.[0-9]+)?)"
+                        r"(?:\s+cfg\s+(?P<cfg>[0-9]+(?:\.[0-9]+)?))?"
                         r"\s*\|(?P<trigger>[^|]*)\|(?P<description>[^|]+)\|\s*(?P<url>https://\S+)\s*\|"
                         r"\s*(?P<sha256>[0-9a-fA-F]{64})\s*(?:\|(?P<guide>[^|]*))?$")
 
 
 def parse_styles(text: str) -> dict:
-    """IMAGE_STYLES, one style a line: name | kind | strength | trigger | description | url | sha256 [| guide].
-    kind: draw (a new picture), edit (restyles an earlier one) or edit2 (also takes a second picture,
-    reference_url, admins only). An edit trigger with {prompt} is filled with the request. guide is the
-    LoRA's own advice: told to the prompt writer for a draw style, shown in the tool for an edit one.
-    Blank lines and # comments are skipped; so is a malformed line, with a log line."""
+    """IMAGE_STYLES, one style a line: name | kind | strength [cfg N] | trigger | description | url | sha256
+    [| guide]. kind: draw (a new picture), edit (restyles an earlier one) or edit2 (also takes a second
+    picture, reference_url, admins only). cfg is the guidance the LoRA needs, when not the usual
+    IMAGE_GEN_CFG. An edit trigger with {prompt} is filled with the request. guide is the LoRA's own
+    advice: told to the prompt writer for a draw style, shown in the tool for an edit one. Blank lines
+    and # comments are skipped; so is a malformed line, with a log line."""
     styles = {}
     for line in (text or "").splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
             continue
         m = STYLE_LINE.match(line)
-        if not m or not 0 < float(m["strength"]) <= 2:
+        if not m or not 0 < float(m["strength"]) <= 2 or (m["cfg"] and not 0 < float(m["cfg"]) <= 10):
             toollog.log_detail("image_gen", f"IMAGE_STYLES line skipped: {line[:80]!r}")
             continue
-        styles[m["name"]] = {k: (v or "").strip() for k, v in m.groupdict().items()} | {"strength": float(m["strength"])}
+        styles[m["name"]] = {k: (v or "").strip() for k, v in m.groupdict().items()} | {
+            "strength": float(m["strength"]), "cfg": float(m["cfg"] or 0)}
     return styles
 
 
@@ -328,8 +331,11 @@ def build_workflow(prompt: str, width: int, height: int, negative: str = "", sou
     edit's instruction, checked against the result. style adds its LoRA to the model; reference names a
     second uploaded picture, the encoder's image 2."""
     negative = combined_negative(negative)
-    # cfg 1 skips the negative branch entirely, so a negative only takes effect with more guidance.
+    # cfg 1 skips the negative branch entirely, so a negative only takes effect with more guidance. A
+    # style's own cfg wins: the PC-98 LoRA at cfg 1 drew retro anime without its palette or dithering.
     cfg = NEGATIVE_CFG if negative else GEN_CFG
+    if style and style.get("cfg"):
+        cfg = style["cfg"]
     nodes = {
         # Plain UNETLoader, not UnetLoaderGGUF: these are safetensors.
         "1": {"class_type": "UNETLoader", "inputs": {
