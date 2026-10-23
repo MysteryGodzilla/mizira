@@ -3,6 +3,7 @@
 # Part of Mizira, a fork of metald (github.com/B4reMetal/metald)
 # SPDX-License-Identifier: GPL-3.0-only
 
+import json
 import os
 import sys
 import tempfile
@@ -365,6 +366,52 @@ class RunPodImageTests(unittest.TestCase):
                          ("a woman at a desk", [imagegen.parse_people(people)[0]]))
         self.assertEqual(imagegen.bind_looks("Hori-chan and HORI", imagegen.parse_people(people))[0],
                          "Hori-chan and HORI (adult woman, green eyes, short lavender bob)")
+
+    def test_other_names_are_one_person(self):
+        # "alice Ally sitting": the look went in after alice and Ally was drawn as a second woman.
+        people = [{"name": "alice", "aliases": ["ally", "alice-chan"]}, {"name": "bob"}]
+        for prompt, want in {
+            "Alice Ally sitting in a cafe": "Alice sitting in a cafe",
+            "alice (Ally) and bob waving": "alice and bob waving",
+            "Ally in a cafe with alice-chan": "alice in a cafe with alice",
+            "alice and Ally's cat": "alice and alice's cat",
+            "Rally cars and bob bob": "Rally cars and bob",
+        }.items():
+            self.assertEqual(imagegen.one_name(prompt, people), want, prompt)
+
+    def test_edit_spells_out_a_set_outfit(self):
+        # Told "back in default outfit", the edit model had nothing to go on.
+        alice = {"name": "alice", "drawn_as": "female", "look": "adult woman", "outfit": "a cream shirt and lilac cardigan"}
+        office = dict(alice, outfit="a charcoal blazer", variant="office")
+        bob = {"name": "bob", "drawn_as": "male", "notes": ["grey rat"]}
+        put = "Change her outfit to a cream shirt and lilac cardigan. "
+        for change, people, want in [
+            ("alice back in her default outfit, warm light", [alice], put + "alice back in her default outfit, warm light"),
+            ("change her clothes back", [alice], put + "change her clothes back"),
+            ("put alice in her office look", [office], "Change her outfit to a charcoal blazer. put alice in her office look"),
+            ("alice in a red dress", [alice], "alice in a red dress"),
+            ("make it night time", [alice], "make it night time"),
+            ("change his outfit to match", [alice, bob], "change his outfit to match"),
+            ("alice and bob back in their usual outfits", [alice, bob], put + "alice and bob back in their usual outfits"),
+            ("both back in default outfits", [alice, dict(alice, name="carol")], "both back in default outfits"),
+        ]:
+            self.assertEqual(imagegen.dressed(change, people), want, change)
+
+        sent = {}
+
+        def run(workflow, timeout, log=None, inputs=None, loras=None):
+            sent.update(workflow=workflow)
+            return {"images": [b"png"], "texts": ["SAFE", "YES"]}
+        with patch.object(imagegen, "EDIT_HOSTS", ["files.example.com"]), \
+                patch.object(imagegen.vision, "fetch_image", lambda url: (b"source", "image/png")), \
+                patch.object(imagegen.vision, "fit_for_model", lambda b, m: (b, m)), \
+                patch.object(runpod, "run", run):
+            reply = imagegen.generate_image("Alice Ally back in default outfit", 1024, 1024, requested_by="alice",
+                                            image_url="https://files.example.com/a.png",
+                                            people=json.dumps([dict(alice, aliases=["ally"])]))
+        self.assertTrue(reply.startswith("url: "), reply)
+        self.assertEqual(sent["workflow"]["4"]["inputs"]["prompt"],
+                         put + "Alice back in default outfit. Keep everything else exactly the same.")
 
 
 if __name__ == "__main__":

@@ -407,7 +407,7 @@ def upload_image(image_bytes: bytes) -> str:
     return upload_file(image_bytes, f"metald_{int(time.time() * 1000)}.png", "image/png", EXPIRE)
 
 def parse_people(people: str) -> list:
-    """The bot's "people": [{name, drawn_as, look, outfit, variant, notes}]; [] when there are none."""
+    """The bot's "people": [{name, aliases, drawn_as, look, outfit, variant, notes}]; [] when there are none."""
     try:
         found = json.loads(people) if people.strip() else []
     except ValueError:
@@ -445,6 +445,39 @@ def bind_looks(prompt: str, people: list) -> tuple:
         else:
             unbound.append(p)
     return prompt, unbound
+
+
+def one_name(prompt: str, people: list) -> str:
+    """The prompt with each person's other names as their name, said once: in "alice Ally sitting" the
+    look went in after alice and Ally was drawn as a second woman."""
+    for p in people:
+        name = p["name"]
+        for alias in sorted((a for a in p.get("aliases") or [] if isinstance(a, str) and a), key=len, reverse=True):
+            prompt = re.sub(r"(?i)(?<![\w-])" + re.escape(alias) + r"(?![\w-])", lambda _: name, prompt)
+        n = re.escape(name)
+        prompt = re.sub(rf"(?i)(?<![\w-])({n})(?:\s*\(\s*{n}\s*\)|\s+{n})+(?![\w'’-])", lambda m: m.group(1), prompt)
+    return prompt
+
+
+# What an edit calls someone's clothes without saying what they are ("back in her default outfit").
+CLOTHES_WORDS = {"outfit", "outfits", "clothes", "clothing", "attire", "dressed", "wardrobe"}
+
+
+def dressed(change: str, people: list) -> str:
+    """An edit putting someone in their set outfit, with the outfit spelled out: the edit model was told
+    "back in default outfit" and had nothing to go on. Only for the one person with a set look, named
+    in the change or the only one in the picture, and only when the change names no clothes itself."""
+    looks = [p for p in people if p.get("look") and p.get("outfit")]
+    words = set(re.findall(r"[a-z0-9'-]+", change.lower()))
+    if len(looks) != 1 or not says_nothing(change):
+        return change
+    p = looks[0]
+    if not (words & CLOTHES_WORDS or p.get("variant") in words):
+        return change
+    if len(people) > 1 and p["name"].lower() not in words:
+        return change
+    their = {"female": "her", "male": "his"}.get(p.get("drawn_as"), "their")
+    return f"Change {their} outfit to {p['outfit']}. {change}"
 
 
 def characters_text(people: list) -> str:
@@ -578,8 +611,8 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
         reference, why_not = fetch_reference(reference_url)
         if reference is None:
             return why_not
-    # An edit is a short instruction about the picture; expanding it would redraw the whole scene.
-    named = [] if source else parse_people(people)
+    named = parse_people(people)
+    prompt = one_name(prompt, named)
     if named:
         toollog.log_detail("image_gen", f"asked for: {prompt[:300]!r}")
         toollog.log_detail("image_gen", "people: " + ", ".join(
@@ -596,9 +629,11 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
             # "Put her in that outfit" left the swap nothing to go on; the encoder describes it instead.
             describe, final_prompt = True, style["trigger"]
     elif source:
-        # An edit style's LoRA was trained on its own instruction, so that is the whole edit.
-        change = style["trigger"] if style and style["trigger"] else prompt
+        # An edit style's LoRA was trained on its own instruction, so that is the whole edit. An edit is
+        # a short instruction about the picture; expanding it would redraw the whole scene.
+        change = style["trigger"] if style and style["trigger"] else dressed(prompt, named)
         final_prompt = edit_prompt(change)
+        toollog.log_detail("image_gen", f"edit: {final_prompt[:600]!r}")
     else:
         change = ""
         final_prompt = refine_prompt(prompt, people, style)

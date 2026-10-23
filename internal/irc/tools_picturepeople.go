@@ -21,7 +21,7 @@ import (
 // PicturePeopleTool passes a picture tool how the people its prompt names look, as "people": the
 // gender their avatar is drawn as, and their profile look or else their look memories. With only a
 // name in the prompt, women were drawn as men. The value comes from memory, never from the model: any "people" it wrote is
-// replaced. Edits (an image_url) get none, as the picture already shows them.
+// replaced. Edits (an image_url) get them too, for "back in her default outfit".
 type PicturePeopleTool struct {
 	tools.Tool
 }
@@ -45,8 +45,7 @@ func (p *PicturePeopleTool) Execute(ctx context.Context, args map[string]any) (s
 	}
 	delete(args, "people")
 	prompt, _ := args["prompt"].(string)
-	edit, _ := args["image_url"].(string)
-	if chatCtx, err := GetIRCContext(ctx); err == nil && strings.TrimSpace(edit) == "" {
+	if chatCtx, err := GetIRCContext(ctx); err == nil {
 		// The request names them even when the prompt the model wrote doesn't ("draw bob" became "a
 		// girl with silver hair"). One mention of her own name there is how she was addressed.
 		// The trigger, as her nick can be someone else's account.
@@ -98,9 +97,11 @@ func speakerNamed(request, speaker string) string {
 
 // PicturePerson is one person a picture names, as the picture tool gets them (JSON in "people").
 // Look is set from their profile and goes into the picture word for word; without one, Notes are
-// their look memories, for the prompt writer to use.
+// their look memories, for the prompt writer to use. Aliases are their other names, which the prompt
+// may use too ("alice Ally" drew two women).
 type PicturePerson struct {
 	Name    string   `json:"name"`
+	Aliases []string `json:"aliases,omitempty"`
 	DrawnAs string   `json:"drawn_as,omitempty"`
 	Look    string   `json:"look,omitempty"`
 	Outfit  string   `json:"outfit,omitempty"`
@@ -130,7 +131,11 @@ func PicturePeople(network, text string, fadeDays int, now time.Time) string {
 			break
 		}
 		p := PicturePerson{Name: name, DrawnAs: drawnAs(people, name)}
-		if pr, ok := people.Get(name); ok && pr.Look.Set() {
+		pr, ok := people.Get(name)
+		if ok {
+			p.Aliases = pr.Aliases
+		}
+		if ok && pr.Look.Set() {
 			hair, outfit, variant := pr.Look.For(text)
 			p.Look = strings.TrimSuffix(pr.Look.Appearance, ".")
 			if hair != "" {

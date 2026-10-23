@@ -15,7 +15,7 @@ import (
 	mocktest "B4reMetal/metald/internal/testing"
 )
 
-const bobFemale = `[{"name":"bob","drawn_as":"female"`
+const bobFemale = `[{"name":"bob","aliases":["bobby"],"drawn_as":"female"`
 
 // With only a name in the prompt, women were drawn as men: the picture is told how they look.
 func TestPicturePeople(t *testing.T) {
@@ -35,7 +35,7 @@ func TestPicturePeople(t *testing.T) {
 	})
 
 	got := PicturePeople(net, "bobby and carol at the beach, dave waving", 45, time.Now())
-	if got != `[{"name":"bob","drawn_as":"female","notes":["bob's avatar has long silver hair and a red ribbon"]}]` {
+	if got != bobFemale+`,"notes":["bob's avatar has long silver hair and a red ribbon"]}]` {
 		t.Errorf("people = %q", got)
 	}
 	if got := PicturePeople(net, "a cat on a windowsill", 45, time.Now()); got != "" {
@@ -76,9 +76,10 @@ func TestPicturePeople(t *testing.T) {
 			t.Errorf("%q: the bot asked to be in the picture was missed: %q", request, who)
 		}
 	}
-	NewPicturePeopleTool(rec).Execute(ctx, map[string]any{"prompt": "make bob's ribbon blue", "image_url": "https://files.example.com/a.png"})
-	if _, ok := rec.got["people"]; ok {
-		t.Error("an edit was given people")
+	// "Back in her default outfit" left the edit nothing to go on.
+	NewPicturePeopleTool(rec).Execute(ctx, map[string]any{"prompt": "bob back in his usual outfit", "image_url": "https://files.example.com/a.png"})
+	if who, _ := rec.got["people"].(string); !strings.HasPrefix(who, bobFemale) {
+		t.Errorf("an edit wasn't given people: %q", who)
 	}
 }
 
