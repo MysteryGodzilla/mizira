@@ -233,7 +233,9 @@ def print_schema():
             "the correction with memory__remember. the tool itself checks what may be drawn (romance like "
             "hand holding or a kiss is fine, nudity isn't), so don't refuse a picture request yourself: call it "
             "and pass on its answer. when the picture includes people from the chat, name them rather than "
-            "describing how they look: their looks are added for you."
+            "describing how they look: their looks are added for you; for one of their alt looks (\"her "
+            "business outfit\"), write the alt's name from their profile (\"office\"). draw only what was asked: leave out "
+            "what you remember about them (what they like, jokes, their bots) unless the request asks for it."
         ),
         "type": "object",
         "properties": {

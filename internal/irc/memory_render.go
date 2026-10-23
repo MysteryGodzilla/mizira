@@ -65,8 +65,24 @@ func ProfileLine(people core.People, subject string) string {
 	if len(p.Aliases) > 0 {
 		parts = append(parts, "also called "+strings.Join(p.Aliases, ", "))
 	}
+	// The set look, as their look memories are left out: without it she couldn't say what they look
+	// like, and described someone else in their picture.
 	if p.Look.Set() {
-		parts = append(parts, "look set for pictures")
+		look := p.Look.Appearance
+		if p.Look.Hair != "" {
+			look += ", " + p.Look.Hair
+		}
+		parts = append(parts, "looks like "+look+" (added to pictures for you: name them)")
+		if p.Look.Outfit != "" {
+			parts = append(parts, "usually wears "+p.Look.Outfit)
+		}
+		var alts []string
+		for _, v := range p.Look.Variants {
+			alts = append(alts, v.Name)
+		}
+		if len(alts) > 0 {
+			parts = append(parts, "alt looks (put the alt's name in a picture prompt to use it): "+strings.Join(alts, ", "))
+		}
 	}
 	// No time zone: it says where someone lives, and profile__localtime gives the time when needed.
 	for _, bot := range bots {

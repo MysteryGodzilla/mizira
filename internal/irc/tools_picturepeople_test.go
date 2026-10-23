@@ -126,7 +126,8 @@ func TestPicturePeopleProfileLook(t *testing.T) {
 func TestWithoutSetLooks(t *testing.T) {
 	const net = "picture-hide-looks"
 	store, _ := core.Memories()
-	store.SetLook(net, "carol", core.Look{Appearance: "adult woman"}, "")
+	store.SetLook(net, "carol", core.Look{Appearance: "adult woman", Hair: "a lavender bob", Outfit: "a white t-shirt",
+		Variants: []core.LookVariant{{Name: "office", Outfit: "a blazer"}, {Name: "wedding", Outfit: "a white gown"}}}, "")
 	look, _ := store.Remember(net, "carol", "carol's avatar has long silver hair", "carol", "#test")
 	store.SetKind(net, look, core.KindLook)
 	lore, _ := store.Remember(net, "carol", "carol runs the pub quiz", "carol", "#test")
@@ -147,8 +148,11 @@ func TestWithoutSetLooks(t *testing.T) {
 	if len(kept) != 2 || kept[0] != lore || kept[1] != other {
 		t.Errorf("kept %v, want carol's lore and dave's look (%d, %d)", kept, lore, other)
 	}
+	// Left with neither, she couldn't say what carol looks like and drew someone else as her.
 	people, _ := store.People(net)
-	if line := ProfileLine(people, "carol"); !strings.Contains(line, "look set for pictures") {
+	want := "carol: looks like adult woman, a lavender bob (added to pictures for you: name them); " +
+		"usually wears a white t-shirt; alt looks (put the alt's name in a picture prompt to use it): office, wedding"
+	if line := ProfileLine(people, "carol"); line != want {
 		t.Errorf("profile line = %q", line)
 	}
 }
