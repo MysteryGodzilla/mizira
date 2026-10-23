@@ -189,7 +189,7 @@ GARMENTS = set("""jacket jackets coat coats blazer blazers suit suits dress dres
     cheongsam apron overalls jumpsuit robe cloak cape armour armor bikini swimsuit pajamas pyjamas pjs lingerie
     corset belt bag backpack glasses sunglasses necklace earrings bracelet costume onesie kigurumi tracksuit
     raincoat parka poncho loafers stilettos pumps sweatshirt sweatpants joggers slacks tunic pinafore camisole
-    bodysuit leotard windbreaker overcoat obi high-top high-tops""".split())
+    bodysuit leotard windbreaker overcoat obi high-top high-tops jersey jerseys""".split())
 
 
 def says_nothing(prompt: str) -> bool:
@@ -433,10 +433,14 @@ def people_lines(people: list) -> str:
     lines = []
     for p in people:
         sex = p.get("drawn_as") or ""
+        if p.get("look") and not p.get("outfit"):
+            # Dressed as the request says, the line only told the prompt writer of "the second person ...
+            # wearing the specified outfit from their entry".
+            continue
         if p.get("look"):
             # Without "drawn as", "MysteryGodzilla" in a dinosaur onesie became "he ... massive reptilian form".
             drawn = f"; drawn as {sex}" if sex else ""
-            lines.append(f"{p['name']} - outfit: {p.get('outfit') or 'as the request says'}{drawn}")
+            lines.append(f"{p['name']} - outfit: {p['outfit']}{drawn}")
         else:
             about = [f"drawn as {sex}" if sex else ""] + list(p.get("notes") or [])
             lines.append(f"{p['name']}: {'; '.join(x for x in about if x)}")
@@ -506,7 +510,7 @@ def unasked_clothes_dropped(prompt: str, request: str, people: list) -> str:
     kept, dropped = [], []
     for part in re.split(r"(?<=[,.;:])\s+", prompt):
         words = set(re.findall(r"[a-z0-9'-]+", part.lower()))
-        if (words & WORN) - asked and not any(n in words for n in names):
+        if any(not said(w, asked) for w in words & WORN) and not any(n in words for n in names):
             dropped.append(part)
         else:
             kept.append(part)
@@ -516,9 +520,36 @@ def unasked_clothes_dropped(prompt: str, request: str, people: list) -> str:
     return " ".join(kept).rstrip(",;: ")
 
 
+def said(word: str, asked: set) -> bool:
+    """Whether the request has word, allowing two swapped letters ("jeresy" for jersey)."""
+    return word in asked or any(len(a) == len(word) and any(a[:i] + a[i + 1] + a[i] + a[i + 2:] == word
+                                                            for i in range(len(a) - 1)) for a in asked)
+
+
+def outfit_from_request(people: list, request: str) -> list:
+    """The people, without their set outfit when the request names a whole outfit ("me in a ravens
+    jersey") and no variant: given both, the prompt writer kept her thigh-high socks under the jersey,
+    and once drew "two people on a plush couch"."""
+    asked = set(re.findall(r"[a-z0-9'-]+", request.lower()))
+    if not any(said(w, asked) for w in OUTFIT_WORDS):
+        return people
+    out = []
+    for p in people:
+        if p.get("look") and p.get("outfit") and not p.get("variant"):
+            toollog.log_detail("image_gen", f"{p['name']}: the request's clothes, not the set outfit")
+            p = dict(p, outfit="")
+        out.append(p)
+    return out
+
+
 # Words that dress someone; "top", "cap" and "glasses" are left out as they're scenery as often.
 WORN = (GARMENTS - {"top", "tops", "cap", "tie", "bag", "backpack", "belt", "glasses", "sunglasses", "necklace",
                     "earrings", "bracelet"}) | {"outfit", "outfits", "clothes", "clothing", "attire", "dressed"}
+# Words for a whole outfit; a hat, socks or shoes go with the set one.
+OUTFIT_WORDS = GARMENTS - {"hat", "hats", "cap", "beanie", "scarf", "gloves", "tie", "bowtie", "belt", "bag", "backpack",
+                           "glasses", "sunglasses", "necklace", "earrings", "bracelet", "socks", "shoes", "shoe", "boots",
+                           "boot", "heels", "sneakers", "trainers", "sandals", "slippers", "loafers", "stilettos", "pumps",
+                           "high-top", "high-tops", "tights", "stockings", "apron", "cape", "cloak", "top", "tops"}
 
 
 # What an edit calls someone's clothes without saying what they are ("back in her default outfit").
@@ -677,6 +708,7 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
     prompt = named_first(one_name(prompt, named), named)
     if not source:
         prompt = unasked_clothes_dropped(prompt, request, named)
+        named = outfit_from_request(named, request)
     if named:
         toollog.log_detail("image_gen", f"asked for: {prompt[:300]!r}")
         toollog.log_detail("image_gen", "people: " + ", ".join(
@@ -700,7 +732,7 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
         toollog.log_detail("image_gen", f"edit: {final_prompt[:600]!r}")
     else:
         change = ""
-        final_prompt = refine_prompt(prompt, people, style)
+        final_prompt = refine_prompt(prompt, json.dumps(named), style)
         if style and style["trigger"]:
             final_prompt = f"{style['trigger']}, {final_prompt}"
         final_prompt, unbound = bind_looks(final_prompt, named)
