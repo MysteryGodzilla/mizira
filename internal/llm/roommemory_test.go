@@ -36,6 +36,15 @@ func TestRoomMemoryInSystemPrompt(t *testing.T) {
 		t.Fatalf("room memory missing from the system prompt: %q", sys.Content)
 	}
 
+	// With her look set, her old look memory ("straight fringe") stayed in every request and in her pictures.
+	look, _ := mem.Remember(ctx.GetNetwork(), "botty", "botty has a straight pink fringe", "admin", cfg.Server.Channel)
+	mem.SetKind(ctx.GetNetwork(), look, core.KindLook)
+	mem.SetLook(ctx.GetNetwork(), "botty", core.Look{Appearance: "adult woman, teal eyes"}, "")
+	t.Cleanup(func() { mem.DeleteProfile(ctx.GetNetwork(), "botty") })
+	if got := roomBlock(ctx); strings.Contains(got, "straight pink fringe") || !strings.Contains(got, "night owl") {
+		t.Errorf("room block with a set look: %q", got)
+	}
+
 	core.Prompts().Set(ctx.GetLockKey(), "you are a pirate", "alice")
 	t.Cleanup(func() { core.Prompts().Clear(ctx.GetLockKey()) })
 	out, _ = Complete(ctx, "(nick:alice) botty hi again")
