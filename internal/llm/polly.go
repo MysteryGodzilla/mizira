@@ -249,6 +249,7 @@ type callbackHandler struct {
 	announcedTools   map[string]bool
 	refusals         map[string]int      // refusals per tool this request, to stop a refusal loop
 	lastToolURL      string              // most recent "url: ..." a successful tool call handed back this request
+	drawFailed       string              // why the last picture call this request made nothing, or ""
 	hadContent       bool                // whether the model's final reply ever wrote any actual content
 	leaked           bool                // this turn emitted tool-call syntax; suppress the rest
 	leakedBuf        string              // rolling tail, so a marker split across chunks is still seen
@@ -354,6 +355,13 @@ func (h *callbackHandler) onComplete(response *messages.ChatMessage) {
 		h.overBudget = false // let the url itself through
 		// Its own line, not the end of the reply's last one; the chunker drops the empty line otherwise.
 		h.chunker.Write("\n" + h.lastToolURL + "\n")
+	}
+	// A picture call that made nothing wasn't always said: she posted the last picture's link as the
+	// new one, and people had to ask or check the console.
+	if h.drawFailed != "" && h.lastToolURL == "" {
+		h.chatCtx.GetLogger().Info("picture_failure_shown", "reason", h.drawFailed)
+		h.overBudget = false
+		h.chunker.Write("\n(no picture this time: " + h.drawFailed + ")\n")
 	}
 }
 
@@ -612,12 +620,40 @@ func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result stri
 	vouchLinks(h.chatCtx.GetRequestID(), result)
 
 	// Remember the last url a tool returned, as a fallback if the model's final reply is empty.
-	if firstLine, ok := strings.CutPrefix(result, "url: "); ok {
+	firstLine, made := strings.CutPrefix(result, "url: ")
+	if made {
 		if nl := strings.IndexByte(firstLine, '\n'); nl != -1 {
 			firstLine = firstLine[:nl]
 		}
 		h.lastToolURL = strings.TrimSpace(firstLine)
 	}
+	if tc.Name == irc.ClaimTool[irc.ClaimDraw] && !strings.HasPrefix(result, irc.OnceRepeated) {
+		h.drawFailed = ""
+		if !made {
+			h.drawFailed = failureReason(result)
+		}
+	}
+}
+
+// failureReason is the first sentence of a tool's failure ("Not done: outfit restyles an existing
+// picture. Call again with ..."), without its label: the part a person can read.
+func failureReason(result string) string {
+	reason := strings.TrimSpace(result)
+	// "Error", "Not done", "Limit reached".
+	if label, rest, ok := strings.Cut(reason, ": "); ok && len(label) <= 14 {
+		reason = rest
+	}
+	if end := strings.IndexAny(reason, "\n"); end != -1 {
+		reason = reason[:end]
+	}
+	if end := strings.Index(reason, ". "); end != -1 {
+		reason = reason[:end]
+	}
+	reason = strings.TrimSuffix(strings.TrimSpace(reason), ".")
+	if r := []rune(reason); len(r) > 160 {
+		reason = string(r[:160]) + "..."
+	}
+	return reason
 }
 
 // maxToolRefusals is how often one tool may refuse a request before the model stops being allowed

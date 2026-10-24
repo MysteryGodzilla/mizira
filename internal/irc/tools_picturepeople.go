@@ -35,7 +35,7 @@ func NewPicturePeopleTool(tool tools.Tool) *PicturePeopleTool {
 
 // maxPicturePeople and maxLooks bound what one picture is told about the people in it.
 const (
-	maxPicturePeople = 6
+	maxPicturePeople = 10
 	maxLooks         = 2
 	maxLookChars     = 300
 )
