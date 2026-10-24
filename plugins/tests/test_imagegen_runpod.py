@@ -413,6 +413,28 @@ class RunPodImageTests(unittest.TestCase):
         # With nothing to say, her line made the prompt writer add "the second person ... from their entry".
         self.assertEqual(imagegen.people_lines(imagegen.outfit_from_request([me], "me in a jersey")), "")
 
+    def test_failed_prompt_writer_leaves_its_instructions_out(self):
+        # A timed-out prompt writer hands back its input, and its instructions and every outfit were drawn.
+        people = json.dumps([{"name": "alice", "look": "adult woman", "outfit": "a lilac cardigan"}])
+        with patch.object(imagegen, "PEOPLE_FRAME", "People: {people}"), \
+                patch.object(imagegen.chat, "endpoint", lambda name: {"url": "", "model": "", "key": ""}), \
+                patch.object(imagegen, "_refine", lambda text, *a: text):
+            self.assertEqual(REFINE_PROMPT("alice at the beach", people), "alice at the beach. alice wears a lilac cardigan.")
+        with patch.object(imagegen, "PEOPLE_FRAME", "People: {people}"), \
+                patch.object(imagegen.chat, "endpoint", lambda name: {"url": "", "model": "", "key": ""}), \
+                patch.object(imagegen, "_refine", lambda text, *a: "a detailed alice at the beach"):
+            self.assertEqual(REFINE_PROMPT("alice at the beach", people), "a detailed alice at the beach")
+
+    def test_group_of_three_or_more_is_named_in_order(self):
+        # Five set looks were drawn as four people, two of them fused, until the count and order led the prompt.
+        people = [{"name": n} for n in ("carol", "alice", "bob", "dave")]
+        frame = "The {count} named people, each drawn once, left to right: {names}."
+        with patch.object(imagegen, "GROUP_FRAME", frame):
+            self.assertEqual(imagegen.group_line("alice (look) at the bar with bob and Carol by the horizon", people),
+                             "The three named people, each drawn once, left to right: alice, bob and carol. ")
+            self.assertEqual(imagegen.group_line("alice and bob on a hill", people), "")
+            self.assertEqual(imagegen.group_line("alice, bobby and carolina", people), "")
+
     def test_name_tucked_in_brackets_comes_first(self):
         # "adult woman mid-20s (baremetal) with ..." drew the woman and "another person named baremetal".
         people = [{"name": "baremetal"}]

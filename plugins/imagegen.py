@@ -43,6 +43,7 @@ Configure under env: in config.yml:
   IMAGE_PROMPT_STYLE   how a draw style's description reaches the prompt writer; {style}
   IMAGE_PROMPT_PEOPLE  who is in a new picture, for the prompt writer; {people}
   IMAGE_PROMPT_CHARACTERS  profile looks, added as they are after the prompt writer's prompt; {characters}
+  IMAGE_PROMPT_GROUP   put before the prompt of a picture of three or more named people; {count}, {names}
   IMAGE_REFERENCE_PROMPT  asked of an edit2 style's second picture when the request names nothing to
                        take from it; the answer fills the style's {prompt}
   hosting              see metald_tools/hosting.py (UPLOAD_BACKEND, UPLOAD_HEADERS, ...)
@@ -103,6 +104,8 @@ PROMPT_POLICY = os.environ.get("IMAGE_PROMPT_POLICY", "")
 PEOPLE_FRAME = os.environ.get("IMAGE_PROMPT_PEOPLE", "")
 # Profile looks, added word for word after the prompt writer's prompt; {characters}.
 CHARACTER_FRAME = os.environ.get("IMAGE_PROMPT_CHARACTERS", "")
+# Before the prompt of a picture of three or more named people; {count} (a word), {names} (in order).
+GROUP_FRAME = os.environ.get("IMAGE_PROMPT_GROUP", "")
 # Asked of the finished edit with the encoder check; {change} is the instruction, answer YES or NO.
 EDIT_CHECK = os.environ.get("IMAGE_EDIT_CHECK_PROMPT", "")
 # How a drawing style reaches the prompt writer, so it doesn't describe a photo; {style}.
@@ -203,7 +206,8 @@ def style_change(style: dict, prompt: str) -> str:
 
 
 def requires() -> list:
-    need = ["IMAGE_SAFETY_PROMPT", "IMAGE_PROMPT_REFINER", "IMAGE_PROMPT_PEOPLE", "IMAGE_PROMPT_CHARACTERS"] + hosting.requires()
+    need = ["IMAGE_SAFETY_PROMPT", "IMAGE_PROMPT_REFINER", "IMAGE_PROMPT_PEOPLE", "IMAGE_PROMPT_CHARACTERS",
+            "IMAGE_PROMPT_GROUP"] + hosting.requires()
     if EDITS_CHECKED:
         need.append("IMAGE_EDIT_CHECK_PROMPT")
     if any(s["kind"] == "draw" for s in STYLES.values()):
@@ -573,6 +577,21 @@ def dressed(change: str, people: list) -> str:
     return f"Change {their} outfit to {p['outfit']}. {change}"
 
 
+NUMBER_WORDS = {3: "three", 4: "four", 5: "five", 6: "six"}
+
+
+def group_line(prompt: str, people: list) -> str:
+    """IMAGE_PROMPT_GROUP for the people a prompt of three or more names, in the order it names them, or
+    "": five were drawn as four, two of them fused, until the picture was told how many and in what order."""
+    found = [(m.start(), p["name"]) for p in people
+             if (m := re.search(r"(?i)(?<![\w-])" + re.escape(p["name"]) + r"(?![\w-])", prompt))]
+    if len(found) < 3 or not GROUP_FRAME.strip():
+        return ""
+    names = [name for _, name in sorted(found)]
+    return (GROUP_FRAME.strip().replace("{count}", NUMBER_WORDS.get(len(names), str(len(names))))
+            .replace("{names}", ", ".join(names[:-1]) + " and " + names[-1]) + " ")
+
+
 def characters_text(people: list) -> str:
     """The set looks, added to the final prompt as they are."""
     return "; ".join(f"{p['name']}: {p['look']}" for p in people if p.get("look"))
@@ -581,14 +600,22 @@ def characters_text(people: list) -> str:
 def refine_prompt(user_prompt: str, people: str = "", style: dict = None) -> str:
     """The detailed prompt; people (passed by the bot) says who is in it and how they look, and a
     drawing style what it's drawn in."""
-    lines = people_lines(parse_people(people))
+    request, parsed = user_prompt, parse_people(people)
+    lines = people_lines(parsed)
     if lines and PEOPLE_FRAME.strip():
         user_prompt += "\n\n" + PEOPLE_FRAME.strip().replace("{people}", lines)
     if style and STYLE_FRAME.strip():
         about = style["description"] + (f". {style['guide']}" if style["guide"] else "")
         user_prompt += "\n\n" + STYLE_FRAME.strip().replace("{style}", about)
     ep = chat.endpoint("IMAGE_REFINER")
-    return _refine(user_prompt, ep["url"], ep["model"], ep["key"])
+    refined = _refine(user_prompt, ep["url"], ep["model"], ep["key"])
+    if refined == user_prompt and user_prompt != request:
+        # The prompt writer failed (it hands back its input) and its instructions, every outfit
+        # included, went into the picture: the request is drawn as written, each set outfit said once.
+        toollog.log_detail("image_gen", "prompt writer gave nothing back; drawing the request as written")
+        dressed = [f"{p['name']} wears {p['outfit']}." for p in parsed if p.get("look") and p.get("outfit")]
+        return " ".join([request.rstrip().rstrip(".") + "."] + dressed) if dressed else request
+    return refined
 
 def review_prompt(prompt: str, edit: bool = False) -> str:
     """Why the request may not be drawn, as the tool's reply, or "" when it may."""
@@ -732,12 +759,13 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
         toollog.log_detail("image_gen", f"edit: {final_prompt[:600]!r}")
     else:
         change = ""
-        final_prompt = refine_prompt(prompt, json.dumps(named), style)
-        if style and style["trigger"]:
-            final_prompt = f"{style['trigger']}, {final_prompt}"
-        final_prompt, unbound = bind_looks(final_prompt, named)
+        final_prompt, unbound = bind_looks(refine_prompt(prompt, json.dumps(named), style), named)
         if characters_text(unbound) and CHARACTER_FRAME.strip():
             final_prompt += "\n\n" + CHARACTER_FRAME.strip().replace("{characters}", characters_text(unbound))
+        # After binding, so each look still goes on the person in the scene, not in this list.
+        final_prompt = group_line(final_prompt, named) + final_prompt
+        if style and style["trigger"]:
+            final_prompt = f"{style['trigger']}, {final_prompt}"
         toollog.log_detail("image_gen", f"prompt: {final_prompt[:600]!r}")
     try:
         workflow = lambda: build_workflow(final_prompt, width, height, negative, SOURCE_NAME if source else "",
