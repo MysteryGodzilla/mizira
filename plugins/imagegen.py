@@ -534,8 +534,9 @@ def outfit_from_request(people: list, request: str) -> list:
     """The people, without their set outfit when the request names a whole outfit ("me in a ravens
     jersey") and no variant: given both, the prompt writer kept her thigh-high socks under the jersey,
     and once drew "two people on a plush couch"."""
-    asked = set(re.findall(r"[a-z0-9'-]+", request.lower()))
-    if not any(said(w, asked) for w in OUTFIT_WORDS):
+    words = re.findall(r"[a-z0-9'-]+", request.lower())
+    alts = {p["variant"] for p in people if p.get("variant")}
+    if not (any(said(w, set(words)) for w in OUTFIT_WORDS) or says_outfit(words, alts)):
         return people
     out = []
     for p in people:
@@ -544,6 +545,55 @@ def outfit_from_request(people: list, request: str) -> list:
             p = dict(p, outfit="")
         out.append(p)
     return out
+
+
+def outfit_from_prompt(prompt: str, people: list) -> list:
+    """The people, without the set outfit of anyone the prompt dresses in other clothes: asked a message
+    earlier for "alice in a fantasy game style dress", the prompt writer drew her in it and a second
+    alice in her set outfit."""
+    out = []
+    for p in people:
+        if p.get("look") and p.get("outfit") and not p.get("variant"):
+            words = worn_by(prompt, p["name"], [q["name"] for q in people])
+            new = set(words) & OUTFIT_WORDS - set(re.findall(r"[a-z0-9'-]+", p["outfit"].lower()))
+            if new or says_outfit(words):
+                toollog.log_detail("image_gen", f"{p['name']}: the prompt's clothes, not the set outfit")
+                p = dict(p, outfit="")
+        out.append(p)
+    return out
+
+
+def worn_by(prompt: str, name: str, names: list) -> list:
+    """The words each clause says after name until someone else's name, through an "and" to theirs
+    ("alice and bob in rocker outfits"); "bob's outfit" is about what's worn, not bob."""
+    words = []
+    for part in re.split(r"(?<=[,.;:])\s+", prompt):
+        marks = sorted((m.start(), m.end(), n, bool(re.match(r"['’]s\b", part[m.end():]))) for n in names
+                       for m in re.finditer(r"(?i)(?<![\w-])" + re.escape(n) + r"(?![\w-])", part))
+        for i, (_, end, n, _) in enumerate(marks):
+            if n != name:
+                continue
+            stops = [(s, e) for s, e, other, owner in marks[i + 1:] if other != name and not owner]
+            stops.append((len(part), len(part)))
+            k, said_of = 0, part[end:stops[0][0]]
+            while JOINED.fullmatch(said_of) and k + 1 < len(stops):
+                said_of, k = part[stops[k][1]:stops[k + 1][0]], k + 1
+            words += re.findall(r"[a-z0-9'-]+", said_of.lower())
+    return words
+
+
+JOINED = re.compile(r"(?i)[\s,&]*(?:(?:and|both)\b[\s,&]*)*")
+
+
+def says_outfit(words: list, own: set = frozenset()) -> bool:
+    """Whether words name an outfit with "outfit" ("march 7th's outfit", "a maid outfit"), not someone's
+    own ("her usual outfit", or "office outfit" for their office look)."""
+    return any(w in ("outfit", "outfits") and (i == 0 or words[i - 1] not in OWN_OUTFIT | own)
+               for i, w in enumerate(words))
+
+
+OWN_OUTFIT = {"her", "his", "their", "my", "your", "our", "own", "usual", "default", "normal", "regular",
+              "everyday", "typical", "standard", "signature", "set", "saved"}
 
 
 # Words that dress someone; "top", "cap" and "glasses" are left out as they're scenery as often.
@@ -735,7 +785,7 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
     prompt = named_first(one_name(prompt, named), named)
     if not source:
         prompt = unasked_clothes_dropped(prompt, request, named)
-        named = outfit_from_request(named, request)
+        named = outfit_from_prompt(prompt, outfit_from_request(named, request))
     if named:
         toollog.log_detail("image_gen", f"asked for: {prompt[:300]!r}")
         toollog.log_detail("image_gen", "people: " + ", ".join(
