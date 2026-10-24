@@ -462,3 +462,37 @@ func TestOnToolStart_UnknownToolIsNotAnnounced(t *testing.T) {
 		t.Fatalf("unknown tool announced: %v", ctx.Actions)
 	}
 }
+
+// A picture call that made nothing wasn't always said: she posted the last picture's link as the new one.
+func TestOnComplete_PictureFailureIsShown(t *testing.T) {
+	run := func(results ...string) []string {
+		ctx := mocktest.NewMockContext()
+		output := make(chan string, 10)
+		chunker := irc.NewChunker(output, 350)
+		h := newCallbackHandler(ctx, chunker, ctx.GetConfig())
+		for _, r := range results {
+			h.onToolEnd(messages.ChatMessageToolCall{Name: irc.ClaimTool[irc.ClaimDraw]}, r, time.Millisecond, nil)
+		}
+		h.onContent("here it is: https://files.example.com/old.png")
+		h.onComplete(&messages.ChatMessage{})
+		chunker.Flush()
+		close(output)
+		var got []string
+		for line := range output {
+			got = append(got, line)
+		}
+		return got
+	}
+	notDone := "Not done: outfit restyles an existing picture. Call again with that picture's image_url."
+	if got := run(notDone, irc.OnceRepeated+" this tool runs once per request"); len(got) != 2 ||
+		got[1] != "(no picture this time: outfit restyles an existing picture)" {
+		t.Errorf("failure: %q", got)
+	}
+	if got := run("Limit reached: alice has had 5 in the last hour (the limit is 5 an hour); the next is possible in 44 minutes. Say so; don't retry now."); len(got) != 2 ||
+		got[1] != "(no picture this time: alice has had 5 in the last hour (the limit is 5 an hour); the next is possible in 44 minutes)" {
+		t.Errorf("limit: %q", got)
+	}
+	if got := run(notDone, "url: https://files.example.com/new.png"); len(got) != 2 || !strings.Contains(got[1], "new.png") {
+		t.Errorf("a retry that made one: %q", got)
+	}
+}

@@ -577,7 +577,7 @@ def dressed(change: str, people: list) -> str:
     return f"Change {their} outfit to {p['outfit']}. {change}"
 
 
-NUMBER_WORDS = {3: "three", 4: "four", 5: "five", 6: "six"}
+NUMBER_WORDS = {3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
 
 
 def group_line(prompt: str, people: list) -> str:
