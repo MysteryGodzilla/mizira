@@ -492,6 +492,32 @@ def one_name(prompt: str, people: list) -> str:
     return prompt
 
 
+def kind_named(prompt: str, people: list) -> str:
+    """The prompt with "capybara man" as the name of the one whose set look is a humanoid capybara, away
+    from their name: in "bob and dave on a bench, ... while capybara man sits beside him" a second
+    capybara was drawn. Right after the name ("dave, a capybara man") it only says what he is."""
+    for p in people:
+        first = (p.get("look") or "").split(",")[0].lower()
+        if not re.search(r"\b(?:humanoid|anthropomorphic|anthro)\b", first):
+            continue
+        kinds = [w for w in re.findall(r"[a-z]+", first) if w not in NOT_A_KIND]
+        if not kinds:
+            continue
+        kind = "(?:" + "|".join(map(re.escape, kinds)) + ")"
+        name = re.escape(p["name"])
+        said = re.compile(rf"(?i)\b(?:(?:a|an|the)\s+)?(?:(?:humanoid|anthropomorphic|anthro)\s+{kind}(?:\s+{ONE})?"
+                          rf"|{kind}\s+{ONE})\b")
+        prompt = said.sub(lambda m: m.group(0) if re.search(rf"(?i)(?<![\w-]){name}\W{{0,3}}(?:\w+\W+)?$",
+                                                             m.string[:m.start()]) else p["name"], prompt)
+    return prompt
+
+
+# Words in a look's first clause that aren't what someone is; "man" and the like are ONE.
+NOT_A_KIND = {"adult", "young", "old", "humanoid", "anthropomorphic", "anthro", "man", "woman", "boy", "girl",
+              "person", "guy", "lady", "male", "female", "in", "his", "her", "their", "early", "mid", "late", "s"}
+ONE = "(?:man|woman|boy|girl|guy|lady|person|character|dude)"
+
+
 def named_first(prompt: str, people: list) -> str:
     """The prompt with "adult woman mid-20s (alice)" as "alice (adult woman mid-20s)": with the name
     tucked in brackets after a description, the prompt writer drew the woman and "another person named
@@ -564,22 +590,63 @@ def outfit_from_prompt(prompt: str, people: list) -> list:
 
 
 def worn_by(prompt: str, name: str, names: list) -> list:
-    """The words each clause says after name until someone else's name, through an "and" to theirs
-    ("alice and bob in rocker outfits"); "bob's outfit" is about what's worn, not bob."""
-    words = []
-    for part in re.split(r"(?<=[,.;:])\s+", prompt):
-        marks = sorted((m.start(), m.end(), n, bool(re.match(r"['’]s\b", part[m.end():]))) for n in names
-                       for m in re.finditer(r"(?i)(?<![\w-])" + re.escape(n) + r"(?![\w-])", part))
-        for i, (_, end, n, _) in enumerate(marks):
-            if n != name:
-                continue
-            stops = [(s, e) for s, e, other, owner in marks[i + 1:] if other != name and not owner]
-            stops.append((len(part), len(part)))
-            k, said_of = 0, part[end:stops[0][0]]
-            while JOINED.fullmatch(said_of) and k + 1 < len(stops):
-                said_of, k = part[stops[k][1]:stops[k + 1][0]], k + 1
-            words += re.findall(r"[a-z0-9'-]+", said_of.lower())
-    return words
+    """The words the prompt's clauses say of name (said_of)."""
+    return [w for part in CLAUSES.split(prompt) for s, e in said_of(part, name, names)
+            for w in re.findall(r"[a-z0-9'-]+", part[s:e].lower())]
+
+
+def said_of(part: str, name: str, names: list) -> list:
+    """The (start, end) spans of a clause after name until someone else's name, through an "and" to
+    theirs ("alice and bob in rocker outfits"); "bob's outfit" is about what's worn, not bob."""
+    marks = sorted((m.start(), m.end(), n, bool(re.match(r"['’]s\b", part[m.end():]))) for n in names
+                   for m in re.finditer(r"(?i)(?<![\w-])" + re.escape(n) + r"(?![\w-])", part))
+    spans = []
+    for i, (_, end, n, _) in enumerate(marks):
+        if n != name:
+            continue
+        stops = [(s, e) for s, e, other, owner in marks[i + 1:] if other != name and not owner]
+        stops.append((len(part), len(part)))
+        k, span = 0, (end, stops[0][0])
+        while JOINED.fullmatch(part[span[0]:span[1]]) and k + 1 < len(stops):
+            span, k = (stops[k][1], stops[k + 1][0]), k + 1
+        spans.append(span)
+    return spans
+
+
+CLAUSES = re.compile(r"(?<=[,.;:])\s+")
+
+
+def alt_clothes_dropped(prompt: str, request: str, people: list) -> str:
+    """The prompt without clothes it puts on someone in an alt look that the alt doesn't have and the
+    asker didn't name: with alice's villainess alt, the chat model also wrote "alice smirking in an
+    oversized white tee and grey shorts", and a second alice was drawn in them."""
+    asked = set(re.findall(r"[a-z0-9'-]+", request.lower()))
+    names = [q["name"] for q in people]
+    for p in people:
+        if not (p.get("look") and p.get("outfit") and p.get("variant")):
+            continue
+        own = set(re.findall(r"[a-z0-9'-]+", p["outfit"].lower()))
+
+        def strip(m):
+            worn = set(re.findall(r"[a-z0-9'-]+", m.group(0).lower())) & WORN
+            if all(w in own or said(w, asked) for w in worn):
+                return m.group(0)
+            toollog.log_detail("image_gen", f"{p['name']}: clothes not in their {p['variant']} look left out: "
+                                            f"{m.group(0).strip()!r}")
+            return ""
+        parts = []
+        for part in re.split(r"((?<=[,.;:])\s+)", prompt):
+            spans = []
+            for s, e in sorted(said_of(part, p["name"], names)):
+                if spans and s <= spans[-1][1]:
+                    spans[-1] = (spans[-1][0], max(e, spans[-1][1]))
+                else:
+                    spans.append((s, e))
+            for s, e in reversed(spans):
+                part = part[:s] + DRESSED_IN.sub(strip, part[s:e]) + part[e:]
+            parts.append(part)
+        prompt = "".join(parts)
+    return prompt
 
 
 JOINED = re.compile(r"(?i)[\s,&]*(?:(?:and|both)\b[\s,&]*)*")
@@ -604,6 +671,11 @@ OUTFIT_WORDS = GARMENTS - {"hat", "hats", "cap", "beanie", "scarf", "gloves", "t
                            "glasses", "sunglasses", "necklace", "earrings", "bracelet", "socks", "shoes", "shoe", "boots",
                            "boot", "heels", "sneakers", "trainers", "sandals", "slippers", "loafers", "stilettos", "pumps",
                            "high-top", "high-tops", "tights", "stockings", "apron", "cape", "cloak", "top", "tops"}
+# "in an oversized white tee and grey shorts": what puts clothes on someone, up to its last garment.
+_WORN = "|".join(sorted(map(re.escape, WORN), key=len, reverse=True))
+DRESSED_IN = re.compile(rf"(?i)\s*\b(?:in|wearing|dressed in|clad in)\s+(?:(?:a|an|her|his|their|the|some)\s+)?"
+                        rf"(?:[\w'-]+\s+){{0,3}}?(?:{_WORN})\b(?:\s*(?:,|and|&)\s*(?:(?:a|an|her|his|their)\s+)?"
+                        rf"(?:[\w'-]+\s+){{0,3}}?(?:{_WORN})\b)*")
 
 
 # What an edit calls someone's clothes without saying what they are ("back in her default outfit").
@@ -782,9 +854,9 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
         if reference is None:
             return why_not
     named = parse_people(people)
-    prompt = named_first(one_name(prompt, named), named)
+    prompt = named_first(one_name(kind_named(prompt, named), named), named)
     if not source:
-        prompt = unasked_clothes_dropped(prompt, request, named)
+        prompt = alt_clothes_dropped(unasked_clothes_dropped(prompt, request, named), request, named)
         named = outfit_from_prompt(prompt, outfit_from_request(named, request))
     if named:
         toollog.log_detail("image_gen", f"asked for: {prompt[:300]!r}")

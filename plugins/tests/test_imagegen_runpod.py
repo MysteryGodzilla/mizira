@@ -421,6 +421,38 @@ class RunPodImageTests(unittest.TestCase):
         ]:
             self.assertEqual([p["outfit"] for p in imagegen.outfit_from_request(people, request)], outfits, request)
 
+    def test_a_kind_away_from_the_name_is_the_name(self):
+        # "bob and dave on a bench ... while capybara man sits beside him" drew a second capybara.
+        dave = {"name": "dave", "look": "adult humanoid capybara man, big heavyset build", "outfit": "a black sweater"}
+        bob = {"name": "bob", "look": "adult humanoid rat man, slim", "outfit": "a black hoodie", "variant": "street"}
+        alice = {"name": "alice", "look": "adult woman, green eyes", "outfit": "a white t-shirt"}
+        for prompt, want in [
+            ("bob and dave on a bench, humanoid rat man leaning back while capybara man sits beside him",
+             "bob and dave on a bench, bob leaning back while dave sits beside him"),
+            ("dave, a capybara man, waving at bob the humanoid rat", "dave, a capybara man, waving at bob the humanoid rat"),
+            ("bob feeding a baby capybara", "bob feeding a baby capybara"),
+            ("a woman and a rat man chef in an alley", "a woman and bob chef in an alley"),
+        ]:
+            self.assertEqual(imagegen.kind_named(prompt, [dave, bob, alice]), want, prompt)
+
+    def test_clothes_off_an_alt_are_left_out(self):
+        # With her villainess alt, the chat model also put her in her usual tee and shorts; a second
+        # alice was drawn in them.
+        alice = {"name": "alice", "look": "adult woman", "outfit": "a flowing deep purple gown, sheer sleeves",
+                 "variant": "villainess"}
+        bob = {"name": "bob", "look": "adult rat man", "outfit": "a white chef's jacket and apron", "variant": "chef"}
+        for prompt, request, want in [
+            ("bob next to alice as villainess, alice smirking in an oversized white tee and grey shorts with a bob",
+             "draw bob next to villianess alice",
+             "bob next to alice as villainess, alice smirking with a bob"),
+            ("bob crouched in his chef's jacket and apron, alice in her purple gown",
+             "bob and alice", "bob crouched in his chef's jacket and apron, alice in her purple gown"),
+            ("alice wearing a red dress at a party", "alice in her villainess look but in a red dress",
+             "alice wearing a red dress at a party"),
+            ("carol in jeans waving, alice in the kitchen", "draw carol and alice", "carol in jeans waving, alice in the kitchen"),
+        ]:
+            self.assertEqual(imagegen.alt_clothes_dropped(prompt, request, [alice, bob]), want, prompt)
+
     def test_prompt_outfit_replaces_the_set_one(self):
         # Asked a message earlier for a game-style dress, the chat model wrote it into the prompt, the
         # request ("draw the picture") named no clothes, and her set outfit was drawn on a second woman.

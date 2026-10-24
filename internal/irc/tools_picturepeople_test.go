@@ -34,11 +34,11 @@ func TestPicturePeople(t *testing.T) {
 		store.Forget(net, lore)
 	})
 
-	got := PicturePeople(net, "bobby and carol at the beach, dave waving", 45, time.Now())
+	got := PicturePeople(net, "bobby and carol at the beach, dave waving", "", 45, time.Now())
 	if got != bobFemale+`,"notes":["bob's avatar has long silver hair and a red ribbon"]}]` {
 		t.Errorf("people = %q", got)
 	}
-	if got := PicturePeople(net, "a cat on a windowsill", 45, time.Now()); got != "" {
+	if got := PicturePeople(net, "a cat on a windowsill", "", 45, time.Now()); got != "" {
 		t.Errorf("nobody named = %q", got)
 	}
 
@@ -112,12 +112,55 @@ func TestPicturePeopleProfileLook(t *testing.T) {
 	t.Cleanup(func() { store.DeleteProfile(net, "carol"); store.Forget(net, mem) })
 
 	var got []PicturePerson
-	if err := json.Unmarshal([]byte(PicturePeople(net, "carol in her business look at a desk", 45, time.Now())), &got); err != nil || len(got) != 1 {
+	if err := json.Unmarshal([]byte(PicturePeople(net, "carol in her business look at a desk", "", 45, time.Now())), &got); err != nil || len(got) != 1 {
 		t.Fatalf("people = %v, %v", got, err)
 	}
 	want := PicturePerson{Name: "carol", DrawnAs: "female", Look: "adult woman, green eyes, short lavender bob", Outfit: "charcoal blazer", Variant: "business"}
 	if got[0].Name != want.Name || got[0].Look != want.Look || got[0].Outfit != want.Outfit || got[0].Variant != want.Variant || len(got[0].Notes) != 0 {
 		t.Errorf("carol = %+v, want %+v (no look memories)", got[0], want)
+	}
+}
+
+// "me in an office outfit and her in the villainess outfit" drew both in office wear: each person's
+// variant was whichever of theirs came first in their list, wherever the text named it.
+func TestPicturePeopleVariantPerPerson(t *testing.T) {
+	const net = "picture-variants"
+	store, _ := core.Memories()
+	store.SetProfile(net, core.Profile{Subject: "carol", Pronouns: "she/her"})
+	store.SetProfile(net, core.Profile{Subject: "dave", Pronouns: "he/him"})
+	store.SetLook(net, "carol", core.Look{Appearance: "adult woman", Outfit: "white t-shirt", Variants: []core.LookVariant{
+		{Name: "office", Outfit: "grey blazer"}, {Name: "villainess", Outfit: "purple gown"}}}, "")
+	store.SetLook(net, "dave", core.Look{Appearance: "adult man", Outfit: "black apron", Variants: []core.LookVariant{
+		{Name: "office", Outfit: "navy suit"}, {Name: "heist", Outfit: "black turtleneck"}, {Name: "chef", Outfit: "white toque"}}}, "")
+	t.Cleanup(func() { store.DeleteProfile(net, "carol"); store.DeleteProfile(net, "dave") })
+
+	outfits := func(prompt, request string) map[string]string {
+		var got []PicturePerson
+		json.Unmarshal([]byte(PicturePeople(net, prompt, request, 45, time.Now())), &got)
+		out := map[string]string{}
+		for _, p := range got {
+			out[p.Name] = p.Outfit
+		}
+		return out
+	}
+	for _, c := range []struct {
+		prompt, request string
+		want            map[string]string
+	}{
+		{"", "dave in his office look and carol in her villainess dress", map[string]string{"carol": "purple gown", "dave": "navy suit"}},
+		{"", "villianess carol at night", map[string]string{"carol": "purple gown"}},
+		{"dave in office wear bowing to villainess carol", "same again but I am bowing in my office look",
+			map[string]string{"carol": "purple gown", "dave": "navy suit"}},
+		{"dave the chef sneaking through a kitchen", "dave in his heist look", map[string]string{"dave": "black turtleneck"}},
+		{"dave the chef at a stove", "draw dave", map[string]string{"dave": "white toque"}},
+		{"carol and dave in office clothes", "carol and dave at work", map[string]string{"carol": "grey blazer", "dave": "navy suit"}},
+	} {
+		got := outfits(c.prompt, c.request)
+		for name, want := range c.want {
+			if got[name] != want {
+				t.Errorf("%q / %q: %s wears %q, want %q", c.prompt, c.request, name, got[name], want)
+			}
+		}
 	}
 }
 

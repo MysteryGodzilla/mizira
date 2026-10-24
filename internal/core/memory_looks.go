@@ -45,28 +45,80 @@ var (
 // Set reports whether there is a look to draw from.
 func (l Look) Set() bool { return l.Appearance != "" }
 
-// For is the hair and outfit for a picture whose text names one of the variants (a whole word), or
-// the defaults; variant is the one used, or "".
-func (l Look) For(text string) (hair, outfit, variant string) {
+// For is the hair and outfit for a picture whose text names one of the variants (a whole word, or
+// with two letters swapped: "buisness"), or the defaults; variant is the one used, or "". Given the
+// person's names, text that doesn't mention them names none of theirs, and of several the one nearest
+// a mention wins: "me in my office look and carol in her villainess dress" is carol's villainess.
+func (l Look) For(text string, names ...string) (hair, outfit, variant string) {
 	hair, outfit = l.Hair, l.Outfit
-	words := map[string]bool{}
-	for _, w := range strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
+	words := strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
 		return !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-')
-	}) {
-		words[w] = true
-	}
-	for _, v := range l.Variants {
-		if words[v.Name] {
-			if v.Hair != "" {
-				hair = v.Hair
+	})
+	var at []int
+	for i, w := range words {
+		for _, n := range names {
+			if w == strings.ToLower(n) {
+				at = append(at, i)
 			}
-			if v.Outfit != "" {
-				outfit = v.Outfit
-			}
-			return hair, outfit, v.Name
 		}
 	}
-	return hair, outfit, ""
+	if len(names) > 0 && len(at) == 0 {
+		return hair, outfit, ""
+	}
+	best, bestScore := -1, 0
+	for vi, v := range l.Variants {
+		for i, w := range words {
+			if !sameWord(w, v.Name) {
+				continue
+			}
+			if score := nearness(i, at); best < 0 || score < bestScore {
+				best, bestScore = vi, score
+			}
+		}
+	}
+	if best < 0 {
+		return hair, outfit, ""
+	}
+	v := l.Variants[best]
+	if v.Hair != "" {
+		hair = v.Hair
+	}
+	if v.Outfit != "" {
+		outfit = v.Outfit
+	}
+	return hair, outfit, v.Name
+}
+
+// sameWord reports whether w is name, allowing two swapped letters in a name of five or more.
+func sameWord(w, name string) bool {
+	if w == name {
+		return true
+	}
+	if len(name) < 5 || len(w) != len(name) {
+		return false
+	}
+	for i := 0; i+1 < len(w); i++ {
+		if w[i] != name[i] {
+			return w[i] == name[i+1] && w[i+1] == name[i] && w[i+2:] == name[i+2:]
+		}
+	}
+	return false
+}
+
+// nearness ranks the word at i by how far it is from the nearest mention in at, one just after a
+// mention ("carol in her villainess dress") ahead of one as far before; 0 without mentions.
+func nearness(i int, at []int) int {
+	best := 0
+	for n, a := range at {
+		d := 2 * (a - i)
+		if i > a {
+			d = 2*(i-a) - 1
+		}
+		if n == 0 || d < best {
+			best = d
+		}
+	}
+	return best
 }
 
 // clean trims a look and says why it can't be saved.

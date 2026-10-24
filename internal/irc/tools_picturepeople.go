@@ -72,8 +72,7 @@ func (p *PicturePeopleTool) Execute(ctx context.Context, args map[string]any) (s
 			}
 		}
 		request := speakerNamed(selfNamed(asked, self), chatCtx.GetSource())
-		named := prompt + "\n" + request
-		if who := PicturePeople(chatCtx.GetNetwork(), named, chatCtx.GetConfig().Bot.LoreFadeDays, time.Now()); who != "" {
+		if who := PicturePeople(chatCtx.GetNetwork(), prompt, request, chatCtx.GetConfig().Bot.LoreFadeDays, time.Now()); who != "" {
 			args["people"] = who
 		}
 	}
@@ -162,11 +161,13 @@ type PicturePerson struct {
 	Notes   []string `json:"notes,omitempty"`
 }
 
-// PicturePeople describes the people text names that memory knows how to draw, as a JSON list; ""
-// when it names nobody known. A profile look wins over look memories, and a variant named in text
-// picks its hair and outfit.
-func PicturePeople(network, text string, fadeDays int, now time.Time) string {
+// PicturePeople describes the people the prompt or request names that memory knows how to draw, as a
+// JSON list; "" when they name nobody known. A profile look wins over look memories, and a variant
+// named with them picks its hair and outfit, the request's ahead of the prompt's: the prompt the model
+// wrote called bob a chef when the asker said heist.
+func PicturePeople(network, prompt, request string, fadeDays int, now time.Time) string {
 	store, err := core.Memories()
+	text := prompt + "\n" + request
 	if err != nil || strings.TrimSpace(text) == "" {
 		return ""
 	}
@@ -189,7 +190,11 @@ func PicturePeople(network, text string, fadeDays int, now time.Time) string {
 			p.Aliases = pr.Aliases
 		}
 		if ok && pr.Look.Set() {
-			hair, outfit, variant := pr.Look.For(text)
+			names := append([]string{name}, pr.Aliases...)
+			hair, outfit, variant := pr.Look.For(request, names...)
+			if variant == "" {
+				hair, outfit, variant = pr.Look.For(prompt, names...)
+			}
 			p.Look = strings.TrimSuffix(pr.Look.Appearance, ".")
 			if hair != "" {
 				p.Look += ", " + hair

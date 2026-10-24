@@ -52,6 +52,17 @@ func TestLooks(t *testing.T) {
 			t.Errorf("For(%q) = %q, %q, %q", text, h, o, v)
 		}
 	}
+	for text, want := range map[string]string{
+		"bob in her buisness look": "business",
+		"bob, buns":                "",
+		"carol in her business look next to bob with a bun": "bun",
+		"bun hair carol, bob in her business look":          "business",
+		"carol in her business look":                        "",
+	} {
+		if _, _, v := bob.Look.For(text, "bob"); v != want {
+			t.Errorf("For(%q, bob) = %q, want %q", text, v, want)
+		}
+	}
 
 	for name, bad := range map[string]Look{
 		"no appearance":   {Hair: "red"},
