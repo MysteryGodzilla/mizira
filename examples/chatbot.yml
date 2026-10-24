@@ -876,6 +876,8 @@ env:
   IMAGE_PROMPT_PEOPLE: "People in the picture. Someone given as \"name - outfit: ...\" is added to the picture as they are: keep their name in your prompt as the one person they are, leave out any description of their face, body or hair (even one the request gives), and dress them in that outfit unless the request asks for other clothes, describing only the parts of it the framing shows (no shoes in a close-up). Draw anyone else as described, including whether they are male or female: {people}"
   # profile looks, added word for word after the prompt writer's prompt; {characters}
   IMAGE_PROMPT_CHARACTERS: "Characters, drawn exactly like this: {characters}"
+  # put before the prompt of a picture of three or more named people; {count} is a word, {names} in the order the prompt names them
+  IMAGE_PROMPT_GROUP: "The {count} named people, each drawn once as a separate person, side by side from left to right: {names}."
   # a draw style's description, added to the prompt writer's input; {style}
   IMAGE_PROMPT_STYLE: "Art style (keep to it; don't describe a photo or a different medium): {style}"
   # asked of an edit2 style's second picture when the request doesn't say what to take from it ("put her in
