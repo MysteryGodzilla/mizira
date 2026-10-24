@@ -798,8 +798,9 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
         # The LoRA's own wording with the request in it (a camera angle, an outfit), as it was trained;
         # the encoder can't judge those, so no edit check.
         change, final_prompt = "", style_change(style, prompt)
-        if reference and says_nothing(prompt) and REFERENCE_PROMPT:
-            # "Put her in that outfit" left the swap nothing to go on; the encoder describes it instead.
+        if reference and REFERENCE_PROMPT:
+            # The encoder describes the second picture's clothes: the chat model never sees it, and named
+            # them from its file name or the asker's own outfit.
             describe, final_prompt = True, style["trigger"]
     elif source:
         # An edit style's LoRA was trained on its own instruction, so that is the whole edit. An edit is
