@@ -250,6 +250,8 @@ func roomBlock(ctx irc.ChatContextInterface) string {
 		ctx.GetLogger().Warn("room_memory_failed", "error", err.Error())
 		return ""
 	}
+	// Her own look memories too, once her look is set: they go with every request.
+	mems = irc.WithoutSetLooks(ctx.GetNetwork(), mems)
 	if len(mems) == 0 {
 		return ""
 	}
