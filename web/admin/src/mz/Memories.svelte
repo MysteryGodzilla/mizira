@@ -65,7 +65,8 @@
   function openOne(e: SubmitEvent) { e.preventDefault(); const s = openNick.trim().toLowerCase(); if (s) { open(s); openNick = ""; } }
   const names = (s: string) => s.split(",").map((a) => a.trim()).filter(Boolean);
   let profile = $derived(profiles.find((p) => p.subject === selected) ?? null);
-  let isRoom = $derived(subjects.some((s) => s.subject === selected && s.room));
+  // The channel has no profile or look; the bot, the other room subject, has both.
+  let isChannel = $derived(selected.startsWith("#") && subjects.some((s) => s.subject === selected && s.room));
   const sharedWith = (m: Memory) => [m.subject, ...(m.also ?? [])].filter((s) => s !== selected).join(", ");
   const sourceText = (m: Memory) =>
     m.source === "told" ? `told by ${m.author.split(" ")[0]}` : m.source === "guessed" ? "guessed from chat" : m.source;
@@ -173,7 +174,7 @@
     {#if sortingOpen && net !== null}
       <Sort {mz} network={net} onclose={(applied) => { sortingOpen = false; if (applied) void reload(); }} />
     {/if}
-    {#if selected && !isRoom && net !== null}
+    {#if selected && !isChannel && net !== null}
       <Profile {mz} network={net} subject={selected} {profile} onchange={() => void reload()} />
       <LookCard {mz} network={net} subject={selected} look={profile?.look ?? null} onchange={() => void reload()} />
     {/if}
