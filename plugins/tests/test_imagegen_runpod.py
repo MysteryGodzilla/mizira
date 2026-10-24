@@ -259,8 +259,7 @@ class RunPodImageTests(unittest.TestCase):
         reply, sent, _ = self.guided(*args, admin=True)
         self.assertTrue(reply.startswith("url: "), reply)
         wf = sent["workflow"]
-        self.assertEqual(wf["4"]["inputs"]["prompt"],
-                         "Dress the person in image 1 in the red leather jacket shown in image 2. Keep their face.")
+        self.assertEqual(wf["4"]["inputs"]["prompt"], ["17", 0])
         self.assertEqual(wf["14"], {"class_type": "LoadImage", "inputs": {"image": imagegen.REFERENCE_NAME}})
         self.assertEqual(wf["4"]["inputs"]["images.image_2"], ["14", 0])
         self.assertEqual(sent["inputs"], {imagegen.SOURCE_NAME: b"https://files.example.com/a.png",
@@ -281,8 +280,9 @@ class RunPodImageTests(unittest.TestCase):
         self.assertEqual(wf["17"]["inputs"]["string"],
                          "Dress the person in image 1 in the {prompt} shown in image 2. Keep their face.")
         self.assertEqual(wf["4"]["inputs"]["prompt"], ["17", 0])
-        reply, sent, _ = self.guided("outfit", "red leather jacket", *args, admin=True)
-        self.assertNotIn("15", sent["workflow"], "named clothes aren't described again")
+        # Clothes the chat model names are a guess: it never sees the second picture.
+        reply, sent, _ = self.guided("outfit", "a lavender knit cardigan and pleated mini skirt", *args, admin=True)
+        self.assertEqual(sent["workflow"]["15"]["inputs"]["image"], ["14", 0])
         self.assertTrue(imagegen.says_nothing("put her in that outfit from image 2"))
         # As the model wrote it live: a whole sentence, still no clothes named.
         self.assertTrue(imagegen.says_nothing("The girl with short black hair from the first image is now wearing "
