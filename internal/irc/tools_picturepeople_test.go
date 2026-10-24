@@ -183,3 +183,32 @@ func TestPictureStyleNeedsAsking(t *testing.T) {
 		}
 	}
 }
+
+// "outfitswap the last image to the outfit in this one" went out with style vn and was refused.
+func TestPictureStyleAskedForWins(t *testing.T) {
+	sha := strings.Repeat("a", 64)
+	t.Setenv("IMAGE_STYLES", "pc98 | draw | 0.8 | pc98dither | PC-98 art | https://civitai.com/p | "+sha+"\n"+
+		"vn | draw | 1 | vnstyle | visual novel | https://civitai.com/v | "+sha+"\n"+
+		"outfitswap | edit2 | 1 | Dress them in the {prompt} in image 2 | outfit swap | https://huggingface.co/o | "+sha+"\n"+
+		"angle | edit | 1 | <qma> {prompt} | camera angle | https://huggingface.co/a | "+sha)
+	rec := &argsRecorder{}
+	for _, c := range []struct {
+		request, style, want string
+	}{
+		{"outfitswap the last image to the outfit in this one https://example.com/vn.png", "vn", "outfitswap"},
+		{"draw bob in vn style", "pc98", "vn"},
+		{"draw bob in vn style or pc98", "pc98", "pc98"},
+		{"draw bob from a low angle", "", ""},
+		{"draw bob https://example.com/pc98.png", "pc98", ""},
+	} {
+		asked := mocktest.NewMockContext().WithArgs(strings.Fields(c.request)...)
+		args := map[string]any{"prompt": "bob reading"}
+		if c.style != "" {
+			args["style"] = c.style
+		}
+		NewPicturePeopleTool(rec).Execute(InjectContext(context.Background(), asked), args)
+		if got, _ := rec.got["style"].(string); got != c.want {
+			t.Errorf("%q with style %q: style = %q, want %q", c.request, c.style, got, c.want)
+		}
+	}
+}
