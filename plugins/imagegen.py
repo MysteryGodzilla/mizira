@@ -541,10 +541,11 @@ def named_first(prompt: str, people: list) -> str:
     return prompt
 
 
-def unasked_clothes_dropped(prompt: str, request: str, people: list) -> str:
+def unasked_clothes_dropped(prompt: str, request: str, people: list, roles: set = frozenset()) -> str:
     """The prompt without its parts that dress people in clothes the asker never named, when someone in
     it has a set outfit: the chat model made up "a modern tech outfit: turtleneck, cargo pants", and the
-    prompt writer drew a second woman to wear the set one. A part naming someone stays."""
+    prompt writer drew a second woman to wear the set one. A part naming someone, or one of the roles
+    the asker gave them (themes), stays."""
     if not request or not any(p.get("look") and p.get("outfit") for p in people):
         return prompt
     asked = set(re.findall(r"[a-z0-9'-]+", request.lower()))
@@ -552,7 +553,8 @@ def unasked_clothes_dropped(prompt: str, request: str, people: list) -> str:
     kept, dropped = [], []
     for part in re.split(r"(?<=[,.;:])\s+", prompt):
         words = set(re.findall(r"[a-z0-9'-]+", part.lower()))
-        if any(not said(w, asked) for w in words & (WORN | HAIRDOS)) and not any(n in words for n in names):
+        if any(not said(w, asked) for w in words & (WORN | HAIRDOS)) and not any(n in words for n in names) \
+                and not words & roles:
             dropped.append(part)
         else:
             kept.append(part)
@@ -680,6 +682,100 @@ def usual_echo_dropped(clause: str, p: dict, names: list) -> str:
 # Words too common to tell whose outfit a clause copies.
 ECHO_SKIP = {"the", "and", "with", "from", "down", "over", "under", "into", "onto", "her", "his", "their", "its",
              "has", "have", "wearing", "wears", "set", "one", "side", "small", "large"}
+
+
+def look_echo_dropped(prompt: str, people: list) -> str:
+    """The prompt without the clauses that copy the set look of whoever it's describing (two of their
+    words or more, most of them): the look goes in once, after the name, and from "alice figure style,
+    adult woman in her mid-20s, violet eyes, ..." the prompt writer drew a woman and "another figure of
+    alice" beside her. A clause naming them is cut back to the name, or left out when it came before."""
+    looks = {p["name"].lower(): p for p in people if p.get("look")}
+    if not looks:
+        return prompt
+    kept, dropped, about = [], [], None
+    for part in CLAUSES.split(prompt):
+        named = [p["name"] for p in people if mentions(part, p["name"])]
+        if named:
+            about = named[-1].lower()
+        p = looks.get(about)
+        if p and named in ([], [p["name"]]):
+            words = [w.removesuffix("'s") for w in re.findall(r"[a-z][a-z'-]{2,}", part.lower()) if w not in ECHO_SKIP]
+            words = [w for w in words if w != about]
+            source = " ".join(p.get(k) or "" for k in ("look", "outfit", "usual", "usual_hair")).lower()
+            echoed = [w for w in words if w in set(re.findall(r"[a-z][a-z'-]{2,}", source))]
+            if len(echoed) >= 2 and len(echoed) >= 0.7 * len(words):
+                dropped.append(part)
+                if named and not any(mentions(k, p["name"]) for k in kept):
+                    kept.append(p["name"] + re.search(r"[,.;:]?\s*$", part).group(0))
+                continue
+        kept.append(part)
+    if not dropped:
+        return prompt
+    toollog.log_detail("image_gen", f"looks copied into the prompt left out: {' '.join(dropped)[:200]!r}")
+    return " ".join(kept).rstrip(",;: ")
+
+
+# Words before a name that aren't a role to dress them for.
+THEME_SKIP = {"draw", "drawing", "paint", "sketch", "render", "rerender", "redo", "make", "create", "generate", "show",
+              "give", "picture", "image", "photo", "with", "next", "beside", "from", "then", "please", "just", "also",
+              "again", "both", "their", "your", "another", "same", "four", "five", "cute", "happy", "angry", "sleepy",
+              "tired", "little", "tiny", "young", "cool", "coolest", "handsome", "handsomest", "pretty", "beautiful",
+              "smiling", "adult", "full", "body", "normal", "usual", "default", "regular", "chibi", "style"}
+
+
+def themes(request: str, people: list) -> dict:
+    """{name: word} for each person with a set outfit the asker called by a role that isn't one of their
+    looks ("volleyball remy"): the clothes the chat model gave them for it are the asked ones. Without,
+    volleyball remy played in his apron."""
+    words = re.findall(r"[a-z0-9'-]+", re.sub(r"\S+://\S+", " ", request.lower()))
+    names = {n.lower() for p in people for n in [p["name"], *(p.get("aliases") or [])]}
+    out = {}
+    for p in people:
+        if not (p.get("look") and p.get("outfit")) or p.get("variant"):
+            continue
+        own = {n.lower() for n in [p["name"], *(p.get("aliases") or [])]}
+        for before, w in zip(words, words[1:]):
+            if w in own and len(before) >= 4 and before.isalpha() and before not in THEME_SKIP | names | set(STYLES):
+                out[p["name"]] = before
+    return out
+
+
+def outfit_from_theme(prompt: str, people: list, themed: dict) -> list:
+    """The people, without the set outfit of anyone themes() found when the prompt dresses someone for
+    that role ("wearing a sporty volleyball uniform"): given both, a second person wears the other."""
+    out = []
+    for p in people:
+        role = themed.get(p["name"])
+        for part in CLAUSES.split(prompt) if role else []:
+            words = re.findall(r"[a-z0-9'-]+", part.lower())
+            if role in words and (set(words) & WORN or says_outfit(words)):
+                toollog.log_detail("image_gen", f"{p['name']}: clothes for {role!r}, not the set outfit")
+                p = dict(p, outfit="")
+                break
+        out.append(p)
+    return out
+
+
+# Words in front of "style" that don't say which style ("in the same style", "in his usual style").
+NOT_STYLE = {"a", "an", "the", "in", "into", "with", "of", "like", "using", "and", "or", "but", "draw", "drawn", "do",
+             "make", "me", "him", "her", "them", "us", "it", "this", "that", "same", "his", "my", "your", "their", "our",
+             "its", "usual", "own", "new", "different", "other", "any", "art", "drawing", "picture", "image", "pic",
+             "now", "please", "then", "just", "also", "again", "some", "hair", "wearing", "dressed"}
+
+
+def asked_style(request: str) -> dict:
+    """The art style the asker named that isn't one of IMAGE_STYLES ("in soft pastel style"), as a style
+    for the prompt writer only (no LoRA); None for none. It drew its usual clean anime illustration with
+    "soft pastel lighting" instead."""
+    text = re.sub(r"\S+://\S+", " ", request.lower())
+    for m in re.finditer(r"\b((?:[a-z][a-z'-]*\s+){1,3})(?:art\s+)?style\b", text):
+        words = m.group(1).split()
+        while words and words[0] in NOT_STYLE:
+            words.pop(0)
+        if words and not any(w in NOT_STYLE or w.replace("-", "") in STYLES or w in GARMENTS | {"streetwear"}
+                             for w in words):
+            return {"name": "", "description": " ".join(words), "guide": "", "trigger": ""}
+    return None
 
 
 JOINED = re.compile(r"(?i)[\s,&]*(?:(?:and|both)\b[\s,&]*)*")
@@ -922,11 +1018,14 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
     named = parse_people(people)
     prompt = brackets_dropped(named_first(one_name(kind_named(prompt, named), named), named), named)
     if not source:
-        prompt = unasked_clothes_dropped(prompt, request, named)
+        themed = themes(request, named)
+        prompt = look_echo_dropped(prompt, named)
+        prompt = unasked_clothes_dropped(prompt, request, named, set(themed.values()))
         named = outfit_from_request(named, request)
         if COSTUME.search(request):
             # "draw bob as a pirate": the clothes the chat model gave the pirate are the asked ones.
             named = outfit_from_prompt(prompt, named)
+        named = outfit_from_theme(prompt, named, themed)
         prompt = worn_dropped(prompt, request, named)
     if named:
         toollog.log_detail("image_gen", f"asked for: {prompt[:300]!r}")
@@ -952,7 +1051,10 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
         toollog.log_detail("image_gen", f"edit: {final_prompt[:600]!r}")
     else:
         change = ""
-        final_prompt, unbound = bind_looks(refined_with_names(prompt, named, style), named)
+        writer_style = style or asked_style(request)
+        if writer_style and not style:
+            toollog.log_detail("image_gen", f"asked style, no LoRA: {writer_style['description']!r}")
+        final_prompt, unbound = bind_looks(refined_with_names(prompt, named, writer_style), named)
         if characters_text(unbound) and CHARACTER_FRAME.strip():
             final_prompt += "\n\n" + CHARACTER_FRAME.strip().replace("{characters}", characters_text(unbound))
         # After binding, so each look still goes on the person in the scene, not in this list.

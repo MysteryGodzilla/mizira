@@ -636,6 +636,78 @@ class RunPodImageTests(unittest.TestCase):
         self.assertEqual(sent["workflow"]["4"]["inputs"]["prompt"],
                          put + "Alice back in default outfit. Keep everything else exactly the same.")
 
+    def test_copied_look_is_left_out(self):
+        # The chat model wrote alice's whole look after her name, and the prompt writer drew a woman
+        # described that way and "another figure of alice" beside her.
+        alice = {"name": "alice", "look": "adult woman in her mid-20s, slender willowy figure, fair skin, violet eyes, "
+                 "round thin gold glasses, very long wavy lavender hair", "outfit": "a lavender hoodie"}
+        bob = {"name": "bob", "look": "adult rat man, slim but muscular build, short sleek dark grey fur",
+               "outfit": "a black apron"}
+        for prompt, people, want in [
+            ("alice figure style, adult woman in her mid-20s with slender willowy figure, fair skin, violet eyes, "
+             "round thin gold glasses, very long wavy lavender hair", [alice], "alice figure style"),
+            ("alice, adult woman with violet eyes, dancing in the rain at night", [alice],
+             "alice, dancing in the rain at night"),
+            ("bob figure style, adult bob with slim muscular build, dark grey fur", [bob], "bob figure style"),
+            ("alice smiling, violet eyes sparkling under the neon lights of the city", [alice],
+             "alice smiling, violet eyes sparkling under the neon lights of the city"),
+            ("alice and bob at the park, slim muscular rat with dark grey fur, feeding ducks", [alice, bob],
+             "alice and bob at the park, feeding ducks"),
+            ("a woman with violet eyes and fair skin", [alice], "a woman with violet eyes and fair skin"),
+            ("bob, slim grey rat", [{"name": "bob", "notes": ["slim grey rat"]}], "bob, slim grey rat"),
+        ]:
+            self.assertEqual(imagegen.look_echo_dropped(prompt, people), want, prompt)
+
+    def test_a_named_style_without_a_lora_reaches_the_prompt_writer(self):
+        # "draw me soft pastel style" came out as the prompt writer's usual clean anime illustration.
+        with patch.object(imagegen, "STYLES", {"pencil": {}}):
+            for request, want in [
+                ("mizira just imagine me as the coolest rat and draw me soft pastel style", "soft pastel"),
+                ("draw volleyball bob spiking the ball wearing in soft pastel style", "soft pastel"),
+                ("draw alice in a gouache art style", "gouache"),
+                ("draw it again in the same style", None),
+                ("draw me in streetwear style", None),
+                ("draw bob pencil style", None),
+                ("draw alice https://example.com/watercolour-style.png", None),
+            ]:
+                got = imagegen.asked_style(request)
+                self.assertEqual(got and got["description"], want, request)
+        seen = []
+        with patch.object(imagegen, "STYLE_FRAME", "Art style: {style}"), \
+                patch.object(imagegen, "refine_prompt", REFINE_PROMPT), \
+                patch.object(imagegen.chat, "endpoint", lambda name: {"url": "", "model": "", "key": ""}), \
+                patch.object(imagegen, "_refine", lambda text, *a: seen.append(text) or "a rat"), \
+                patch.object(imagegen, "PER_HOUR", 0), \
+                patch.object(runpod, "run", lambda *a, **k: self.assertIsNone(k.get("loras")) or
+                             {"images": [b"png"], "texts": ["SAFE"]}):
+            reply = imagegen.generate_image("a stylish rat in soft pastel style", 1024, 1024, requested_by="bob",
+                                            request="draw me soft pastel style")
+        self.assertTrue(reply.startswith("url: "), reply)
+        self.assertIn("Art style: soft pastel", seen[0])
+
+    def test_role_before_a_name_dresses_them(self):
+        # "volleyball bob": the chat model gave him a volleyball uniform, and he played in his apron.
+        bob = {"name": "bob", "look": "adult rat man", "outfit": "a black apron"}
+        for request, people, want in [
+            ("mizira mizira now draw volleyball bob spiking the ball", [bob], {"bob": "volleyball"}),
+            ("draw happy bob at the beach", [bob], {}),
+            ("draw basketball bob", [dict(bob, variant="basketball")], {}),
+            ("draw bob and alice", [bob, {"name": "alice", "look": "adult woman", "outfit": "a hoodie"}], {}),
+        ]:
+            self.assertEqual(imagegen.themes(request, people), want, request)
+        prompt = "bob spiking the ball mid-air, wearing a sporty volleyball uniform with knee pads, sand court"
+        seen = []
+        with patch.object(imagegen, "PEOPLE_FRAME", "People: {people}"), \
+                patch.object(imagegen, "refine_prompt", REFINE_PROMPT), \
+                patch.object(imagegen.chat, "endpoint", lambda name: {"url": "", "model": "", "key": ""}), \
+                patch.object(imagegen, "_refine", lambda text, *a: seen.append(text) or "bob spiking"), \
+                patch.object(imagegen, "PER_HOUR", 0), \
+                patch.object(runpod, "run", lambda *a, **k: {"images": [b"png"], "texts": ["SAFE"]}):
+            reply = imagegen.generate_image(prompt, 1024, 1024, requested_by="bob", people=json.dumps([bob]),
+                                            request="now draw volleyball bob spiking the ball")
+        self.assertTrue(reply.startswith("url: "), reply)
+        self.assertEqual(seen, [prompt])
+
 
 if __name__ == "__main__":
     unittest.main()
