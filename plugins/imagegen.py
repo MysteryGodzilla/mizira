@@ -899,13 +899,17 @@ def refined_with_names(prompt: str, people: list, style: dict = None) -> str:
     return as_written(prompt, people)
 
 
-def picture_names(prompt: str, people: list) -> str:
-    """The prompt with each name that has one (picture_name) as the name the image model is told: it read
-    "MysteryGodzilla" and gave her a Godzilla tail. Last, so every other step still finds the name."""
+def as_pictured(people: list) -> list:
+    """The people, each with their name in pictures (picture_name) as their name and their own as one of
+    their other names, so one_name puts it everywhere: from "MysteryGodzilla" the image model gave her a
+    Godzilla tail, and the prompt writer, who saw the name too, gave her "emerald green skin tones"."""
+    out = []
     for p in people:
-        if p.get("picture_name"):
-            prompt = re.sub(r"(?i)(?<![\w-])" + re.escape(p["name"]) + r"(?![\w-])", lambda m: p["picture_name"], prompt)
-    return prompt
+        if p.get("picture_name") and p["picture_name"].lower() != p["name"].lower():
+            toollog.log_detail("image_gen", f"{p['name']} is {p['picture_name']!r} in the picture")
+            p = dict(p, name=p["picture_name"], aliases=[p["name"], *(p.get("aliases") or [])])
+        out.append(p)
+    return out
 
 
 def mentions(text: str, name: str) -> bool:
@@ -1025,7 +1029,7 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
         reference, why_not = fetch_reference(reference_url)
         if reference is None:
             return why_not
-    named = parse_people(people)
+    named = as_pictured(parse_people(people))
     prompt = brackets_dropped(named_first(one_name(kind_named(prompt, named), named), named), named)
     if not source:
         themed = themes(request, named)
@@ -1072,10 +1076,6 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
         if style and style["trigger"]:
             final_prompt = f"{style['trigger']}, {final_prompt}"
         toollog.log_detail("image_gen", f"prompt: {final_prompt[:600]!r}")
-    if picture_names(final_prompt, named) != final_prompt:
-        final_prompt = picture_names(final_prompt, named)
-        toollog.log_detail("image_gen", "named in the picture: " + ", ".join(
-            f"{p['name']} as {p['picture_name']!r}" for p in named if p.get("picture_name")))
     try:
         workflow = lambda: build_workflow(final_prompt, width, height, negative, SOURCE_NAME if source else "",
                                           change, style, REFERENCE_NAME if reference else "", describe)

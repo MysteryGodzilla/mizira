@@ -698,19 +698,27 @@ class RunPodImageTests(unittest.TestCase):
                          "Change her outfit to a lavender hoodie. alice back in casual")
 
     def test_the_image_model_gets_the_picture_name(self):
-        # From "MysteryGodzilla" the image model drew a Godzilla tail: it's told the name in pictures.
-        alice = {"name": "alicedragon", "look": "adult woman", "outfit": "a hoodie", "picture_name": "Alice"}
+        # From "MysteryGodzilla" the image model drew a Godzilla tail, and the prompt writer, who saw the
+        # name too, wrote "emerald green skin tones": neither sees the name, only the name in pictures.
+        alice = {"name": "alicedragon", "aliases": ["dragon"], "look": "adult woman", "outfit": "a hoodie",
+                 "picture_name": "Alice"}
         bob = {"name": "bob", "look": "adult man", "outfit": "a coat"}
-        self.assertEqual(imagegen.picture_names("AliceDragon and bob at the park; alicedragon waves, alicedragons", [alice, bob]),
-                         "Alice and bob at the park; Alice waves, alicedragons")
-        with patch.object(imagegen, "PER_HOUR", 0), \
+        seen = []
+        with patch.object(imagegen, "PEOPLE_FRAME", "People: {people}"), \
+                patch.object(imagegen, "refine_prompt", REFINE_PROMPT), \
+                patch.object(imagegen.chat, "endpoint", lambda name: {"url": "", "model": "", "key": ""}), \
+                patch.object(imagegen, "_refine", lambda text, *a: seen.append(text) or "Alice and bob at the park"), \
+                patch.object(imagegen, "PER_HOUR", 0), \
                 patch.object(runpod, "run", lambda wf, *a, **k: self.__dict__.update(sent=wf) or
                              {"images": [b"png"], "texts": ["SAFE"]}):
-            reply = imagegen.generate_image("alicedragon at the park", 1024, 1024, requested_by="bob",
-                                            people=json.dumps([alice]), request="draw alicedragon at the park")
+            reply = imagegen.generate_image("AliceDragon and bob at the park, dragon waving", 1024, 1024,
+                                            requested_by="bob", people=json.dumps([alice, bob]),
+                                            request="draw alicedragon and bob at the park")
         self.assertTrue(reply.startswith("url: "), reply)
+        self.assertNotIn("dragon", seen[0].lower())
+        self.assertIn("Alice - outfit: a hoodie", seen[0])
         self.assertIn("Alice (adult woman)", self.sent["4"]["inputs"]["prompt"])
-        self.assertNotIn("alicedragon", self.sent["4"]["inputs"]["prompt"].lower())
+        self.assertNotIn("dragon", self.sent["4"]["inputs"]["prompt"].lower())
 
     def test_role_before_a_name_dresses_them(self):
         # "volleyball bob": the chat model gave him a volleyball uniform, and he played in his apron.
