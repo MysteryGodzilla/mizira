@@ -103,6 +103,9 @@ prevent that "double", so check a change against `test_imagegen_runpod.py` befor
 
 - Set in the operator page (Memories, profile). Appearance goes in word for word. Hair and Outfit are
   the defaults. Up to 8 variants each swap the hair, the outfit or both.
+- A name the image model would draw ("...Godzilla" gave a tail) can be swapped for a name in pictures
+  (`PictureName`). `picture_names` changes it in the final prompt only, so every other step still
+  finds the person by their name.
 - The defaults have a name too (`DefaultName`, "casual" when blank), and "default", "normal",
   "usual" and "regular" also name them. Named, they win over an alt carried over from an earlier
   request or written into the prompt ("casual hori" after a run of "race hori").

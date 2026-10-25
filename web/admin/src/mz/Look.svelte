@@ -10,6 +10,7 @@
   let hair = $state("");
   let outfit = $state("");
   let defaultName = $state("");
+  let pictureName = $state("");
   let reference = $state("");
   let variants = $state<LookVariant[]>([]);
 
@@ -22,6 +23,7 @@
     hair = look?.hair ?? "";
     outfit = look?.outfit ?? "";
     defaultName = look?.default_name ?? "";
+    pictureName = look?.picture_name ?? "";
     reference = look?.reference ?? "";
     variants = (look?.variants ?? []).map((v) => ({ ...v }));
     editing = true;
@@ -29,7 +31,7 @@
 
   const current = (): Look => ({
     appearance: appearance.trim(), hair: hair.trim(), outfit: outfit.trim(), default_name: defaultName.trim(),
-    reference: reference.trim(),
+    picture_name: pictureName.trim(), reference: reference.trim(),
     variants: variants.filter((v) => v.name.trim() || v.hair.trim() || v.outfit.trim())
       .map((v) => ({ name: v.name.trim(), hair: v.hair.trim(), outfit: v.outfit.trim() })),
   });
@@ -61,6 +63,8 @@
         <textarea bind:value={outfit} rows="2" maxlength="400" placeholder="lilac cardigan over a cream shirt, pleated skirt"></textarea></label>
       <label class="wide">Name of the default hair and outfit, for asking for them ("casual hori"; "default", "normal" and "usual" work too)
         <input bind:value={defaultName} maxlength="20" placeholder="casual" /></label>
+      <label class="wide">Name in pictures, when theirs would be drawn (blank: {subject})
+        <input bind:value={pictureName} maxlength="30" placeholder="Mystery" /></label>
       <label class="wide">Reference picture (a link, kept for later)
         <input bind:value={reference} maxlength="300" placeholder="https://…" /></label>
       <div class="wide">
@@ -86,6 +90,7 @@
       <dt>Appearance</dt><dd>{look.appearance}</dd>
       {#if look.hair}<dt>Hair</dt><dd>{look.hair}</dd>{/if}
       {#if look.outfit}<dt>Outfit ({look.default_name || "casual"})</dt><dd>{look.outfit}</dd>{/if}
+      {#if look.picture_name}<dt>Name in pictures</dt><dd>{look.picture_name}</dd>{/if}
       {#each look.variants as v (v.name)}
         <dt>{v.name}</dt><dd>{[v.hair && `hair: ${v.hair}`, v.outfit && `outfit: ${v.outfit}`].filter(Boolean).join(" · ")}</dd>
       {/each}

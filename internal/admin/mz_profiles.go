@@ -31,7 +31,9 @@ type LookView struct {
 	Hair       string `json:"hair"`
 	Outfit     string `json:"outfit"`
 	// DefaultName is what a request calls the default hair and outfit; blank is "casual".
-	DefaultName string            `json:"default_name"`
+	DefaultName string `json:"default_name"`
+	// PictureName is what the image model is told they are called; blank is their name.
+	PictureName string            `json:"picture_name"`
 	Reference   string            `json:"reference"`
 	Variants    []LookVariantView `json:"variants"`
 }

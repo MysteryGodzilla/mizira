@@ -96,17 +96,18 @@ func TestLooks(t *testing.T) {
 	if _, _, v := named.For("casual bob", 0, "bob"); v != "" {
 		t.Errorf("casual with the default named comfy = %q, want none", v)
 	}
-	if err := s.SetLook("net", "dave", Look{Appearance: "a", DefaultName: " Comfy ", Outfit: "hoodie"}, ""); err != nil {
+	if err := s.SetLook("net", "dave", Look{Appearance: "a", DefaultName: " Comfy ", Outfit: "hoodie", PictureName: " Dave  Jr "}, ""); err != nil {
 		t.Fatal(err)
 	}
 	people, _ = s.People("net")
-	if dave, _ := people.Get("dave"); dave.Look.DefaultName != "comfy" || dave.Look.Default() != "comfy" {
-		t.Errorf("dave's default = %q", dave.Look.DefaultName)
+	if dave, _ := people.Get("dave"); dave.Look.DefaultName != "comfy" || dave.Look.Default() != "comfy" || dave.Look.PictureName != "Dave Jr" {
+		t.Errorf("dave's default = %q, name in pictures %q", dave.Look.DefaultName, dave.Look.PictureName)
 	}
 
 	for name, bad := range map[string]Look{
 		"default named twice": {Appearance: "a", DefaultName: "bun", Variants: []LookVariant{{Name: "bun", Hair: "h"}}},
 		"two-word default":    {Appearance: "a", DefaultName: "every day"},
+		"picture name braces": {Appearance: "a", PictureName: "{prompt}"},
 		"no appearance":       {Hair: "red"},
 		"braces":              {Appearance: "a {style} woman"},
 		"too long":            {Appearance: strings.Repeat("a", maxLookText+1)},

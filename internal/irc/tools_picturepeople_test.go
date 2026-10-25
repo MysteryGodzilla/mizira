@@ -107,7 +107,7 @@ func TestPicturePeopleProfileLook(t *testing.T) {
 	store.SetProfile(net, core.Profile{Subject: "carol", Pronouns: "she/her"})
 	mem, _ := store.Remember(net, "carol", "carol's avatar wears round glasses", "carol", "#test")
 	store.SetKind(net, mem, core.KindLook)
-	store.SetLook(net, "carol", core.Look{Appearance: "adult woman, green eyes", Hair: "short lavender bob", Outfit: "lilac cardigan",
+	store.SetLook(net, "carol", core.Look{Appearance: "adult woman, green eyes", Hair: "short lavender bob", Outfit: "lilac cardigan", PictureName: "Caz",
 		Variants: []core.LookVariant{{Name: "business", Outfit: "charcoal blazer"}, {Name: "bun", Hair: "lavender bun"}}}, "")
 	t.Cleanup(func() { store.DeleteProfile(net, "carol"); store.Forget(net, mem) })
 
@@ -121,7 +121,7 @@ func TestPicturePeopleProfileLook(t *testing.T) {
 	}
 	got = nil
 	json.Unmarshal([]byte(PicturePeople(net, "carol at the beach", "draw bun carol at the beach", "", 45, time.Now())), &got)
-	if len(got) != 1 || got[0].UsualHair != "short lavender bob" || got[0].Usual != "" {
+	if len(got) != 1 || got[0].UsualHair != "short lavender bob" || got[0].Usual != "" || got[0].PictureName != "Caz" {
 		t.Errorf("carol in her bun = %+v, want the usual hair and no usual outfit", got)
 	}
 }
