@@ -103,8 +103,11 @@ prevent that "double", so check a change against `test_imagegen_runpod.py` befor
 
 - Set in the operator page (Memories, profile). Appearance goes in word for word. Hair and Outfit are
   the defaults. Up to 8 variants each swap the hair, the outfit or both.
-- `Look.For` picks the variant mentioned nearest a name. On a tie, a mention just after the name beats
-  one just before it. Names of 5 or more letters still match with two letters swapped.
+- The defaults have a name too (`DefaultName`, "casual" when blank), and "default", "normal",
+  "usual" and "regular" also name them. Named, they win over an alt carried over from an earlier
+  request or written into the prompt ("casual hori" after a run of "race hori").
+- `Look.For` picks the variant (or the defaults) mentioned nearest a name. On a tie, a mention just
+  after the name beats one just before it. Names of 5 or more letters still match with two letters swapped.
 - Don't name copyrighted characters in a look: the model draws that character instead.
 
 ## Testing
@@ -119,5 +122,9 @@ prevent that "double", so check a change against `test_imagegen_runpod.py` befor
 ## Known limits
 
 - About seven people per picture before they start to fuse.
-- One picture per request.
+- One picture per request (`OncePerRequestTool`). When one turn makes several new-picture calls ("a
+  character sheet of you doing tasks" as one call per task), `mergePictureCalls` (internal/llm) folds
+  them into the first as one character sheet, and the others answer `Merged:`.
+- Several looks of one person in one picture (a lineup of their alts) go in one prompt, so outfits can
+  bleed between them.
 - Borrowing someone else's variant ("me in bob's race look") isn't supported.

@@ -169,6 +169,8 @@ func TestPicturePeopleVariantPerPerson(t *testing.T) {
 		// eve's own outfit is a chef's jacket: the model calling him a chef isn't his chef alt.
 		{"eve a rat chef with a whisk", "draw eve chibi style", map[string]string{"eve": "black chef's jacket and white apron"}},
 		{"eve at a stove", "draw chef eve", map[string]string{"eve": "white double-breasted jacket and toque"}},
+		// Named, the defaults win over an alt in the model's prompt.
+		{"carol in her office look at the park", "draw casual carol at the park", map[string]string{"carol": "white t-shirt"}},
 	} {
 		got := outfits(c.prompt, c.request)
 		for name, want := range c.want {
@@ -327,6 +329,12 @@ func TestPicturePeopleEarlierRequest(t *testing.T) {
 		if len(got) != 1 || got[0].Outfit != c.want {
 			t.Errorf("earlier %q: %+v, want %q", c.earlier, got, c.want)
 		}
+	}
+	// "default carol" after a run of villainess pictures: her own outfit, not the carried-over alt.
+	var got []PicturePerson
+	json.Unmarshal([]byte(PicturePeople(net, "carol at night", "now default carol", earlier, 45, now)), &got)
+	if len(got) != 1 || got[0].Outfit != "white t-shirt" || got[0].Variant != "" || got[0].DefaultName != "casual" {
+		t.Errorf("default carol after villainess: %+v", got)
 	}
 }
 

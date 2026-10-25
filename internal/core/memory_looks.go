@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -18,11 +19,14 @@ import (
 // the picture word for word; Hair and Outfit are the defaults, which a variant named in the request
 // replaces ("hori in her business look").
 type Look struct {
-	Appearance string        `json:"appearance"`
-	Hair       string        `json:"hair,omitempty"`
-	Outfit     string        `json:"outfit,omitempty"`
-	Reference  string        `json:"reference,omitempty"` // a picture of them, kept for later use
-	Variants   []LookVariant `json:"variants,omitempty"`
+	Appearance string `json:"appearance"`
+	Hair       string `json:"hair,omitempty"`
+	Outfit     string `json:"outfit,omitempty"`
+	// DefaultName is what a request calls the default hair and outfit ("casual hori"); blank is
+	// DefaultLookName.
+	DefaultName string        `json:"default_name,omitempty"`
+	Reference   string        `json:"reference,omitempty"` // a picture of them, kept for later use
+	Variants    []LookVariant `json:"variants,omitempty"`
 }
 
 // LookVariant swaps the hair, the outfit or both.
@@ -45,8 +49,24 @@ var (
 // Set reports whether there is a look to draw from.
 func (l Look) Set() bool { return l.Appearance != "" }
 
+// DefaultLookName is what the default hair and outfit are called when the look names them nothing else.
+const DefaultLookName = "casual"
+
+// defaultWords name the defaults too: after a run of "race hori" pictures, "draw hori" kept the race
+// alt, and there was no way to ask for her own outfit.
+var defaultWords = []string{"default", "normal", "usual", "regular"}
+
+// Default is what a request calls the default hair and outfit.
+func (l Look) Default() string {
+	if l.DefaultName != "" {
+		return l.DefaultName
+	}
+	return DefaultLookName
+}
+
 // For is the hair and outfit for a picture whose text names one of the variants (a whole word, or
-// with two letters swapped: "buisness"), or the defaults; variant is the one used, or "". Given the
+// with two letters swapped: "buisness"), or the defaults; variant is the one used, Default() for
+// defaults the text names (by that name or a defaultWords word), or "" for none named. Given the
 // person's names, text that doesn't mention them names none of theirs, of several the one nearest a
 // mention wins ("me in my office look and carol in her villainess dress" is carol's villainess), and
 // with within above 0, one further than that many words from a mention doesn't count ("a sleek modern
@@ -67,10 +87,24 @@ func (l Look) For(text string, within int, names ...string) (hair, outfit, varia
 	if len(names) > 0 && len(at) == 0 {
 		return hair, outfit, ""
 	}
-	best, bestScore := -1, 0
+	// Candidates by index into the variants, len(l.Variants) for the defaults; a variant wins a tie.
+	type candidate struct {
+		name  string
+		index int
+	}
+	var cands []candidate
 	for vi, v := range l.Variants {
+		cands = append(cands, candidate{v.Name, vi})
+	}
+	for _, d := range append([]string{l.Default()}, defaultWords...) {
+		if !slices.ContainsFunc(l.Variants, func(v LookVariant) bool { return v.Name == d }) {
+			cands = append(cands, candidate{d, len(l.Variants)})
+		}
+	}
+	best, bestScore := -1, 0
+	for _, c := range cands {
 		for i, w := range words {
-			if !sameWord(w, v.Name) {
+			if !sameWord(w, c.name) {
 				continue
 			}
 			score := nearness(i, at)
@@ -78,12 +112,15 @@ func (l Look) For(text string, within int, names ...string) (hair, outfit, varia
 				continue
 			}
 			if best < 0 || score < bestScore {
-				best, bestScore = vi, score
+				best, bestScore = c.index, score
 			}
 		}
 	}
 	if best < 0 {
 		return hair, outfit, ""
+	}
+	if best == len(l.Variants) {
+		return hair, outfit, l.Default()
 	}
 	v := l.Variants[best]
 	if v.Hair != "" {
@@ -153,7 +190,11 @@ func (l Look) clean() (Look, error) {
 	if l.Reference != "" && !referenceURL.MatchString(l.Reference) {
 		return l, errors.New("the reference picture is an https link")
 	}
-	if l.Appearance == "" && (l.Hair != "" || l.Outfit != "" || len(l.Variants) > 0) {
+	l.DefaultName = strings.ToLower(strings.TrimSpace(l.DefaultName))
+	if l.DefaultName != "" && !variantName.MatchString(l.DefaultName) {
+		return l, fmt.Errorf("the default's name %q: one word, letters and numbers, like casual", l.DefaultName)
+	}
+	if l.Appearance == "" && (l.Hair != "" || l.Outfit != "" || l.DefaultName != "" || len(l.Variants) > 0) {
 		return l, errors.New("a look needs its appearance (age, build, face, eyes, skin)")
 	}
 	if len(l.Variants) > maxLookVariants {
@@ -167,6 +208,9 @@ func (l Look) clean() (Look, error) {
 		}
 		if seen[v.Name] {
 			return l, fmt.Errorf("variant %s is listed twice", v.Name)
+		}
+		if v.Name == l.DefaultName {
+			return l, fmt.Errorf("%s names both the default and a variant", v.Name)
 		}
 		seen[v.Name] = true
 		if v.Hair, err = text("variant "+v.Name+" hair", v.Hair); err != nil {

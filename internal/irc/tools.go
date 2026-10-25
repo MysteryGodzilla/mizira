@@ -172,6 +172,13 @@ type onceCall struct {
 // OnceRepeated starts the answer to a second call in the same request.
 const OnceRepeated = "Already done:"
 
+// OnceMerged starts the answer to a call folded into another call of the same turn, and MergedArg is
+// the argument that marks it (llm's mergePictureCalls).
+const (
+	OnceMerged = "Merged:"
+	MergedArg  = "_merged"
+)
+
 // onceFixable start a refusal that drew nothing and says how to call the tool right (an edit link on a
 // new picture, a style of the wrong kind). The model may correct it once: without that, it told the
 // channel the picture was done.
@@ -186,6 +193,11 @@ func (o *OncePerRequestTool) Execute(ctx context.Context, args map[string]any) (
 	chatCtx, err := GetIRCContext(ctx)
 	if err != nil {
 		return "", err
+	}
+	if merged, _ := args[MergedArg].(bool); merged {
+		// Not a call of its own, so it mustn't take the request's one run from the call it went into.
+		return OnceMerged + " this one is drawn in the same picture as the first call of this turn, which shows " +
+			"them all. Reply once, with that picture's link.", nil
 	}
 	request := chatCtx.GetRequestID()
 	if earlier, again := o.first(request, time.Now()); again {
