@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Repo rules for AI agents and new contributors working on metald. Human-facing docs are in `README.md`, `docs/architecture.md` and `docs/contributing.md`; this file covers what those don't.
+Repo rules for AI agents and new contributors working on metald. Human-facing docs are in `README.md`, `docs/architecture.md`, `docs/contributing.md` and `docs/pictures.md` (how a picture request is drawn: read it before changing `imagegen.py` or the picture people wrapper); this file covers what those don't.
 
 ## Collaboration
 
