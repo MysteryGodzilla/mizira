@@ -108,7 +108,7 @@ func TestPicturePeopleProfileLook(t *testing.T) {
 	mem, _ := store.Remember(net, "carol", "carol's avatar wears round glasses", "carol", "#test")
 	store.SetKind(net, mem, core.KindLook)
 	store.SetLook(net, "carol", core.Look{Appearance: "adult woman, green eyes", Hair: "short lavender bob", Outfit: "lilac cardigan",
-		Variants: []core.LookVariant{{Name: "business", Outfit: "charcoal blazer"}}}, "")
+		Variants: []core.LookVariant{{Name: "business", Outfit: "charcoal blazer"}, {Name: "bun", Hair: "lavender bun"}}}, "")
 	t.Cleanup(func() { store.DeleteProfile(net, "carol"); store.Forget(net, mem) })
 
 	var got []PicturePerson
@@ -118,6 +118,11 @@ func TestPicturePeopleProfileLook(t *testing.T) {
 	want := PicturePerson{Name: "carol", DrawnAs: "female", Look: "adult woman, green eyes, short lavender bob", Outfit: "charcoal blazer", Variant: "business", Usual: "lilac cardigan"}
 	if got[0].Name != want.Name || got[0].Look != want.Look || got[0].Outfit != want.Outfit || got[0].Variant != want.Variant || got[0].Usual != want.Usual || len(got[0].Notes) != 0 {
 		t.Errorf("carol = %+v, want %+v (no look memories)", got[0], want)
+	}
+	got = nil
+	json.Unmarshal([]byte(PicturePeople(net, "carol at the beach", "draw bun carol at the beach", "", 45, time.Now())), &got)
+	if len(got) != 1 || got[0].UsualHair != "short lavender bob" || got[0].Usual != "" {
+		t.Errorf("carol in her bun = %+v, want the usual hair and no usual outfit", got)
 	}
 }
 
@@ -132,7 +137,14 @@ func TestPicturePeopleVariantPerPerson(t *testing.T) {
 		{Name: "office", Outfit: "grey blazer"}, {Name: "villainess", Outfit: "purple gown"}}}, "")
 	store.SetLook(net, "dave", core.Look{Appearance: "adult man", Outfit: "black apron", Variants: []core.LookVariant{
 		{Name: "office", Outfit: "navy suit"}, {Name: "heist", Outfit: "black turtleneck"}, {Name: "chef", Outfit: "white toque"}}}, "")
-	t.Cleanup(func() { store.DeleteProfile(net, "carol"); store.DeleteProfile(net, "dave") })
+	store.SetProfile(net, core.Profile{Subject: "eve", Pronouns: "he/him"})
+	store.SetLook(net, "eve", core.Look{Appearance: "adult rat man", Outfit: "black chef's jacket and white apron", Variants: []core.LookVariant{
+		{Name: "chef", Outfit: "white double-breasted jacket and toque"}}}, "")
+	t.Cleanup(func() {
+		store.DeleteProfile(net, "carol")
+		store.DeleteProfile(net, "dave")
+		store.DeleteProfile(net, "eve")
+	})
 
 	outfits := func(prompt, request string) map[string]string {
 		var got []PicturePerson
@@ -154,6 +166,9 @@ func TestPicturePeopleVariantPerPerson(t *testing.T) {
 		{"dave the chef sneaking through a kitchen", "dave in his heist look", map[string]string{"dave": "black turtleneck"}},
 		{"dave the chef at a stove", "draw dave", map[string]string{"dave": "white toque"}},
 		{"carol and dave in office clothes", "carol and dave at work", map[string]string{"carol": "grey blazer", "dave": "navy suit"}},
+		// eve's own outfit is a chef's jacket: the model calling him a chef isn't his chef alt.
+		{"eve a rat chef with a whisk", "draw eve chibi style", map[string]string{"eve": "black chef's jacket and white apron"}},
+		{"eve at a stove", "draw chef eve", map[string]string{"eve": "white double-breasted jacket and toque"}},
 	} {
 		got := outfits(c.prompt, c.request)
 		for name, want := range c.want {
@@ -311,6 +326,21 @@ func TestPicturePeopleEarlierRequest(t *testing.T) {
 		json.Unmarshal([]byte(PicturePeople(net, prompt, "try that image request again", c.earlier, 45, now)), &got)
 		if len(got) != 1 || got[0].Outfit != c.want {
 			t.Errorf("earlier %q: %+v, want %q", c.earlier, got, c.want)
+		}
+	}
+}
+
+// "mizira mizira now draw volleyball bob" put her in the picture: only the first was the address.
+func TestSelfNamed(t *testing.T) {
+	for _, c := range []struct{ request, want string }{
+		{"metald draw bob", " draw bob"},
+		{"metald metald now draw bob", " now draw bob"},
+		{"metald, metald! draw bob", "! draw bob"},
+		{"metald draw you and bob, metald in red", " draw you and bob, metald in red"},
+		{"metald draw yourself", " draw metald"},
+	} {
+		if got := selfNamed(c.request, "metald"); got != c.want {
+			t.Errorf("selfNamed(%q) = %q, want %q", c.request, got, c.want)
 		}
 	}
 }
