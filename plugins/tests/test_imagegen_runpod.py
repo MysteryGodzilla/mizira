@@ -697,6 +697,21 @@ class RunPodImageTests(unittest.TestCase):
         self.assertEqual(imagegen.dressed("alice back in casual", [alice]),
                          "Change her outfit to a lavender hoodie. alice back in casual")
 
+    def test_the_image_model_gets_the_picture_name(self):
+        # From "MysteryGodzilla" the image model drew a Godzilla tail: it's told the name in pictures.
+        alice = {"name": "alicedragon", "look": "adult woman", "outfit": "a hoodie", "picture_name": "Alice"}
+        bob = {"name": "bob", "look": "adult man", "outfit": "a coat"}
+        self.assertEqual(imagegen.picture_names("AliceDragon and bob at the park; alicedragon waves, alicedragons", [alice, bob]),
+                         "Alice and bob at the park; Alice waves, alicedragons")
+        with patch.object(imagegen, "PER_HOUR", 0), \
+                patch.object(runpod, "run", lambda wf, *a, **k: self.__dict__.update(sent=wf) or
+                             {"images": [b"png"], "texts": ["SAFE"]}):
+            reply = imagegen.generate_image("alicedragon at the park", 1024, 1024, requested_by="bob",
+                                            people=json.dumps([alice]), request="draw alicedragon at the park")
+        self.assertTrue(reply.startswith("url: "), reply)
+        self.assertIn("Alice (adult woman)", self.sent["4"]["inputs"]["prompt"])
+        self.assertNotIn("alicedragon", self.sent["4"]["inputs"]["prompt"].lower())
+
     def test_role_before_a_name_dresses_them(self):
         # "volleyball bob": the chat model gave him a volleyball uniform, and he played in his apron.
         bob = {"name": "bob", "look": "adult rat man", "outfit": "a black apron"}

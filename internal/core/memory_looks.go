@@ -24,7 +24,10 @@ type Look struct {
 	Outfit     string `json:"outfit,omitempty"`
 	// DefaultName is what a request calls the default hair and outfit ("casual hori"); blank is
 	// DefaultLookName.
-	DefaultName string        `json:"default_name,omitempty"`
+	DefaultName string `json:"default_name,omitempty"`
+	// PictureName is what the image model is told they're called, when their name would be drawn: from
+	// "MysteryGodzilla" it gave her a Godzilla tail. Blank is their name.
+	PictureName string        `json:"picture_name,omitempty"`
 	Reference   string        `json:"reference,omitempty"` // a picture of them, kept for later use
 	Variants    []LookVariant `json:"variants,omitempty"`
 }
@@ -43,6 +46,7 @@ const (
 
 var (
 	variantName  = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,19}$`)
+	pictureName  = regexp.MustCompile(`^[\p{L}\p{N}][\p{L}\p{N}' -]{0,29}$`)
 	referenceURL = regexp.MustCompile(`^https://\S{4,300}$`)
 )
 
@@ -194,7 +198,11 @@ func (l Look) clean() (Look, error) {
 	if l.DefaultName != "" && !variantName.MatchString(l.DefaultName) {
 		return l, fmt.Errorf("the default's name %q: one word, letters and numbers, like casual", l.DefaultName)
 	}
-	if l.Appearance == "" && (l.Hair != "" || l.Outfit != "" || l.DefaultName != "" || len(l.Variants) > 0) {
+	l.PictureName = strings.Join(strings.Fields(l.PictureName), " ")
+	if l.PictureName != "" && !pictureName.MatchString(l.PictureName) {
+		return l, fmt.Errorf("the name in pictures %q: up to 30 letters, numbers and spaces, like Mystery", l.PictureName)
+	}
+	if l.Appearance == "" && (l.Hair != "" || l.Outfit != "" || l.DefaultName != "" || l.PictureName != "" || len(l.Variants) > 0) {
 		return l, errors.New("a look needs its appearance (age, build, face, eyes, skin)")
 	}
 	if len(l.Variants) > maxLookVariants {

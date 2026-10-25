@@ -899,6 +899,15 @@ def refined_with_names(prompt: str, people: list, style: dict = None) -> str:
     return as_written(prompt, people)
 
 
+def picture_names(prompt: str, people: list) -> str:
+    """The prompt with each name that has one (picture_name) as the name the image model is told: it read
+    "MysteryGodzilla" and gave her a Godzilla tail. Last, so every other step still finds the name."""
+    for p in people:
+        if p.get("picture_name"):
+            prompt = re.sub(r"(?i)(?<![\w-])" + re.escape(p["name"]) + r"(?![\w-])", lambda m: p["picture_name"], prompt)
+    return prompt
+
+
 def mentions(text: str, name: str) -> bool:
     return re.search(r"(?i)(?<![\w-])" + re.escape(name) + r"(?![\w-])", text) is not None
 
@@ -1063,6 +1072,10 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
         if style and style["trigger"]:
             final_prompt = f"{style['trigger']}, {final_prompt}"
         toollog.log_detail("image_gen", f"prompt: {final_prompt[:600]!r}")
+    if picture_names(final_prompt, named) != final_prompt:
+        final_prompt = picture_names(final_prompt, named)
+        toollog.log_detail("image_gen", "named in the picture: " + ", ".join(
+            f"{p['name']} as {p['picture_name']!r}" for p in named if p.get("picture_name")))
     try:
         workflow = lambda: build_workflow(final_prompt, width, height, negative, SOURCE_NAME if source else "",
                                           change, style, REFERENCE_NAME if reference else "", describe)

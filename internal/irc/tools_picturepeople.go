@@ -261,7 +261,9 @@ type PicturePerson struct {
 	// her ponytail alt.
 	UsualHair string `json:"usual_hair,omitempty"`
 	// DefaultName is what their default outfit is called ("casual"), so "her casual outfit" isn't new clothes.
-	DefaultName string   `json:"default_name,omitempty"`
+	DefaultName string `json:"default_name,omitempty"`
+	// PictureName is what the image model is told they are called, when set.
+	PictureName string   `json:"picture_name,omitempty"`
 	Notes       []string `json:"notes,omitempty"`
 }
 
@@ -311,7 +313,7 @@ func PicturePeople(network, prompt, request, earlier string, fadeDays int, now t
 				// Named on purpose ("casual hori"), the defaults stand over an earlier request's alt.
 				variant = ""
 			}
-			p.DefaultName = pr.Look.Default()
+			p.DefaultName, p.PictureName = pr.Look.Default(), pr.Look.PictureName
 			p.Look = strings.TrimSuffix(pr.Look.Appearance, ".")
 			if hair != "" {
 				p.Look += ", " + hair
