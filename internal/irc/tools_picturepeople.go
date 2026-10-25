@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/alexschlessinger/pollytool/tools"
@@ -39,6 +40,9 @@ const (
 	maxPicturePeople = 10
 	maxLooks         = 2
 	maxLookChars     = 300
+	// promptAltWithin is how near their name an alt the model wrote must be ("bob dressed in her
+	// villainess gown"); further off it was the scene.
+	promptAltWithin = 4
 )
 
 func (p *PicturePeopleTool) Execute(ctx context.Context, args map[string]any) (string, error) {
@@ -72,12 +76,101 @@ func (p *PicturePeopleTool) Execute(ctx context.Context, args map[string]any) (s
 			}
 		}
 		request := speakerNamed(selfNamed(asked, self), chatCtx.GetSource())
-		if who := PicturePeople(chatCtx.GetNetwork(), prompt, request, chatCtx.GetConfig().Bot.LoreFadeDays, time.Now()); who != "" {
+		network, key := chatCtx.GetNetwork(), chatCtx.GetLockKey()+"\x00"+strings.ToLower(chatCtx.GetSource())
+		earlier := ""
+		if namesSomeone(network, request) {
+			lastAsked.keep(key, request, time.Now())
+		} else if earlier = lastAsked.get(key, time.Now()); earlier != "" {
+			// "try that image request again" names nobody; the request before it said who and in what.
+			args["request"] = earlier + "\n" + asked
+		}
+		if rewritten := unaskedSelf(network, prompt, strings.TrimSpace(earlier+"\n"+request), self, chatCtx.GetSource()); rewritten != prompt {
+			chatCtx.GetLogger().Info("picture_self_unasked", "prompt", rewritten)
+			prompt = rewritten
+			args["prompt"] = prompt
+		}
+		if who := PicturePeople(network, prompt, request, earlier, chatCtx.GetConfig().Bot.LoreFadeDays, time.Now()); who != "" {
 			args["people"] = who
 		}
 	}
 	return p.Tool.Execute(ctx, args)
 }
+
+// lastAsked is each asker's last picture request that named someone, per conversation, for an hour.
+var lastAsked = &askedStore{m: map[string]askedAt{}}
+
+type askedStore struct {
+	mu sync.Mutex
+	m  map[string]askedAt
+}
+
+type askedAt struct {
+	text string
+	at   time.Time
+}
+
+func (s *askedStore) keep(key, text string, now time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.m[key] = askedAt{text, now}
+}
+
+func (s *askedStore) get(key string, now time.Time) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if a, ok := s.m[key]; ok && now.Sub(a.at) < time.Hour {
+		return a.text
+	}
+	return ""
+}
+
+// namesSomeone reports whether text names someone memory knows, other than those in except.
+func namesSomeone(network, text string, except ...string) bool {
+	store, err := core.Memories()
+	if err != nil {
+		return false
+	}
+	names, _ := store.Mentioned(network, text, except)
+	return len(names) > 0
+}
+
+// youWord is "you" as someone in the picture, not "can you draw".
+var youWord = regexp.MustCompile(`(?i)(\b\w+\s+)?\byou\b`)
+
+// unaskedSelf is the prompt without the bot where a request naming others didn't ask for her: for
+// "villainess bob, retainer carol and office me" she added herself as a fourth. With the asker in the
+// request and her in the prompt in their place, she wrote herself for "me": their name goes in.
+func unaskedSelf(network, prompt, request, self, speaker string) string {
+	if self == "" || !namesSomeone(network, request, self) {
+		return prompt
+	}
+	selfWord := regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(self) + `\b`)
+	if selfWord.MatchString(request) || !selfWord.MatchString(prompt) {
+		return prompt
+	}
+	for _, m := range youWord.FindAllStringSubmatch(request, -1) {
+		switch strings.ToLower(strings.TrimSpace(m[1])) {
+		case "can", "could", "would", "will", "do", "did", "are", "thank", "if", "should", "have", "when":
+		default:
+			return prompt
+		}
+	}
+	speakerWord := regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(speaker) + `\b`)
+	if speaker != "" && speakerWord.MatchString(request) && !speakerWord.MatchString(prompt) {
+		return selfWord.ReplaceAllLiteralString(prompt, speaker)
+	}
+	var kept strings.Builder
+	for _, clause := range clauseWord.FindAllString(prompt, -1) {
+		if selfWord.MatchString(clause) && !namesSomeone(network, clause, self) {
+			continue
+		}
+		kept.WriteString(clause)
+	}
+	return strings.TrimSpace(kept.String())
+}
+
+// clauseWord is a clause with the punctuation and space after it.
+var clauseWord = regexp.MustCompile(`[^,.;]+[,.;]*\s*`)
 
 // unaskedDrawStyle reports whether style is a drawing style the request doesn't name ("pc-98" names
 // pc98): she put the last picture's style on "draw baremetal". Edit styles are left to the tool.
@@ -150,7 +243,9 @@ func speakerNamed(request, speaker string) string {
 // PicturePerson is one person a picture names, as the picture tool gets them (JSON in "people").
 // Look is set from their profile and goes into the picture word for word; without one, Notes are
 // their look memories, for the prompt writer to use. Aliases are their other names, which the prompt
-// may use too ("alice Ally" drew two women).
+// may use too ("alice Ally" drew two women). Usual is the outfit a variant's replaced, which the model
+// copied into the prompt clause by clause ("deep blue panel hanging down front, golden feathered
+// shoulder pieces, ...") and the prompt writer drew on a second alice.
 type PicturePerson struct {
 	Name    string   `json:"name"`
 	Aliases []string `json:"aliases,omitempty"`
@@ -158,14 +253,16 @@ type PicturePerson struct {
 	Look    string   `json:"look,omitempty"`
 	Outfit  string   `json:"outfit,omitempty"`
 	Variant string   `json:"variant,omitempty"`
+	Usual   string   `json:"usual,omitempty"`
 	Notes   []string `json:"notes,omitempty"`
 }
 
 // PicturePeople describes the people the prompt or request names that memory knows how to draw, as a
 // JSON list; "" when they name nobody known. A profile look wins over look memories, and a variant
-// named with them picks its hair and outfit, the request's ahead of the prompt's: the prompt the model
-// wrote called bob a chef when the asker said heist.
-func PicturePeople(network, prompt, request string, fadeDays int, now time.Time) string {
+// named with them picks its hair and outfit: the request's, then the earlier request's (for "try that
+// again"), then the prompt's beside their name. The prompt the model wrote called bob a chef when the
+// asker said heist, and opened on "a sleek modern office" when they said villainess.
+func PicturePeople(network, prompt, request, earlier string, fadeDays int, now time.Time) string {
 	store, err := core.Memories()
 	text := prompt + "\n" + request
 	if err != nil || strings.TrimSpace(text) == "" {
@@ -191,15 +288,21 @@ func PicturePeople(network, prompt, request string, fadeDays int, now time.Time)
 		}
 		if ok && pr.Look.Set() {
 			names := append([]string{name}, pr.Aliases...)
-			hair, outfit, variant := pr.Look.For(request, names...)
+			hair, outfit, variant := pr.Look.For(request, 0, names...)
 			if variant == "" {
-				hair, outfit, variant = pr.Look.For(prompt, names...)
+				hair, outfit, variant = pr.Look.For(earlier, 0, names...)
+			}
+			if variant == "" {
+				hair, outfit, variant = pr.Look.For(prompt, promptAltWithin, names...)
 			}
 			p.Look = strings.TrimSuffix(pr.Look.Appearance, ".")
 			if hair != "" {
 				p.Look += ", " + hair
 			}
 			p.Outfit, p.Variant = outfit, variant
+			if outfit != pr.Look.Outfit {
+				p.Usual = pr.Look.Outfit
+			}
 		} else if mems, meta, err := store.RankedFor(network, name, fadeDays, 50, now); err == nil {
 			for _, m := range core.OfKind(mems, meta, core.KindLook) {
 				if m.Subject != name || len(p.Notes) == maxLooks {

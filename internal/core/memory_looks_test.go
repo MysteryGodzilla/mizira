@@ -47,7 +47,7 @@ func TestLooks(t *testing.T) {
 		"bob with her hair in a bun":           {"lavender hair in a neat low bun", look.Outfit, "bun"},
 		"bob, bunny ears":                      {look.Hair, look.Outfit, ""},
 	} {
-		h, o, v := bob.Look.For(text)
+		h, o, v := bob.Look.For(text, 0)
 		if [3]string{h, o, v} != want {
 			t.Errorf("For(%q) = %q, %q, %q", text, h, o, v)
 		}
@@ -59,8 +59,18 @@ func TestLooks(t *testing.T) {
 		"bun hair carol, bob in her business look":          "business",
 		"carol in her business look":                        "",
 	} {
-		if _, _, v := bob.Look.For(text, "bob"); v != want {
+		if _, _, v := bob.Look.For(text, 0, "bob"); v != want {
 			t.Errorf("For(%q, bob) = %q, want %q", text, v, want)
+		}
+	}
+	// In a prompt the model wrote, "a sleek modern business office at night" named the scene.
+	for text, want := range map[string]string{
+		"a sleek modern business office at night with neon lights, bob leaning back": "",
+		"bob dressed in her business suit at a desk":                                 "business",
+		"business bob at a desk":                                                     "business",
+	} {
+		if _, _, v := bob.Look.For(text, 4, "bob"); v != want {
+			t.Errorf("For(%q, 4, bob) = %q, want %q", text, v, want)
 		}
 	}
 

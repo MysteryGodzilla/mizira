@@ -34,11 +34,11 @@ func TestPicturePeople(t *testing.T) {
 		store.Forget(net, lore)
 	})
 
-	got := PicturePeople(net, "bobby and carol at the beach, dave waving", "", 45, time.Now())
+	got := PicturePeople(net, "bobby and carol at the beach, dave waving", "", "", 45, time.Now())
 	if got != bobFemale+`,"notes":["bob's avatar has long silver hair and a red ribbon"]}]` {
 		t.Errorf("people = %q", got)
 	}
-	if got := PicturePeople(net, "a cat on a windowsill", "", 45, time.Now()); got != "" {
+	if got := PicturePeople(net, "a cat on a windowsill", "", "", 45, time.Now()); got != "" {
 		t.Errorf("nobody named = %q", got)
 	}
 
@@ -112,11 +112,11 @@ func TestPicturePeopleProfileLook(t *testing.T) {
 	t.Cleanup(func() { store.DeleteProfile(net, "carol"); store.Forget(net, mem) })
 
 	var got []PicturePerson
-	if err := json.Unmarshal([]byte(PicturePeople(net, "carol in her business look at a desk", "", 45, time.Now())), &got); err != nil || len(got) != 1 {
+	if err := json.Unmarshal([]byte(PicturePeople(net, "carol in her business look at a desk", "", "", 45, time.Now())), &got); err != nil || len(got) != 1 {
 		t.Fatalf("people = %v, %v", got, err)
 	}
-	want := PicturePerson{Name: "carol", DrawnAs: "female", Look: "adult woman, green eyes, short lavender bob", Outfit: "charcoal blazer", Variant: "business"}
-	if got[0].Name != want.Name || got[0].Look != want.Look || got[0].Outfit != want.Outfit || got[0].Variant != want.Variant || len(got[0].Notes) != 0 {
+	want := PicturePerson{Name: "carol", DrawnAs: "female", Look: "adult woman, green eyes, short lavender bob", Outfit: "charcoal blazer", Variant: "business", Usual: "lilac cardigan"}
+	if got[0].Name != want.Name || got[0].Look != want.Look || got[0].Outfit != want.Outfit || got[0].Variant != want.Variant || got[0].Usual != want.Usual || len(got[0].Notes) != 0 {
 		t.Errorf("carol = %+v, want %+v (no look memories)", got[0], want)
 	}
 }
@@ -136,7 +136,7 @@ func TestPicturePeopleVariantPerPerson(t *testing.T) {
 
 	outfits := func(prompt, request string) map[string]string {
 		var got []PicturePerson
-		json.Unmarshal([]byte(PicturePeople(net, prompt, request, 45, time.Now())), &got)
+		json.Unmarshal([]byte(PicturePeople(net, prompt, request, "", 45, time.Now())), &got)
 		out := map[string]string{}
 		for _, p := range got {
 			out[p.Name] = p.Outfit
@@ -205,6 +205,8 @@ func TestPictureStyleNeedsAsking(t *testing.T) {
 	sha := strings.Repeat("a", 64)
 	t.Setenv("IMAGE_STYLES", "pc98 | draw | 0.8 cfg 2.5 | pc98dither | PC-98 art | https://civitai.com/p | "+sha+"\n"+
 		"clay | edit | 1 | Turn it into clay | clay figure | https://huggingface.co/c | "+sha)
+	// Another test's request would be this asker's earlier one.
+	lastAsked = &askedStore{m: map[string]askedAt{}}
 	rec := &argsRecorder{}
 	for _, c := range []struct {
 		request []string
@@ -252,6 +254,63 @@ func TestPictureStyleAskedForWins(t *testing.T) {
 		NewPicturePeopleTool(rec).Execute(InjectContext(context.Background(), asked), args)
 		if got, _ := rec.got["style"].(string); got != c.want {
 			t.Errorf("%q with style %q: style = %q, want %q", c.request, c.style, got, c.want)
+		}
+	}
+}
+
+// She added herself to pictures nobody asked her into ("villainess carol, guard dave and office me"
+// came out with four), and once drew herself for the asker's "me".
+func TestUnaskedSelf(t *testing.T) {
+	const net = "picture-self"
+	store, _ := core.Memories()
+	for _, s := range []string{"carol", "dave", "alice", "metald"} {
+		store.SetProfile(net, core.Profile{Subject: s, Pronouns: "she/her"})
+	}
+	t.Cleanup(func() {
+		for _, s := range []string{"carol", "dave", "alice", "metald"} {
+			store.DeleteProfile(net, s)
+		}
+	})
+	for _, c := range []struct{ prompt, request, want string }{
+		{"carol in the middle, dave at her side, metald sitting at a desk with tea. alice bowing.",
+			"draw villainess carol, guard dave and office alice",
+			"carol in the middle, dave at her side, alice bowing."},
+		{"metald streetwear look with a hoodie in an alley", "draw alice streetwear look",
+			"alice streetwear look with a hoodie in an alley"},
+		{"metald and carol having tea", "can you draw carol having tea with alice", "alice and carol having tea"},
+		{"metald and carol having tea", "you and carol having tea", "metald and carol having tea"},
+		{"metald and carol having tea", "draw yourself, metald, and carol", "metald and carol having tea"},
+		{"metald in a garden", "draw something cute", "metald in a garden"},
+		{"metald hugging carol, alice waving", "draw carol and alice", "metald hugging carol, alice waving"},
+	} {
+		if got := unaskedSelf(net, c.prompt, c.request, "metald", "alice"); got != c.want {
+			t.Errorf("%q / %q:\n got %q\nwant %q", c.prompt, c.request, got, c.want)
+		}
+	}
+}
+
+// "try that image request again" named nobody, and her retry drew carol in the alt the scene named.
+func TestPicturePeopleEarlierRequest(t *testing.T) {
+	const net = "picture-earlier"
+	store, _ := core.Memories()
+	store.SetProfile(net, core.Profile{Subject: "carol", Pronouns: "she/her"})
+	store.SetLook(net, "carol", core.Look{Appearance: "adult woman", Outfit: "white t-shirt", Variants: []core.LookVariant{
+		{Name: "office", Outfit: "grey blazer"}, {Name: "villainess", Outfit: "purple gown"}}}, "")
+	t.Cleanup(func() { store.DeleteProfile(net, "carol") })
+
+	now := time.Now()
+	asked := &askedStore{m: map[string]askedAt{}}
+	asked.keep("k", "draw villainess carol at night", now)
+	earlier := asked.get("k", now.Add(10*time.Minute))
+	if asked.get("k", now.Add(2*time.Hour)) != "" || earlier == "" {
+		t.Fatalf("kept request: %q", earlier)
+	}
+	prompt := "A sleek modern office at night with neon lights. carol leaning back dramatically in a villainess pose"
+	for _, c := range []struct{ earlier, want string }{{earlier, "purple gown"}, {"", "white t-shirt"}} {
+		var got []PicturePerson
+		json.Unmarshal([]byte(PicturePeople(net, prompt, "try that image request again", c.earlier, 45, now)), &got)
+		if len(got) != 1 || got[0].Outfit != c.want {
+			t.Errorf("earlier %q: %+v, want %q", c.earlier, got, c.want)
 		}
 	}
 }

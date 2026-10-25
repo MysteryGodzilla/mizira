@@ -177,7 +177,9 @@ def check_style(name: str, editing: bool, reference: bool = False, admin: bool =
         # The second picture is fetched from wherever its link points, which shows the bot's address.
         return None, f"Not allowed: {name} is for admins only right now. It isn't a usage limit."
     if style["kind"] == "edit2" and not reference:
-        return None, f"Not done: {name} needs a second picture. Call again with its link as reference_url."
+        # Refused for "switch her outfit to her weekend look", the model drew a new picture instead.
+        return None, (f"Not done: {name} needs a second picture. Call again with its link as reference_url; to put "
+                      "someone in one of their saved looks, edit the picture without a style.")
     if style["kind"] != "edit2" and reference:
         return None, f"Not done: {name} takes one picture; call again without reference_url."
     return style, ""
@@ -492,6 +494,16 @@ def one_name(prompt: str, people: list) -> str:
     return prompt
 
 
+def brackets_dropped(prompt: str, people: list) -> str:
+    """The prompt without the chat model's description in brackets after someone with a set look: their
+    look is added as set, and "alice (a slender elf-eared woman ... in an oversized white tee)" put a
+    second alice in the tee."""
+    for p in people:
+        if p.get("look"):
+            prompt = re.sub(rf"(?i)(?<![\w-])({re.escape(p['name'])})\s*\([^().]*\)", lambda m: m.group(1), prompt)
+    return prompt
+
+
 def kind_named(prompt: str, people: list) -> str:
     """The prompt with "capybara man" as the name of the one whose set look is a humanoid capybara, away
     from their name: in "bob and dave on a bench, ... while capybara man sits beside him" a second
@@ -617,19 +629,19 @@ CLAUSES = re.compile(r"(?<=[,.;:])\s+")
 
 
 def alt_clothes_dropped(prompt: str, request: str, people: list) -> str:
-    """The prompt without clothes it puts on someone in an alt look that the alt doesn't have and the
-    asker didn't name: with alice's villainess alt, the chat model also wrote "alice smirking in an
-    oversized white tee and grey shorts", and a second alice was drawn in them."""
+    """The prompt without the clothes it puts on someone in an alt look, unless the asker named them:
+    the alt's outfit goes to the prompt writer. With alice's villainess alt, the chat model also wrote
+    "alice smirking in an oversized white tee and grey shorts", or her race suit in mint green, and a
+    second alice was drawn in them."""
     asked = set(re.findall(r"[a-z0-9'-]+", request.lower()))
     names = [q["name"] for q in people]
     for p in people:
         if not (p.get("look") and p.get("outfit") and p.get("variant")):
             continue
-        own = set(re.findall(r"[a-z0-9'-]+", p["outfit"].lower()))
 
         def strip(m):
             worn = set(re.findall(r"[a-z0-9'-]+", m.group(0).lower())) & WORN
-            if all(w in own or said(w, asked) for w in worn):
+            if all(said(w, asked) for w in worn):
                 return m.group(0)
             toollog.log_detail("image_gen", f"{p['name']}: clothes not in their {p['variant']} look left out: "
                                             f"{m.group(0).strip()!r}")
@@ -644,9 +656,31 @@ def alt_clothes_dropped(prompt: str, request: str, people: list) -> str:
                     spans.append((s, e))
             for s, e in reversed(spans):
                 part = part[:s] + DRESSED_IN.sub(strip, part[s:e]) + part[e:]
-            parts.append(part)
-        prompt = "".join(parts)
+            parts.append(usual_echo_dropped(part, p, names))
+        prompt = re.sub(r" {2,}", " ", "".join(parts))
     return prompt
+
+
+def usual_echo_dropped(clause: str, p: dict, names: list) -> str:
+    """A clause, or "" when it copies p's usual outfit while they're in an alt (three of its words or
+    more, most of them, from it): "golden feathered shoulder pieces, ornate gold brooch ..." drew a
+    second alice in it. A clause naming p is cut back to their name."""
+    words = [w for w in re.findall(r"[a-z][a-z'-]{2,}", clause.lower()) if w not in ECHO_SKIP]
+    named = [n for n in names if n.lower() in words]
+    words = [w for w in words if w not in {n.lower() for n in names}]
+    usual = set(re.findall(r"[a-z][a-z'-]{2,}", (p.get("usual") or "").lower()))
+    echoed = [w for w in words if w in usual]
+    if len(echoed) < 3 or len(echoed) < 0.7 * len(words) or (named and named != [p["name"]]):
+        return clause
+    toollog.log_detail("image_gen", f"{p['name']}: their usual outfit left out: {clause.strip()!r}")
+    if named:
+        return p["name"] + re.search(r"[,.;:]?\s*$", clause).group(0)
+    return ""
+
+
+# Words too common to tell whose outfit a clause copies.
+ECHO_SKIP = {"the", "and", "with", "from", "down", "over", "under", "into", "onto", "her", "his", "their", "its",
+             "has", "have", "wearing", "wears", "set", "one", "side", "small", "large"}
 
 
 JOINED = re.compile(r"(?i)[\s,&]*(?:(?:and|both)\b[\s,&]*)*")
@@ -854,7 +888,7 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
         if reference is None:
             return why_not
     named = parse_people(people)
-    prompt = named_first(one_name(kind_named(prompt, named), named), named)
+    prompt = brackets_dropped(named_first(one_name(kind_named(prompt, named), named), named), named)
     if not source:
         prompt = alt_clothes_dropped(unasked_clothes_dropped(prompt, request, named), request, named)
         named = outfit_from_prompt(prompt, outfit_from_request(named, request))
