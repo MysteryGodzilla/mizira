@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/alexschlessinger/pollytool/tools"
 
@@ -207,13 +208,15 @@ func saysStyle(request, style string) bool {
 	return regexp.MustCompile(`\b` + regexp.QuoteMeta(style) + `\b`).MatchString(said)
 }
 
-// selfNamed is a request with the bot's name once less, as that one addressed it, and with "yourself"
-// as the bot's name.
+// selfNamed is a request with the bot's name once less, as that one addressed it (said twice running,
+// "mizira mizira now draw bob", both: the second put her in the picture), and with "yourself" as the
+// bot's name.
 func selfNamed(request, bot string) string {
 	if bot == "" {
 		return request
 	}
-	if loc := regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(bot) + `\b`).FindStringIndex(request); loc != nil {
+	name := `\b` + regexp.QuoteMeta(bot) + `\b`
+	if loc := regexp.MustCompile(`(?i)` + name + `(?:[\s,.:;!~]+` + name + `)*`).FindStringIndex(request); loc != nil {
 		request = request[:loc[0]] + request[loc[1]:]
 	}
 	return yourself.ReplaceAllString(request, bot)
@@ -254,7 +257,10 @@ type PicturePerson struct {
 	Outfit  string   `json:"outfit,omitempty"`
 	Variant string   `json:"variant,omitempty"`
 	Usual   string   `json:"usual,omitempty"`
-	Notes   []string `json:"notes,omitempty"`
+	// UsualHair is the hair a variant's replaced, which the model copied in too: "very long wavy hair" with
+	// her ponytail alt.
+	UsualHair string   `json:"usual_hair,omitempty"`
+	Notes     []string `json:"notes,omitempty"`
 }
 
 // PicturePeople describes the people the prompt or request names that memory knows how to draw, as a
@@ -294,6 +300,10 @@ func PicturePeople(network, prompt, request, earlier string, fadeDays int, now t
 			}
 			if variant == "" {
 				hair, outfit, variant = pr.Look.For(prompt, promptAltWithin, names...)
+				if variant != "" && outfitSays(pr.Look.Outfit, variant) {
+					// "remy a rat chef" described his default chef's jacket, and drew his chef alt.
+					hair, outfit, variant = pr.Look.Hair, pr.Look.Outfit, ""
+				}
 			}
 			p.Look = strings.TrimSuffix(pr.Look.Appearance, ".")
 			if hair != "" {
@@ -302,6 +312,9 @@ func PicturePeople(network, prompt, request, earlier string, fadeDays int, now t
 			p.Outfit, p.Variant = outfit, variant
 			if outfit != pr.Look.Outfit {
 				p.Usual = pr.Look.Outfit
+			}
+			if hair != pr.Look.Hair {
+				p.UsualHair = pr.Look.Hair
 			}
 		} else if mems, meta, err := store.RankedFor(network, name, fadeDays, 50, now); err == nil {
 			for _, m := range core.OfKind(mems, meta, core.KindLook) {
@@ -324,6 +337,13 @@ func PicturePeople(network, prompt, request, earlier string, fadeDays int, now t
 	}
 	b, _ := json.Marshal(out)
 	return string(b)
+}
+
+// outfitSays reports whether outfit has word as a word of its own ("chef's jacket" has chef).
+func outfitSays(outfit, word string) bool {
+	return slices.Contains(strings.FieldsFunc(strings.ToLower(outfit), func(r rune) bool {
+		return !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-')
+	}), strings.ToLower(word))
 }
 
 // drawnAs is the gender a person's picture shows, from the first of their avatar's pronouns, or their

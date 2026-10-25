@@ -21,7 +21,8 @@ that order matters.
 ### In Go (`PicturePeopleTool.Execute`)
 
 1. `request` is the asker's own words. "me"/"myself" become the asker's nick when they're in the
-   picture (`speakerNamed`), and the bot's name is dropped once, where it was used to address her (`selfNamed`).
+   picture (`speakerNamed`), and the bot's name is dropped once, where it was used to address her
+   (`selfNamed`; said twice running, "mizira mizira draw ...", both go).
 2. Style: if the request names a style, it replaces whatever the model chose (`namedStyle`). A draw
    style the request doesn't name is dropped (`unaskedDrawStyle`), since the model carries the last
    picture's style over.
@@ -38,7 +39,8 @@ that order matters.
 
    A variant is taken from the request first, then the earlier request, then the prompt. From the
    prompt, it only counts within 4 words of the person's name, because further away the word was
-   part of the scene.
+   part of the scene, and not when the word is in their default outfit ("a rat chef" for someone
+   whose own outfit is a chef's jacket isn't their chef alt).
 
 ### In Python (`draw`)
 
@@ -49,13 +51,18 @@ that order matters.
    - `named_first`: "woman (alice)" becomes "alice (woman)".
    - `brackets_dropped`: removes the model's own description in brackets.
 3. Clothes, for new pictures only:
+   - `look_echo_dropped`: removes clauses that copy the look of the person being described. The look
+     goes in once, at the name; a copy made the prompt writer draw that description as a second person.
    - `unasked_clothes_dropped`: removes clothes and hairdos the model made up and the asker never named.
+     A clause with a role the asker put before a name (`themes`: "volleyball bob") stays.
    - `outfit_from_request`: clothes the asker named replace the set outfit ("bob in a raincoat").
    - `COSTUME` ("as a pirate", "dressed up as", "cosplay") → `outfit_from_prompt`: the costume the
-     model wrote is the one that was asked for.
+     model wrote is the one that was asked for. `outfit_from_theme` does the same for a role.
    - `worn_dropped`: removes "wearing ..." from anyone whose set outfit stands. Within it,
      `usual_echo_dropped` removes the default outfit when the model copied it next to a variant.
-4. `refined_with_names`: the prompt writer expands the prompt. If it drops someone's name, it is asked
+4. `refined_with_names`: the prompt writer expands the prompt. An art style the asker named that
+   isn't a configured style (`asked_style`: "soft pastel style") reaches it like a style, without a
+   LoRA; otherwise it draws its default style. If it drops someone's name, it is asked
    once more; after that, the prompt is used as written.
 5. `bind_looks` puts each look right after its person's first mention. `IMAGE_PROMPT_CHARACTERS`
    lists anyone the prompt doesn't name.
