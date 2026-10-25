@@ -27,11 +27,13 @@ type ProfileView struct {
 // LookView is how someone is drawn: appearance word for word, default hair and outfit, a reference
 // picture, and variants that swap hair or outfit when named.
 type LookView struct {
-	Appearance string            `json:"appearance"`
-	Hair       string            `json:"hair"`
-	Outfit     string            `json:"outfit"`
-	Reference  string            `json:"reference"`
-	Variants   []LookVariantView `json:"variants"`
+	Appearance string `json:"appearance"`
+	Hair       string `json:"hair"`
+	Outfit     string `json:"outfit"`
+	// DefaultName is what a request calls the default hair and outfit; blank is "casual".
+	DefaultName string            `json:"default_name"`
+	Reference   string            `json:"reference"`
+	Variants    []LookVariantView `json:"variants"`
 }
 
 // LookVariantView is one named variant of a look.

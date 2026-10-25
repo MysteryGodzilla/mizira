@@ -57,16 +57,16 @@ func TestImageLooksCommand(t *testing.T) {
 
 	for args, want := range map[string][]string{
 		"": {
-			"picture looks: carol (office, bun), dave",
+			"picture looks: carol (casual, office, bun), dave (casual)",
 			`name a look when asking, e.g. "draw carol in the office look"; ~image looks <name> shows what each one is`,
 		},
 		"Caz": {
-			"carol, default: a white t-shirt and grey shorts",
+			"carol, casual (the default): a white t-shirt and grey shorts",
 			"office: a charcoal blazer",
 			"bun: hair: a messy bun",
-			`ask e.g. "draw carol in the office look"`,
+			`ask e.g. "draw carol in the office look", or "casual carol" for the default`,
 		},
-		"dave": {"dave, default: no set outfit, dressed as asked"},
+		"dave": {"dave, casual (the default): no set outfit, dressed as asked"},
 		"erin": {"erin has no picture look set; pictures of them go by their look memories"},
 	} {
 		ctx := mocktest.NewMockContext().WithArgs(append([]string{"~image", "looks"}, strings.Fields(args)...)...)

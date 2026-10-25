@@ -259,8 +259,10 @@ type PicturePerson struct {
 	Usual   string   `json:"usual,omitempty"`
 	// UsualHair is the hair a variant's replaced, which the model copied in too: "very long wavy hair" with
 	// her ponytail alt.
-	UsualHair string   `json:"usual_hair,omitempty"`
-	Notes     []string `json:"notes,omitempty"`
+	UsualHair string `json:"usual_hair,omitempty"`
+	// DefaultName is what their default outfit is called ("casual"), so "her casual outfit" isn't new clothes.
+	DefaultName string   `json:"default_name,omitempty"`
+	Notes       []string `json:"notes,omitempty"`
 }
 
 // PicturePeople describes the people the prompt or request names that memory knows how to draw, as a
@@ -300,11 +302,16 @@ func PicturePeople(network, prompt, request, earlier string, fadeDays int, now t
 			}
 			if variant == "" {
 				hair, outfit, variant = pr.Look.For(prompt, promptAltWithin, names...)
-				if variant != "" && outfitSays(pr.Look.Outfit, variant) {
+				if variant != "" && variant != pr.Look.Default() && outfitSays(pr.Look.Outfit, variant) {
 					// "remy a rat chef" described his default chef's jacket, and drew his chef alt.
 					hair, outfit, variant = pr.Look.Hair, pr.Look.Outfit, ""
 				}
 			}
+			if variant == pr.Look.Default() {
+				// Named on purpose ("casual hori"), the defaults stand over an earlier request's alt.
+				variant = ""
+			}
+			p.DefaultName = pr.Look.Default()
 			p.Look = strings.TrimSuffix(pr.Look.Appearance, ".")
 			if hair != "" {
 				p.Look += ", " + hair

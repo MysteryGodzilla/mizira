@@ -575,7 +575,8 @@ def outfit_from_request(people: list, request: str) -> list:
     jersey") and no variant: given both, the prompt writer kept her thigh-high socks under the jersey,
     and once drew "two people on a plush couch"."""
     words = re.findall(r"[a-z0-9'-]+", request.lower())
-    alts = {p["variant"] for p in people if p.get("variant")}
+    # "her casual outfit" names the default ("casual" unless the look calls it something else).
+    alts = {p[k] for p in people for k in ("variant", "default_name") if p.get(k)}
     if not (any(said(w, set(words)) for w in OUTFIT_WORDS) or says_outfit(words, alts)):
         return people
     out = []
@@ -596,7 +597,7 @@ def outfit_from_prompt(prompt: str, people: list) -> list:
         if p.get("look") and p.get("outfit") and not p.get("variant"):
             words = worn_by(prompt, p["name"], [q["name"] for q in people])
             new = set(words) & OUTFIT_WORDS - set(re.findall(r"[a-z0-9'-]+", p["outfit"].lower()))
-            if new or says_outfit(words):
+            if new or says_outfit(words, {p.get("default_name") or ""}):
                 toollog.log_detail("image_gen", f"{p['name']}: the prompt's clothes, not the set outfit")
                 p = dict(p, outfit="")
         out.append(p)
@@ -748,7 +749,7 @@ def outfit_from_theme(prompt: str, people: list, themed: dict) -> list:
         role = themed.get(p["name"])
         for part in CLAUSES.split(prompt) if role else []:
             words = re.findall(r"[a-z0-9'-]+", part.lower())
-            if role in words and (set(words) & WORN or says_outfit(words)):
+            if role in words and (set(words) & WORN or says_outfit(words, {p.get("default_name") or ""})):
                 toollog.log_detail("image_gen", f"{p['name']}: clothes for {role!r}, not the set outfit")
                 p = dict(p, outfit="")
                 break
@@ -830,7 +831,7 @@ def dressed(change: str, people: list) -> str:
     if len(looks) != 1 or not says_nothing(change):
         return change
     p = looks[0]
-    if not (words & CLOTHES_WORDS or p.get("variant") in words):
+    if not (words & CLOTHES_WORDS or {p.get("variant"), p.get("default_name")} & words):
         return change
     if len(people) > 1 and p["name"].lower() not in words:
         return change

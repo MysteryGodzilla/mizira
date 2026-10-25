@@ -685,6 +685,18 @@ class RunPodImageTests(unittest.TestCase):
         self.assertTrue(reply.startswith("url: "), reply)
         self.assertIn("Art style: soft pastel", seen[0])
 
+    def test_the_default_by_name_is_the_set_outfit(self):
+        # The bot passes what the default outfit is called; "her casual outfit" isn't new clothes.
+        alice = {"name": "alice", "look": "adult woman", "outfit": "a lavender hoodie", "default_name": "casual",
+                 "drawn_as": "female"}
+        for request in ("draw alice in her casual outfit", "draw casual alice at the park"):
+            self.assertEqual(imagegen.outfit_from_request([alice], request)[0]["outfit"], alice["outfit"], request)
+        self.assertEqual(imagegen.outfit_from_request([alice], "draw alice in a ravens jersey")[0]["outfit"], "")
+        self.assertEqual(imagegen.outfit_from_prompt("alice in her casual outfit at the park", [alice])[0]["outfit"],
+                         alice["outfit"])
+        self.assertEqual(imagegen.dressed("alice back in casual", [alice]),
+                         "Change her outfit to a lavender hoodie. alice back in casual")
+
     def test_role_before_a_name_dresses_them(self):
         # "volleyball bob": the chat model gave him a volleyball uniform, and he played in his apron.
         bob = {"name": "bob", "look": "adult rat man", "outfit": "a black apron"}

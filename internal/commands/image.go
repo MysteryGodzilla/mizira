@@ -100,17 +100,13 @@ func lookLines(profiles []core.Profile, people core.People, name, prefix string)
 			if !p.Look.Set() {
 				continue
 			}
-			var names []string
+			names := []string{p.Look.Default()}
 			for _, v := range p.Look.Variants {
 				names = append(names, v.Name)
 			}
-			if len(names) == 0 {
-				parts = append(parts, p.Subject)
-				continue
-			}
 			parts = append(parts, p.Subject+" ("+strings.Join(names, ", ")+")")
-			if example == "" {
-				example = `"draw ` + p.Subject + ` in the ` + names[0] + ` look"`
+			if example == "" && len(names) > 1 {
+				example = `"draw ` + p.Subject + ` in the ` + names[1] + ` look"`
 			}
 		}
 		if len(parts) == 0 {
@@ -130,7 +126,7 @@ func lookLines(profiles []core.Profile, people core.People, name, prefix string)
 	if outfit == "" {
 		outfit = "no set outfit, dressed as asked"
 	}
-	out := []string{p.Subject + ", default: " + truncateText(outfit, 200)}
+	out := []string{p.Subject + ", " + p.Look.Default() + " (the default): " + truncateText(outfit, 200)}
 	for _, v := range p.Look.Variants {
 		var about []string
 		if v.Outfit != "" {
@@ -142,7 +138,8 @@ func lookLines(profiles []core.Profile, people core.People, name, prefix string)
 		out = append(out, v.Name+": "+truncateText(strings.Join(about, "; "), 200))
 	}
 	if len(p.Look.Variants) > 0 {
-		out = append(out, `ask e.g. "draw `+p.Subject+` in the `+p.Look.Variants[0].Name+` look"`)
+		out = append(out, `ask e.g. "draw `+p.Subject+` in the `+p.Look.Variants[0].Name+` look", or "`+
+			p.Look.Default()+` `+p.Subject+`" for the default`)
 	}
 	return out
 }

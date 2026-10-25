@@ -81,7 +81,7 @@ export interface Profile {
 }
 
 export interface LookVariant { name: string; hair: string; outfit: string }
-export interface Look { appearance: string; hair: string; outfit: string; reference: string; variants: LookVariant[] }
+export interface Look { appearance: string; hair: string; outfit: string; default_name?: string; reference: string; variants: LookVariant[] }
 
 // Mirrors internal/admin/mz_selfnotes.go.
 
