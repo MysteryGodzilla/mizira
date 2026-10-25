@@ -391,6 +391,9 @@ class RunPodImageTests(unittest.TestCase):
              [{"name": "hori", "look": "adult woman", "outfit": "a white t-shirt"}],
              "hori wearing a red dress, at the top of the steps"),
             (made_up, "", alt, made_up),
+            ("alice streetwear look with tech print, side buns peeking out from hood, holding a console",
+             "draw alice streetwear look", [{"name": "alice", "look": "adult woman", "outfit": "a lavender hoodie"}],
+             "alice streetwear look with tech print, holding a console"),
             (made_up, "draw remy", [{"name": "remy", "notes": ["grey rat"]}], made_up),
         ]:
             self.assertEqual(imagegen.unasked_clothes_dropped(prompt, request, people), want, request)
@@ -470,12 +473,12 @@ class RunPodImageTests(unittest.TestCase):
              "alice wearing a red dress at a party"),
             ("carol in jeans waving, alice in the kitchen", "draw carol and alice", "carol in jeans waving, alice in the kitchen"),
         ]:
-            self.assertEqual(imagegen.alt_clothes_dropped(prompt, request, [alice, bob]), want, prompt)
+            self.assertEqual(imagegen.worn_dropped(prompt, request, [alice, bob]), want, prompt)
         # She described the usual robe clause by clause; a second figure wore the alt.
         carol = {"name": "carol", "look": "adult woman", "outfit": "a cream sweater and navy skirt", "variant": "weekend",
                  "usual": ("a flowing white robe with wide bell sleeves trimmed in gold, a deep blue panel hanging down "
                            "the front from a V-neck collar, golden feathered shoulder pieces, an ornate gold brooch")}
-        self.assertEqual(imagegen.alt_clothes_dropped(
+        self.assertEqual(imagegen.worn_dropped(
             "carol with wide bell sleeves trimmed in gold, deep blue panel hanging down front from V-neck collar, "
             "golden feathered shoulder pieces, reading under a deep blue night sky, bob waving", "carol and bob",
             [carol, bob]), "carol, reading under a deep blue night sky, bob waving")
@@ -499,16 +502,42 @@ class RunPodImageTests(unittest.TestCase):
             ("alice on a bridge. The dress is red.", [alice], [alice["outfit"]]),
         ]:
             self.assertEqual([p["outfit"] for p in imagegen.outfit_from_prompt(prompt, people)], outfits, prompt)
-        seen = []
-        with patch.object(imagegen, "PEOPLE_FRAME", "People: {people}"), \
-                patch.object(imagegen, "refine_prompt", REFINE_PROMPT), \
-                patch.object(imagegen.chat, "endpoint", lambda name: {"url": "", "model": "", "key": ""}), \
-                patch.object(imagegen, "_refine", lambda text, *a: seen.append(text) or "alice in a gown"), \
-                patch.object(runpod, "run", lambda *a, **k: {"images": [b"png"], "texts": ["SAFE"]}):
-            reply = imagegen.generate_image("alice in a fantasy game style dress at the park", 1024, 1024,
-                                            requested_by="carol", people=json.dumps([alice]), request="draw the picture")
-        self.assertTrue(reply.startswith("url: "), reply)
-        self.assertEqual(seen, ["alice in a fantasy game style dress at the park"])
+        # Asked a message earlier (the bot passes that request on), as a costume, or not at all: only
+        # the clothes the asker wanted replace hers.
+        for prompt, request, want in [
+            ("alice in a fantasy game style dress at the park",
+             "draw alice but give her a fantasy game style dress\ndraw the picture",
+             "alice in a fantasy game style dress at the park"),
+            ("alice in a pirate coat and tricorn hat on a ship", "draw alice as a pirate",
+             "alice in a pirate coat and tricorn hat on a ship"),
+            ("alice in an oversized hoodie at the park", "you and alice at the park",
+             "alice at the park\n\nPeople: alice - outfit: " + alice["outfit"]),
+        ]:
+            seen = []
+            with patch.object(imagegen, "PEOPLE_FRAME", "People: {people}"), \
+                    patch.object(imagegen, "refine_prompt", REFINE_PROMPT), \
+                    patch.object(imagegen.chat, "endpoint", lambda name: {"url": "", "model": "", "key": ""}), \
+                    patch.object(imagegen, "_refine", lambda text, *a: seen.append(text) or "alice in a gown"), \
+                    patch.object(imagegen, "PER_HOUR", 0), \
+                    patch.object(runpod, "run", lambda *a, **k: {"images": [b"png"], "texts": ["SAFE"]}):
+                reply = imagegen.generate_image(prompt, 1024, 1024, requested_by="carol", people=json.dumps([alice]),
+                                                request=request)
+            self.assertTrue(reply.startswith("url: "), reply)
+            self.assertEqual(seen, [want], request)
+
+    def test_prompt_writer_keeps_the_names(self):
+        # It wrote "a man ... and a second man" for alice and bob: their looks went on whoever the picture
+        # showed, outfits swapped. Asked again once, then the prompt goes as written.
+        people = [{"name": "alice", "look": "adult woman", "outfit": "a red race suit", "drawn_as": "female"},
+                  {"name": "bob", "look": "adult man", "outfit": "a white robe", "drawn_as": "male"}]
+        for answers, want in [
+            (["a man on a bike and a second man"], "alice on a bike next to bob. alice wears a red race suit. "
+                                                   "bob wears a white robe."),
+            (["a man on a bike", "alice on a bike beside bob"], "alice on a bike beside bob"),
+        ]:
+            replies = iter(answers * 2)
+            with patch.object(imagegen, "refine_prompt", lambda p, people="", style=None: next(replies)):
+                self.assertEqual(imagegen.refined_with_names("alice on a bike next to bob", people), want)
 
     def test_failed_prompt_writer_leaves_its_instructions_out(self):
         # A timed-out prompt writer hands back its input, and its instructions and every outfit were drawn.

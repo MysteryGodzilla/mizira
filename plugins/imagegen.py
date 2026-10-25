@@ -552,7 +552,7 @@ def unasked_clothes_dropped(prompt: str, request: str, people: list) -> str:
     kept, dropped = [], []
     for part in re.split(r"(?<=[,.;:])\s+", prompt):
         words = set(re.findall(r"[a-z0-9'-]+", part.lower()))
-        if any(not said(w, asked) for w in words & WORN) and not any(n in words for n in names):
+        if any(not said(w, asked) for w in words & (WORN | HAIRDOS)) and not any(n in words for n in names):
             dropped.append(part)
         else:
             kept.append(part)
@@ -628,23 +628,22 @@ def said_of(part: str, name: str, names: list) -> list:
 CLAUSES = re.compile(r"(?<=[,.;:])\s+")
 
 
-def alt_clothes_dropped(prompt: str, request: str, people: list) -> str:
-    """The prompt without the clothes it puts on someone in an alt look, unless the asker named them:
-    the alt's outfit goes to the prompt writer. With alice's villainess alt, the chat model also wrote
+def worn_dropped(prompt: str, request: str, people: list) -> str:
+    """The prompt without the clothes it puts on someone whose set outfit stands, unless the asker named
+    them: that outfit goes to the prompt writer. With alice's villainess alt, the chat model also wrote
     "alice smirking in an oversized white tee and grey shorts", or her race suit in mint green, and a
-    second alice was drawn in them."""
+    second alice was drawn in them; given "bob in an oversized hoodie" unasked, bob lost his own outfit."""
     asked = set(re.findall(r"[a-z0-9'-]+", request.lower()))
     names = [q["name"] for q in people]
     for p in people:
-        if not (p.get("look") and p.get("outfit") and p.get("variant")):
+        if not (p.get("look") and p.get("outfit")):
             continue
 
         def strip(m):
             worn = set(re.findall(r"[a-z0-9'-]+", m.group(0).lower())) & WORN
             if all(said(w, asked) for w in worn):
                 return m.group(0)
-            toollog.log_detail("image_gen", f"{p['name']}: clothes not in their {p['variant']} look left out: "
-                                            f"{m.group(0).strip()!r}")
+            toollog.log_detail("image_gen", f"{p['name']}: clothes nobody asked for left out: {m.group(0).strip()!r}")
             return ""
         parts = []
         for part in re.split(r"((?<=[,.;:])\s+)", prompt):
@@ -693,6 +692,15 @@ def says_outfit(words: list, own: set = frozenset()) -> bool:
                for i, w in enumerate(words))
 
 
+# Hair the chat model gave someone with a set look in a clause of its own: "side buns peeking out from
+# hood" was one look's hair put on another.
+HAIRDOS = {"bun", "buns", "ponytail", "ponytails", "pigtails", "twintails", "braid", "braids", "updo", "chignon"}
+
+
+# A request for a costume ("as a pirate", "dressed up as a witch"); its clothes are the chat model's to say.
+COSTUME = re.compile(r"(?i)\b(?:as an?|dressed (?:as|up)|disguised as|costumes?|cosplay(?:ing)?)\b")
+
+
 OWN_OUTFIT = {"her", "his", "their", "my", "your", "our", "own", "usual", "default", "normal", "regular",
               "everyday", "typical", "standard", "signature", "set", "saved"}
 
@@ -707,7 +715,8 @@ OUTFIT_WORDS = GARMENTS - {"hat", "hats", "cap", "beanie", "scarf", "gloves", "t
                            "high-top", "high-tops", "tights", "stockings", "apron", "cape", "cloak", "top", "tops"}
 # "in an oversized white tee and grey shorts": what puts clothes on someone, up to its last garment.
 _WORN = "|".join(sorted(map(re.escape, WORN), key=len, reverse=True))
-DRESSED_IN = re.compile(rf"(?i)\s*\b(?:in|wearing|dressed in|clad in)\s+(?:(?:a|an|her|his|their|the|some)\s+)?"
+# "bob streetwear look - oversized hoodie" is the model's way too.
+DRESSED_IN = re.compile(rf"(?i)\s*(?:\b(?:in|wearing|dressed in|clad in)|\s[-–])\s+(?:(?:a|an|her|his|their|the|some)\s+)?"
                         rf"(?:[\w'-]+\s+){{0,3}}?(?:{_WORN})\b(?:\s*(?:,|and|&)\s*(?:(?:a|an|her|his|their)\s+)?"
                         rf"(?:[\w'-]+\s+){{0,3}}?(?:{_WORN})\b)*")
 
@@ -769,9 +778,32 @@ def refine_prompt(user_prompt: str, people: str = "", style: dict = None) -> str
         # The prompt writer failed (it hands back its input) and its instructions, every outfit
         # included, went into the picture: the request is drawn as written, each set outfit said once.
         toollog.log_detail("image_gen", "prompt writer gave nothing back; drawing the request as written")
-        dressed = [f"{p['name']} wears {p['outfit']}." for p in parsed if p.get("look") and p.get("outfit")]
-        return " ".join([request.rstrip().rstrip(".") + "."] + dressed) if dressed else request
+        return as_written(request, parsed)
     return refined
+
+
+def as_written(prompt: str, people: list) -> str:
+    """The prompt as the chat model wrote it, with each set outfit said once."""
+    dressed = [f"{p['name']} wears {p['outfit']}." for p in people if p.get("look") and p.get("outfit")]
+    return " ".join([prompt.rstrip().rstrip(".") + "."] + dressed) if dressed else prompt
+
+
+def refined_with_names(prompt: str, people: list, style: dict = None) -> str:
+    """The prompt writer's prompt, still naming everyone with a set look the prompt names; asked again
+    once, then the prompt as written. It wrote "a man ... and a second man" for alice and bob, and their
+    looks went on whoever the picture showed, outfits swapped."""
+    named = [p for p in people if p.get("look") and mentions(prompt, p["name"])]
+    for _ in range(2):
+        refined = refine_prompt(prompt, json.dumps(people), style)
+        missing = [p["name"] for p in named if not mentions(refined, p["name"])]
+        if not missing:
+            return refined
+        toollog.log_detail("image_gen", f"prompt writer left out {', '.join(missing)}")
+    return as_written(prompt, people)
+
+
+def mentions(text: str, name: str) -> bool:
+    return re.search(r"(?i)(?<![\w-])" + re.escape(name) + r"(?![\w-])", text) is not None
 
 def review_prompt(prompt: str, edit: bool = False) -> str:
     """Why the request may not be drawn, as the tool's reply, or "" when it may."""
@@ -890,8 +922,12 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
     named = parse_people(people)
     prompt = brackets_dropped(named_first(one_name(kind_named(prompt, named), named), named), named)
     if not source:
-        prompt = alt_clothes_dropped(unasked_clothes_dropped(prompt, request, named), request, named)
-        named = outfit_from_prompt(prompt, outfit_from_request(named, request))
+        prompt = unasked_clothes_dropped(prompt, request, named)
+        named = outfit_from_request(named, request)
+        if COSTUME.search(request):
+            # "draw bob as a pirate": the clothes the chat model gave the pirate are the asked ones.
+            named = outfit_from_prompt(prompt, named)
+        prompt = worn_dropped(prompt, request, named)
     if named:
         toollog.log_detail("image_gen", f"asked for: {prompt[:300]!r}")
         toollog.log_detail("image_gen", "people: " + ", ".join(
@@ -916,7 +952,7 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
         toollog.log_detail("image_gen", f"edit: {final_prompt[:600]!r}")
     else:
         change = ""
-        final_prompt, unbound = bind_looks(refine_prompt(prompt, json.dumps(named), style), named)
+        final_prompt, unbound = bind_looks(refined_with_names(prompt, named, style), named)
         if characters_text(unbound) and CHARACTER_FRAME.strip():
             final_prompt += "\n\n" + CHARACTER_FRAME.strip().replace("{characters}", characters_text(unbound))
         # After binding, so each look still goes on the person in the scene, not in this list.
