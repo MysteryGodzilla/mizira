@@ -47,9 +47,11 @@ func (l Look) Set() bool { return l.Appearance != "" }
 
 // For is the hair and outfit for a picture whose text names one of the variants (a whole word, or
 // with two letters swapped: "buisness"), or the defaults; variant is the one used, or "". Given the
-// person's names, text that doesn't mention them names none of theirs, and of several the one nearest
-// a mention wins: "me in my office look and carol in her villainess dress" is carol's villainess.
-func (l Look) For(text string, names ...string) (hair, outfit, variant string) {
+// person's names, text that doesn't mention them names none of theirs, of several the one nearest a
+// mention wins ("me in my office look and carol in her villainess dress" is carol's villainess), and
+// with within above 0, one further than that many words from a mention doesn't count ("a sleek modern
+// office at night. carol ...").
+func (l Look) For(text string, within int, names ...string) (hair, outfit, variant string) {
 	hair, outfit = l.Hair, l.Outfit
 	words := strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
 		return !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-')
@@ -71,7 +73,11 @@ func (l Look) For(text string, names ...string) (hair, outfit, variant string) {
 			if !sameWord(w, v.Name) {
 				continue
 			}
-			if score := nearness(i, at); best < 0 || score < bestScore {
+			score := nearness(i, at)
+			if within > 0 && score > 2*within {
+				continue
+			}
+			if best < 0 || score < bestScore {
 				best, bestScore = vi, score
 			}
 		}
