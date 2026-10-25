@@ -272,6 +272,7 @@ The sandbox lives in pollytool; see [pollytool's Sandboxing section](https://git
 
 -   [Contributing](docs/contributing.md): adding commands and tools.
 -   [Architecture](docs/architecture.md): how the pieces fit.
+-   [Pictures](docs/pictures.md): how a picture request becomes an image, step by step.
 -   [AGENTS.md](AGENTS.md): repo rules for contributors and coding agents.
 
 ## License
