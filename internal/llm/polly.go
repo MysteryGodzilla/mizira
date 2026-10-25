@@ -518,6 +518,9 @@ func toolDisplayName(name string) string {
 func (h *callbackHandler) onToolStart(calls []messages.ChatMessageToolCall) {
 	h.flush()
 	h.correctToolNames(calls)
+	if n := mergePictureCalls(calls, irc.ClaimTool[irc.ClaimDraw]); n > 0 {
+		h.chatCtx.GetLogger().Info("picture_calls_merged", "merged", n)
+	}
 
 	h.toolCount += len(calls)
 	for _, tc := range calls {
@@ -627,7 +630,7 @@ func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result stri
 		}
 		h.lastToolURL = strings.TrimSpace(firstLine)
 	}
-	if tc.Name == irc.ClaimTool[irc.ClaimDraw] && !strings.HasPrefix(result, irc.OnceRepeated) {
+	if tc.Name == irc.ClaimTool[irc.ClaimDraw] && !strings.HasPrefix(result, irc.OnceRepeated) && !strings.HasPrefix(result, irc.OnceMerged) {
 		h.drawFailed = ""
 		if !made {
 			h.drawFailed = failureReason(result)

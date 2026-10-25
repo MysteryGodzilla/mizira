@@ -161,6 +161,16 @@ func TestOncePerRequestTool(t *testing.T) {
 		t.Errorf("a refusal that isn't fixable was retried: %q", out)
 	}
 
+	// A call folded into the turn's first picture answers so, and doesn't use up the request's run.
+	once4 := NewOncePerRequestTool(&argsRecorder{})
+	ctx4 := InjectContext(context.Background(), mocktest.NewMockContext())
+	if out, _ := once4.Execute(ctx4, map[string]any{MergedArg: true}); !strings.HasPrefix(out, OnceMerged) {
+		t.Errorf("merged call = %q", out)
+	}
+	if out, _ := once4.Execute(ctx4, map[string]any{}); out != "ok" {
+		t.Errorf("the first real call after a merged one = %q", out)
+	}
+
 	now := time.Now()
 	if _, again := once.first("another-request", now); again {
 		t.Fatal("a new request was refused")
