@@ -50,6 +50,9 @@ that order matters.
    - `one_name`: aliases become one name.
    - `named_first`: "woman (alice)" becomes "alice (woman)".
    - `brackets_dropped`: removes the model's own description in brackets.
+   - `gesture_kept`: a middle finger the asker wanted ("flipping off the sunset") goes back in when the
+     chat model softened it away ("watching the sunset", "flipping her hair"). It runs again on the
+     prompt writer's prompt.
 3. Clothes, for new pictures only:
    - `look_echo_dropped`: removes clauses that copy the look of the person being described. The look
      goes in once, at the name; a copy made the prompt writer draw that description as a second person.
