@@ -899,6 +899,35 @@ def refined_with_names(prompt: str, people: list, style: dict = None) -> str:
     return as_written(prompt, people)
 
 
+# A rude gesture the asker wants: "flipping off the sunset", "flip him off", "middle finger", "flip the
+# bird"; "flipping of the view" too, as it was typed.
+RUDE_ASKED = re.compile(r"(?i)\bflip(?:s|ped|ping)?\s+(?:(?:him|her|them|me|you|us|everyone|it)\s+)?"
+                        r"(?:off\b|of\s+(?=the\s+(?:view|viewer|camera)\b|you\b))"
+                        r"|\bmiddle\s+fingers?\b|\bflip(?:s|ped|ping)?\s+the\s+bird\b|\bgiv(?:e|es|ing)\s+(?:\w+\s+)?the\s+finger\b")
+RUDE_SAID = re.compile(r"(?i)middle\s+finger|\bflip(?:s|ped|ping)?\s+(?:\w+\s+){0,3}off\b|\bthe\s+bird\b|\bthe\s+finger\b")
+RUDE_TARGET = re.compile(r"(?i)\s*(?:at\s+)?(the\s+[a-z]+|me|you|us|them|everyone|him|her)\b")
+
+
+def gesture_kept(prompt: str, request: str, people: list) -> str:
+    """The prompt with the middle finger the asker wanted, when it left it out: asked for "me flipping off
+    the sunset", the chat model wrote "standing on a beach watching the sunset", and "flipping off the
+    view" became "flipping her hair"."""
+    m = RUDE_ASKED.search(request or "")
+    if not m or RUDE_SAID.search(prompt):
+        return prompt
+    t = RUDE_TARGET.match(request, m.end())
+    target = t.group(1).lower() if t and m.group(0).lower().rstrip().endswith(("off", "of")) else ""
+    if target in ("", "me", "you", "us", "the view", "the camera"):
+        target = "the viewer"
+    if len(people) == 1:
+        their = {"female": "her", "male": "his"}.get(people[0].get("drawn_as"), "their")
+        gesture = f"{people[0]['name']} raising {their} middle finger at {target}"
+    else:
+        gesture = f"a middle finger raised at {target}"
+    toollog.log_detail("image_gen", f"asked gesture put back: {gesture!r}")
+    return prompt.rstrip(" .,;") + ", " + gesture + "."
+
+
 def as_pictured(people: list) -> list:
     """The people, each with their name in pictures (picture_name) as their name and their own as one of
     their other names, so one_name puts it everywhere: from "MysteryGodzilla" the image model gave her a
@@ -1030,7 +1059,8 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
         if reference is None:
             return why_not
     named = as_pictured(parse_people(people))
-    prompt = brackets_dropped(named_first(one_name(kind_named(prompt, named), named), named), named)
+    prompt = gesture_kept(brackets_dropped(named_first(one_name(kind_named(prompt, named), named), named), named),
+                          request, named)
     if not source:
         themed = themes(request, named)
         prompt = look_echo_dropped(prompt, named)
@@ -1068,7 +1098,8 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
         writer_style = style or asked_style(request)
         if writer_style and not style:
             toollog.log_detail("image_gen", f"asked style, no LoRA: {writer_style['description']!r}")
-        final_prompt, unbound = bind_looks(refined_with_names(prompt, named, writer_style), named)
+        final_prompt, unbound = bind_looks(gesture_kept(refined_with_names(prompt, named, writer_style), request, named),
+                                           named)
         if characters_text(unbound) and CHARACTER_FRAME.strip():
             final_prompt += "\n\n" + CHARACTER_FRAME.strip().replace("{characters}", characters_text(unbound))
         # After binding, so each look still goes on the person in the scene, not in this list.

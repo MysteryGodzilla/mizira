@@ -720,6 +720,34 @@ class RunPodImageTests(unittest.TestCase):
         self.assertIn("Alice (adult woman)", self.sent["4"]["inputs"]["prompt"])
         self.assertNotIn("dragon", self.sent["4"]["inputs"]["prompt"].lower())
 
+    def test_an_asked_middle_finger_is_put_back(self):
+        # Asked for "me flipping off the sunset", the chat model wrote "watching the sunset", and "flipping
+        # of the view" became "flipping her hair".
+        alice = [{"name": "alice", "look": "adult woman", "outfit": "a hoodie", "drawn_as": "female"}]
+        two = alice + [{"name": "bob", "look": "adult man", "outfit": "a coat"}]
+        for prompt, request, people, want in [
+            ("alice on a beach watching the sunset.", "mizira draw me flipping off the sunset classicanime style", alice,
+             "alice on a beach watching the sunset, alice raising her middle finger at the sunset."),
+            ("alice in streetwear flipping her hair", "draw me streetwear look flipping of the view, figure style", alice,
+             "alice in streetwear flipping her hair, alice raising her middle finger at the viewer."),
+            ("alice and bob at the bar", "draw alice and bob giving me the middle finger", two,
+             "alice and bob at the bar, a middle finger raised at the viewer."),
+            ("alice angry, middle finger raised at the viewer", "draw alice flipping me off", alice,
+             "alice angry, middle finger raised at the viewer"),
+            ("alice flipping pancakes", "draw alice flipping pancakes", alice, "alice flipping pancakes"),
+            ("alice reading", "draw alice flipping of pages in a book", alice, "alice reading"),
+        ]:
+            self.assertEqual(imagegen.gesture_kept(prompt, request, people), want, request)
+        # The prompt writer can leave it out too: it goes back on its prompt.
+        sent = {}
+        with patch.object(imagegen, "PER_HOUR", 0), \
+                patch.object(imagegen, "refine_prompt", lambda p, people="", style=None: "alice on a beach at sunset"), \
+                patch.object(runpod, "run", lambda wf, *a, **k: sent.update(wf=wf) or {"images": [b"png"], "texts": ["SAFE"]}):
+            reply = imagegen.generate_image("alice on a beach at sunset", 1024, 1024, requested_by="alice",
+                                            people=json.dumps(alice), request="draw me flipping off the sunset")
+        self.assertTrue(reply.startswith("url: "), reply)
+        self.assertIn("raising her middle finger at the sunset", sent["wf"]["4"]["inputs"]["prompt"])
+
     def test_role_before_a_name_dresses_them(self):
         # "volleyball bob": the chat model gave him a volleyball uniform, and he played in his apron.
         bob = {"name": "bob", "look": "adult rat man", "outfit": "a black apron"}
