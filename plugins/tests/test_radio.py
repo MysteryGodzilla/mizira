@@ -134,5 +134,54 @@ class RadioTest(unittest.TestCase):
         self.assertIn("intro", json.loads(out.getvalue())["required"])
 
 
+def load_guest(server):
+    os.environ.pop("RADIO_TOKEN", None)
+    os.environ.update(RADIO_API_URL=server.url, RADIO_KEY="k3y", RADIO_PAGE_URL="https://example.com/radio/")
+    import radio
+    return importlib.reload(radio)
+
+
+class GuestRadioTest(unittest.TestCase):
+    """With a key for someone else's radio: songs go through its /request, credited to who asked."""
+
+    def tearDown(self):
+        os.environ.pop("RADIO_KEY", None)
+
+    def test_queue_a_link_credits_the_asker(self):
+        srv = FakeServer({"/request": lambda p, b: (200, {"queued": "kernel blues", "position": 3})})
+        self.addCleanup(srv.close)
+        out = load_guest(srv).run({"action": "queue", "url": "https://example.org/a.mp3", "title": "kernel blues",
+                                   "intro": "ignored", "requested_by": "carol"})
+        self.assertEqual(out, 'queued "kernel blues" at position 3. listen: https://example.com/radio/')
+        self.assertEqual(len(srv.seen), 1, "no intro is spoken or pushed")
+        sent = srv.seen[0]
+        self.assertEqual(sent["headers"]["authorization"], "Bearer k3y")
+        self.assertEqual(json.loads(sent["body"]), {"url": "https://example.org/a.mp3", "title": "kernel blues",
+                                                    "lyrics": "", "requested_by": "carol"})
+
+    def test_queue_a_library_song_by_id(self):
+        srv = FakeServer({"/request": lambda p, b: (200, {"queued": "kernel blues", "position": 1})})
+        self.addCleanup(srv.close)
+        load_guest(srv).run({"action": "queue", "song": "k1"})
+        self.assertEqual(json.loads(srv.seen[0]["body"]), {"song": "k1"})
+
+    def test_limits_and_keys(self):
+        srv = FakeServer({"/request": lambda p, b: (429, {"error": "this key already has 3 songs waiting; let them play first"})})
+        self.addCleanup(srv.close)
+        self.assertEqual(load_guest(srv).run({"action": "queue", "url": "https://example.org/a.mp3"}),
+                         "Refused: this key already has 3 songs waiting; let them play first")
+        bad = FakeServer({"/request": lambda p, b: (401, {"error": "revoked"})})
+        self.addCleanup(bad.close)
+        self.assertIn("didn't accept the key", load_guest(bad).run({"action": "queue", "url": "https://example.org/a.mp3"}))
+
+    def test_schema_asks_for_the_requester_and_needs_no_hosting(self):
+        srv = FakeServer({})
+        self.addCleanup(srv.close)
+        schema = load_guest(srv).guest_schema()
+        self.assertTrue(schema["requester"])
+        self.assertEqual(schema["requires"], ["RADIO_API_URL", "RADIO_KEY", "RADIO_PAGE_URL"])
+        self.assertNotIn("intro", schema["properties"])
+
+
 if __name__ == "__main__":
     unittest.main()

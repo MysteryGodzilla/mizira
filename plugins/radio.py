@@ -10,7 +10,10 @@ The server side (Icecast + Liquidsoap + a small API) is in contrib/radio.
 
 Configure under env: in config.yml:
   RADIO_API_URL    base url of the radio API, e.g. https://files.example.com/radio/api (required)
-  RADIO_TOKEN      the API's bearer token (required)
+  RADIO_TOKEN      the API's bearer token (required, unless RADIO_KEY is set)
+  RADIO_KEY        an API key for someone else's radio, instead of RADIO_TOKEN: songs are queued
+                   through its /request (any public audio link, or a song it has by id), credited
+                   to the nick that asked, within the key's limits; no spoken intros
   RADIO_PAGE_URL   the listening page posted to the channel (required)
   RADIO_QUEUED_BY  the name the page shows as having queued a track (default: none shown)
   RADIO_DJ_VOICE   voice for spoken intros, one of TTS_VOICES (default: the stock voice)
@@ -40,6 +43,9 @@ from metald_tools.media import tag_flac
 
 API_URL = os.environ.get("RADIO_API_URL", "").rstrip("/")
 TOKEN = os.environ.get("RADIO_TOKEN", "")
+KEY = os.environ.get("RADIO_KEY", "")
+# A key holder on someone else's radio, not its owner.
+GUEST = bool(KEY) and not TOKEN
 PAGE_URL = os.environ.get("RADIO_PAGE_URL", "")
 QUEUED_BY = os.environ.get("RADIO_QUEUED_BY", "")
 DJ_VOICE = os.environ.get("RADIO_DJ_VOICE", "")
@@ -53,7 +59,40 @@ TIMEOUT = 20
 GENERIC_ERROR = "Error: the radio is unavailable right now"
 
 
+def guest_schema():
+    return {
+        "title": "station",
+        "description": (
+            "a web radio the channel listens to. 'queue' adds a song to its stream: a public link to an "
+            "audio file (mp3, flac, ogg, wav or m4a) someone gave, with a short title and its lyrics if you "
+            "have them, or a song the radio already has, by its id from 'search'. you may queue at most 3 "
+            "songs waiting at once and 20 a day; if the radio refuses, say why. 'now' says what is playing, "
+            "'list' shows what is queued, 'search' finds songs the radio has by words from the title, the "
+            "lyrics or the nick that asked for them. give people the listening page link it returns."
+        ),
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": ["queue", "now", "list", "search"],
+                       "description": "what to do (default: now)"},
+            "url": {"type": "string", "description": "for queue: a public link to the audio file"},
+            "song": {"type": "string", "description": "for queue: a song id from search, instead of url"},
+            "query": {"type": "string",
+                      "description": "for search: words to find in titles, lyrics or requester nicks"},
+            "title": {"type": "string", "description": "for queue: a short title for the song"},
+            "lyrics": {"type": "string", "description": "for queue: the lyrics as sung, if you have them"},
+        },
+        "required": ["action"],
+        "additionalProperties": False,
+        "sandbox": {"allowNetwork": True},
+        "requester": True,
+        "requires": ["RADIO_API_URL", "RADIO_KEY", "RADIO_PAGE_URL"],
+    }
+
+
 def print_schema():
+    if GUEST:
+        print(json.dumps(guest_schema(), indent=2))
+        return
     schema = {
         "title": "station",
         "description": (
@@ -105,8 +144,8 @@ def print_schema():
 def call(method, path, body=None):
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(API_URL + path, data=data, method=method,
-                                 headers={"Content-Type": "application/json",
-                                          "Authorization": "Bearer " + TOKEN})
+                                 headers={"Content-Type": "application/json", "User-Agent": "metald-radio/1",
+                                          "Authorization": "Bearer " + (TOKEN or KEY)})
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
             return resp.status, json.load(resp)
@@ -181,6 +220,8 @@ def queue_song(args):
         return "Error: queue needs the song's link, or its id from search"
     if song and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", song):
         return "Error: that isn't a song id from search"
+    if GUEST:
+        return request_song(args, url, song)
     intro = " ".join((args.get("intro") or "").split())
     if len(intro) > MAX_INTRO:
         return f"Error: the intro is too long ({len(intro)} characters, at most {MAX_INTRO})"
@@ -206,8 +247,25 @@ def queue_song(args):
     return GENERIC_ERROR
 
 
+def request_song(args, url, song):
+    """Queue through a key's /request: the radio fetches the link itself, and credits who asked."""
+    body = {"song": song} if song else {
+        "url": url, "title": args.get("title") or "", "lyrics": args.get("lyrics") or "",
+        "requested_by": str(args.get("requested_by") or "")[:40]}
+    status, out = call("POST", "/request", body)
+    if status == 200:
+        return f"queued \"{out.get('queued')}\" at position {out.get('position')}. listen: {PAGE_URL}"
+    if status in (400, 404, 429) and out.get("error"):
+        return "Refused: " + out["error"]
+    if status in (401, 403):
+        toollog.log_detail("radio", f"request {status} {out}")
+        return "Error: the radio didn't accept the key (missing, revoked, or not allowed from here)"
+    toollog.log_detail("radio", f"request {status} {out}")
+    return GENERIC_ERROR
+
+
 def run(args):
-    if not (API_URL and TOKEN and PAGE_URL):
+    if not (API_URL and (TOKEN or KEY) and PAGE_URL):
         return "Error: the radio is not configured"
     action = (args.get("action") or "now").strip().lower()
     try:
