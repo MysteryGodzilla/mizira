@@ -82,6 +82,7 @@ func retryUnbackedClaim(chatCtx core.ChatContextInterface, agent *llm.Agent, req
 	}})
 
 	cb := newCallbackHandler(chatCtx, chunker, chatCtx.GetConfig())
+	defer cb.endTools()
 	cb.watchClaims(claimTools)
 	resp, err := agent.Run(chatCtx, &retry, cb.build())
 	if chatCtx.Err() != nil {

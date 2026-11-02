@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/alexschlessinger/pollytool/llm"
@@ -76,8 +77,15 @@ func (p *PollyLLM) ChatCompletionStream(chatCtx core.ChatContextInterface, req *
 		chunker.SetMaxLines(cfg.Bot.MaxReplyLines)
 		chunker.SetJoinLines(true)
 		claimTools := claimableTools(registry)
+		var handlers []*callbackHandler
+		defer func() {
+			for _, h := range handlers {
+				h.endTools()
+			}
+		}()
 		newHandler := func() *callbackHandler {
 			h := newCallbackHandler(chatCtx, chunker, cfg)
+			handlers = append(handlers, h)
 			h.watchClaims(claimTools)
 			for _, name := range forcedToolsRun(req.Messages) {
 				h.toolsRun[name] = true
@@ -264,9 +272,11 @@ type callbackHandler struct {
 	claimTools       map[string]bool     // tools a claim is checked against; nil checks nothing
 	toolsRun         map[string]bool     // tools started this request
 	claims           map[irc.ClaimKind]bool
-	askedPicture     bool // the message asks for a picture, so a link in the reply must be one drawn now
-	shown            bool // the channel saw a tool's effect: its start line, its own /me, or its action
-	repeats          int  // calls this request to a once-per-request tool after its first
+	askedPicture     bool              // the message asks for a picture, so a link in the reply must be one drawn now
+	shown            bool              // the channel saw a tool's effect: its start line, its own /me, or its action
+	repeats          int               // calls this request to a once-per-request tool after its first
+	running          map[string]uint64 // tool call id -> core.ToolStarted id, for the status bridge
+	runningMu        sync.Mutex        // tools end in parallel
 }
 
 // maxTurnContent bounds how much visible text ONE request may post.
@@ -282,6 +292,35 @@ func newCallbackHandler(chatCtx core.ChatContextInterface, chunker *irc.Chunker,
 		toolsRun:       make(map[string]bool),
 		claims:         make(map[irc.ClaimKind]bool),
 		refusals:       make(map[string]int),
+		running:        make(map[string]uint64),
+	}
+}
+
+// endTools ends the activity records of tool calls that never reported back (a cancelled request).
+func (h *callbackHandler) endTools() {
+	h.runningMu.Lock()
+	defer h.runningMu.Unlock()
+	for id, act := range h.running {
+		core.ToolEnded(act)
+		delete(h.running, id)
+	}
+}
+
+func (h *callbackHandler) toolStarted(tc messages.ChatMessageToolCall) {
+	h.runningMu.Lock()
+	defer h.runningMu.Unlock()
+	if act, ok := h.running[tc.ID]; ok {
+		core.ToolEnded(act)
+	}
+	h.running[tc.ID] = core.ToolStarted(tc.Name)
+}
+
+func (h *callbackHandler) toolEnded(tc messages.ChatMessageToolCall) {
+	h.runningMu.Lock()
+	defer h.runningMu.Unlock()
+	if act, ok := h.running[tc.ID]; ok {
+		core.ToolEnded(act)
+		delete(h.running, tc.ID)
 	}
 }
 
@@ -533,6 +572,7 @@ func (h *callbackHandler) onToolStart(calls []messages.ChatMessageToolCall) {
 	// Log each tool
 	for _, tc := range calls {
 		h.chatCtx.GetLogger().Info("tool_started", "tool", tc.Name)
+		h.toolStarted(tc)
 	}
 
 	if len(calls) == 0 {
@@ -575,6 +615,7 @@ func (h *callbackHandler) onToolStart(calls []messages.ChatMessageToolCall) {
 }
 
 func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result string, duration time.Duration, toolErr error) {
+	h.toolEnded(tc)
 	if toolErr != nil {
 		h.chatCtx.GetLogger().Error("tool_failed",
 			"tool", tc.Name,

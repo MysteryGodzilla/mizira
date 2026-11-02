@@ -116,6 +116,8 @@ type BotConfig struct {
 	// AdminListen and AdminToken serve the operator page; it stays off unless both are set.
 	AdminListen string
 	AdminToken  string
+	// StatusToken opens only the console's read-only status bridge, for a dashboard.
+	StatusToken string
 	// Sign-in through an auth proxy instead of the token; see admin.Config.
 	AdminTrustedProxies []string
 	AdminUsers          []string
@@ -338,6 +340,7 @@ func GetFlags() []cli.Flag {
 		&cli.IntFlag{Name: "maxconcurrent", Value: 3, Usage: "requests handled at once across all networks (1 = strictly one at a time)", Sources: src("maxconcurrent", "METALD_MAXCONCURRENT")},
 		&cli.StringFlag{Name: "adminlisten", Usage: "address for the operator page, e.g. 127.0.0.1:8766 (empty = off)", Sources: src("adminlisten", "METALD_ADMINLISTEN")},
 		&cli.StringFlag{Name: "admintoken", Usage: "bearer token the operator page requires (empty = page off)", Sources: src("admintoken", "METALD_ADMINTOKEN")},
+		&cli.StringFlag{Name: "statustoken", Usage: "bearer token for the operator page's read-only status bridge only (empty = admintoken only)", Sources: src("statustoken", "METALD_STATUSTOKEN")},
 		&cli.StringSliceFlag{Name: "admintrustedproxies", Usage: "auth proxy addresses or ranges whose user header the operator page believes", Sources: src("admintrustedproxies", "METALD_ADMINTRUSTEDPROXIES")},
 		&cli.StringSliceFlag{Name: "adminusers", Usage: "users the auth proxy may sign in to the operator page (empty = none)", Sources: src("adminusers", "METALD_ADMINUSERS")},
 		&cli.StringFlag{Name: "adminuserheader", Value: "X-Authentik-Username", Usage: "request header carrying the auth proxy's signed-in user", Sources: src("adminuserheader", "METALD_ADMINUSERHEADER")},
@@ -580,6 +583,7 @@ func NewConfiguration(c *cli.Command) *Configuration {
 			MaxConcurrent:       int(c.Int("maxconcurrent")),
 			AdminListen:         c.String("adminlisten"),
 			AdminToken:          c.String("admintoken"),
+			StatusToken:         c.String("statustoken"),
 			AdminTrustedProxies: c.StringSlice("admintrustedproxies"),
 			AdminUsers:          c.StringSlice("adminusers"),
 			AdminUserHeader:     c.String("adminuserheader"),

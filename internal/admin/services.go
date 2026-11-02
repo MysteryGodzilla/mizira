@@ -6,6 +6,7 @@ package admin
 
 import (
 	"log/slog"
+	"time"
 
 	"B4reMetal/metald/internal/core"
 	"B4reMetal/metald/internal/llm"
@@ -31,6 +32,9 @@ type WorkService interface {
 	Inflight() []core.Inflight
 	Concurrency() int
 	StopRound(taskID int64)
+	// Tools are the tool calls running now; LastActive is when a request last finished.
+	Tools() []core.ActiveTool
+	LastActive() time.Time
 }
 
 type coreWork struct{}
@@ -38,6 +42,8 @@ type coreWork struct{}
 func (coreWork) Inflight() []core.Inflight { return core.InflightRequests() }
 func (coreWork) Concurrency() int          { return core.Concurrency() }
 func (coreWork) StopRound(id int64)        { llm.CancelTask(id) }
+func (coreWork) Tools() []core.ActiveTool  { return core.ActiveTools() }
+func (coreWork) LastActive() time.Time     { return core.LastActive() }
 
 // NewFromCore builds the server over the bot's own stores.
 func NewFromCore(cfg Config, log *slog.Logger) (*Server, error) {

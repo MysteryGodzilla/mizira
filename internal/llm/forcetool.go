@@ -96,6 +96,7 @@ func forceIntentTool(ctx irc.ChatContextInterface, req *CompletionRequest, msg s
 	}
 	runCtx, cancel := context.WithTimeout(irc.InjectContext(ctx, ctx), ctx.GetConfig().API.Timeout)
 	defer cancel()
+	defer core.ToolEnded(core.ToolStarted(name))
 	result, err := tool.Execute(runCtx, args)
 	if err != nil {
 		log.Warn("forced_tool_failed", "tool", name, "error", err.Error())
