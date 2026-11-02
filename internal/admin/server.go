@@ -27,10 +27,12 @@ var dist embed.FS
 
 // Config is what the server needs from the bot.
 type Config struct {
-	Token    string
-	Version  string
-	Networks []string
-	Started  time.Time
+	Token string
+	// StatusToken opens only the status bridge (GET /api/v1/bridge); empty: only Token does.
+	StatusToken string
+	Version     string
+	Networks    []string
+	Started     time.Time
 	// Outside services the page reports on; empty ones are shown as not configured.
 	ComfyURL, RadioURL string
 	// Sign-in through an auth proxy (e.g. Traefik forward auth): a request from one of TrustedProxies
@@ -103,6 +105,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux := http.NewServeMux()
 	mux.Handle("/api/v1/", http.StripPrefix("/api/v1", s.throttle(s.authenticate(api))))
+	s.mzBridgeRoute(mux)
 	mux.Handle("/", app())
 	return s.logRequests(mux)
 }

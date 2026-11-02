@@ -360,7 +360,7 @@ func startAdmin(ctx context.Context, cfg *config.Configuration, nets []*config.S
 		}
 		proxies = append(proxies, prefix)
 	}
-	srv, err := admin.NewFromCore(admin.Config{Token: cfg.Bot.AdminToken, Version: "v" + Version, Networks: names,
+	srv, err := admin.NewFromCore(admin.Config{Token: cfg.Bot.AdminToken, StatusToken: cfg.Bot.StatusToken, Version: "v" + Version, Networks: names,
 		Started: time.Now(), ComfyURL: os.Getenv("COMFYUI_URL"), RadioURL: os.Getenv("RADIO_API_URL"),
 		TrustedProxies: proxies, UserHeader: cfg.Bot.AdminUserHeader, Users: cfg.Bot.AdminUsers}, core.GetLogger())
 	if err != nil {

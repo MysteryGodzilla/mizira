@@ -40,7 +40,18 @@ func markRunning(id uint64) {
 	}
 }
 
-func untrackInflight(id uint64) { inflight.Delete(id) }
+func untrackInflight(id uint64) {
+	v, ok := inflight.LoadAndDelete(id)
+	if !ok {
+		return
+	}
+	inflightMu.Lock()
+	ran := v.(*Inflight).Running
+	inflightMu.Unlock()
+	if ran {
+		requestDone()
+	}
+}
 
 // InflightRequests is every request now waiting or running, oldest first.
 func InflightRequests() []Inflight {

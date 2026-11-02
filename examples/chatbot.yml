@@ -282,6 +282,10 @@ maxconcurrent: 3
 # minutes lock it out for 5.
 # adminlisten: 127.0.0.1:8425
 # admintoken: ""
+# A dashboard's key: it opens only GET /api/v1/bridge, a read-only summary (working, idle,
+# paused or stopped; what she's busy with, by kind; when she was last active; queue counts),
+# never chat text, nicks, memories or prompts. The admintoken opens it too.
+# statustoken: ""
 # Sign in through an auth proxy (e.g. Traefik forward auth with Authentik) instead of
 # typing the token: requests from admintrustedproxies whose adminuserheader names one
 # of adminusers are let in. Point those proxies at adminlisten; nobody else should be

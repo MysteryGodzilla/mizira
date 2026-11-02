@@ -70,13 +70,21 @@ func (f *fakeReminders) Cancel(network, id string) bool {
 	return false
 }
 
-type fakeWork struct{ stopped []int64 }
+type fakeWork struct {
+	stopped []int64
+	tools   []core.ActiveTool
+	last    time.Time
+}
 
 func (f *fakeWork) Inflight() []core.Inflight {
 	return []core.Inflight{{Key: "net/#chat", Operation: "addressed", Source: "alice", Since: time.Now(), Running: true}}
 }
 func (f *fakeWork) Concurrency() int   { return 3 }
 func (f *fakeWork) StopRound(id int64) { f.stopped = append(f.stopped, id) }
+func (f *fakeWork) Tools() []core.ActiveTool {
+	return f.tools
+}
+func (f *fakeWork) LastActive() time.Time { return f.last }
 
 type rig struct {
 	tasks    *fakeTasks
