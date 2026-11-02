@@ -1,0 +1,47 @@
+# metald-keeper: runs the bot and its model server on one machine, and lets a
+# dashboard on the same machine see their state and start, stop or restart them.
+#
+#   go build -o metald-keeper ./cmd/metald-keeper
+#   (Windows, no window at logon: go build -ldflags -H=windowsgui -o metald-keeper.exe ./cmd/metald-keeper)
+#   metald-keeper -config keeper.yml
+#
+# API (JSON):
+#   GET  /status     the bot's statustoken (from its config) or controltoken
+#   POST /start      controltoken: the model server if it isn't up, then the bot
+#   POST /stop       controltoken: the bot (cleanly, through its stdin), then the model server
+#   POST /restart    controltoken: the bot only; the model stays loaded
+#   POST /coldstart  controltoken: everything, the model server too
+# Send "Authorization: Bearer <token>". Actions run in the background (202); GET
+# /status shows their progress: stopped, loading_model, starting, running, stopping,
+# crashed (with last_exit), or external (a copy started by hand is running; the
+# keeper won't start a second one). While the bot answers, /status includes its own
+# status bridge as "bot". 10 wrong keys from one address in 10 minutes lock it out
+# for 5.
+
+# Loopback only: anything else is refused.
+listen: 127.0.0.1:8427
+# 32 characters or more. Keep this file private.
+controltoken: ""
+log: /config/data/logs/keeper.log
+# Start the bot when the keeper starts (e.g. at logon).
+startatlaunch: false
+
+bot:
+  exe: /usr/local/bin/metald
+  config: /config/config.yml
+  # args: [--consoleonly]
+  dir: /config
+  log: /config/data/logs/bot.console.log
+  # How long a clean stop may take before the bot is killed.
+  stoptimeout: 30s
+
+# Optional. Without it only the bot is run. llama-swap: one address in front of
+# every local model; the keeper waits until the bot's model (model:, or the one
+# the operator page picked) reports ready.
+# modelserver:
+#   exe: /usr/local/bin/llama-swap
+#   config: /config/llama-swap.yaml
+#   listen: 127.0.0.1:8081
+#   log: /config/data/logs/llama-swap.out.log
+#   errlog: /config/data/logs/llama-swap.log
+#   readytimeout: 3m
