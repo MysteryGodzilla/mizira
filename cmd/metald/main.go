@@ -14,6 +14,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -33,6 +34,13 @@ func main() {
 	// Create a context that cancels on SIGINT or SIGTERM
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+	// A supervisor that can't send signals (Windows) stops the bot by closing its stdin.
+	if os.Getenv("METALD_STOP_ON_STDIN_EOF") == "1" {
+		go func() {
+			_, _ = io.Copy(io.Discard, os.Stdin)
+			cancel()
+		}()
+	}
 
 	cmd := &cli.Command{
 		Name:    "metald",
