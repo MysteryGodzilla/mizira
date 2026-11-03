@@ -5,8 +5,9 @@
 
 Every media tool calls upload_file(). UPLOAD_BACKEND picks zipline (default),
 rustypaste, imgbb (images only) or http (any host, configured from the environment), and
-UPLOAD_HEADERS adds headers to every upload. The env: section of
-examples/chatbot.yml lists every setting. A custom plugin can add a backend with register_backend().
+UPLOAD_HEADERS adds headers to every upload. UPLOAD_LINK_HOSTS, names that all reach the same
+host, gives each link one of them at random. The env: section of examples/chatbot.yml lists
+every setting. A custom plugin can add a backend with register_backend().
 """
 
 import os
@@ -14,6 +15,7 @@ import json
 import time
 import uuid
 import base64
+import random
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -172,6 +174,18 @@ def requires() -> list:
     """Env vars the active backend needs, for a tool's schema "requires"."""
     return list(REQUIRES.get(backend_name(), []))
 
+def link_hosts() -> list:
+    return [h.strip().lower() for h in os.environ.get("UPLOAD_LINK_HOSTS", "").split(",") if h.strip()]
+
+def pick_link_host(url: str) -> str:
+    """Swaps the link's host for a random one from UPLOAD_LINK_HOSTS. Only a link already on one of
+    those names is changed, so a host that isn't listed (imgbb, a typo) keeps working links."""
+    hosts = link_hosts()
+    parts = urllib.parse.urlsplit(url)
+    if not parts.hostname or parts.hostname.lower() not in hosts:
+        return url
+    return urllib.parse.urlunsplit(parts._replace(netloc=random.choice(hosts)))
+
 def upload_file(data: bytes, filename: str, content_type: str, deletes_at: str = "") -> str:
     """Upload through the configured backend, retrying transient failures.
     deletes_at is the tool's own expiry ("12h"); how it is sent depends on
@@ -183,7 +197,7 @@ def upload_file(data: bytes, filename: str, content_type: str, deletes_at: str =
     last = None
     for attempt in range(1, max(1, UPLOAD_RETRIES) + 1):
         try:
-            return fn(data, filename, content_type, deletes_at)
+            return pick_link_host(fn(data, filename, content_type, deletes_at))
         except HostingError as e:
             last = e
             if "must be set" in str(e) or "is not set" in str(e) or "only hosts" in str(e):
