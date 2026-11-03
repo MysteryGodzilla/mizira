@@ -768,6 +768,7 @@ env:
   # RUSTYPASTE_URL: https://files.example.com
   # RUSTYPASTE_TOKEN: ""      # one of the server's auth tokens; give the bot its own
   # RUSTYPASTE_EXPIRE: 7d     # used when a tool gives no expiry; unset keeps files
+  # UPLOAD_LINK_HOSTS: files.example.com,pics.example.net   # names of one host; each link gets one at random
   # UPLOAD_BACKEND: http
   # UPLOAD_URL: https://files.example.com/api/upload   # may contain {filename}
   # UPLOAD_RESPONSE: files.0.url                        # JSON path to the URL, or "text"

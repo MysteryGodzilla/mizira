@@ -135,6 +135,19 @@ class HostingTest(unittest.TestCase):
         with self.assertRaises(hosting.HostingError):
             hosting.upload_file(b"x", "a.txt", "text/plain")
 
+    def test_link_hosts_spread_links(self):
+        os.environ.update({"UPLOAD_BACKEND": "rustypaste", "RUSTYPASTE_URL": self.base,
+                           "RUSTYPASTE_TOKEN": "tok", "UPLOAD_LINK_HOSTS": "files.example.com, Pics.Example.net"})
+        Recorder.reply = b"https://files.example.com/abc.png?x=1\n"
+        seen = {hosting.upload_file(b"x", "a.png", "image/png") for _ in range(40)}
+        self.assertEqual(seen, {"https://files.example.com/abc.png?x=1", "https://pics.example.net/abc.png?x=1"})
+        # A link on a name that isn't listed is left alone.
+        Recorder.reply = b"https://other.example.org/abc.png\n"
+        self.assertEqual(hosting.upload_file(b"x", "a.png", "image/png"), "https://other.example.org/abc.png")
+        del os.environ["UPLOAD_LINK_HOSTS"]
+        Recorder.reply = b"https://files.example.com/abc.png\n"
+        self.assertEqual(hosting.upload_file(b"x", "a.png", "image/png"), "https://files.example.com/abc.png")
+
     # Cloudflare's bot check answers 403 (error 1010) to Python's own User-Agent.
     def test_uploads_send_their_own_user_agent(self):
         os.environ.update({"UPLOAD_BACKEND": "http", "UPLOAD_URL": self.base + "/up", "UPLOAD_RESPONSE": "url"})
