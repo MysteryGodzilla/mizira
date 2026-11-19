@@ -78,12 +78,19 @@ func (p *PicturePeopleTool) Execute(ctx context.Context, args map[string]any) (s
 		}
 		request := speakerNamed(selfNamed(asked, self), chatCtx.GetSource())
 		network, key := chatCtx.GetNetwork(), chatCtx.GetLockKey()+"\x00"+strings.ToLower(chatCtx.GetSource())
+		names := mentionedNames(network, request)
+		// A request for the whole group names one of the three she just drew: the group is the earlier
+		// request's, so it is not a new one to keep.
+		group := len(names) < 2 && groupWord.MatchString(request)
 		earlier := ""
-		if namesSomeone(network, request) {
+		if len(names) > 0 && !group {
 			lastAsked.keep(key, request, time.Now())
 		} else if earlier = lastAsked.get(key, time.Now()); earlier != "" {
 			// "try that image request again" names nobody; the request before it said who and in what.
 			args["request"] = earlier + "\n" + asked
+			if group {
+				request, earlier = earlier+"\n"+request, ""
+			}
 		}
 		if rewritten := unaskedSelf(network, prompt, strings.TrimSpace(earlier+"\n"+request), self, chatCtx.GetSource()); rewritten != prompt {
 			chatCtx.GetLogger().Info("picture_self_unasked", "prompt", rewritten)
@@ -127,13 +134,22 @@ func (s *askedStore) get(key string, now time.Time) string {
 
 // namesSomeone reports whether text names someone memory knows, other than those in except.
 func namesSomeone(network, text string, except ...string) bool {
+	return len(mentionedNames(network, text, except...)) > 0
+}
+
+func mentionedNames(network, text string, except ...string) []string {
 	store, err := core.Memories()
 	if err != nil {
-		return false
+		return nil
 	}
 	names, _ := store.Mentioned(network, text, except)
-	return len(names) > 0
+	return names
 }
+
+// groupWord asks for the whole group rather than the one or two the request names ("all of us").
+// "all of them" is left out: it can be the cats in the prompt, not the people in the last picture.
+var groupWord = regexp.MustCompile(`(?i)\b(?:all of us|us all|both of us|each of us|everyone|everybody|` +
+	`the whole group|(?:all |the )?(?:two|three|four|five|six|seven|eight|nine|ten) of us)\b`)
 
 // youWord is "you" as someone in the picture, not "can you draw".
 var youWord = regexp.MustCompile(`(?i)(\b\w+\s+)?\byou\b`)
