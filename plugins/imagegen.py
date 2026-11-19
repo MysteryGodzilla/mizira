@@ -190,7 +190,7 @@ def check_style(name: str, editing: bool, reference: bool = False, admin: bool =
 GARMENTS = set("""jacket jackets coat coats blazer blazers suit suits dress dresses gown skirt skirts shirt shirts
     blouse top tops tee t-shirt tshirt hoodie hoodies sweater sweaters jumper cardigan cardigans vest waistcoat
     turtleneck pants trousers jeans shorts leggings tights stockings socks shoes shoe boots boot heels sneakers
-    trainers sandals slippers hat hats cap beanie scarf gloves tie bowtie uniform kimono yukata hanbok qipao
+    trainers sandals slippers hat hats cap beanie scarf gloves tie bowtie uniform uniforms kimono yukata hanbok qipao
     cheongsam apron overalls jumpsuit robe cloak cape armour armor bikini swimsuit pajamas pyjamas pjs lingerie
     corset belt bag backpack glasses sunglasses necklace earrings bracelet costume onesie kigurumi tracksuit
     raincoat parka poncho loafers stilettos pumps sweatshirt sweatpants joggers slacks tunic pinafore camisole
@@ -554,7 +554,7 @@ def unasked_clothes_dropped(prompt: str, request: str, people: list, roles: set 
     for part in re.split(r"(?<=[,.;:])\s+", prompt):
         words = set(re.findall(r"[a-z0-9'-]+", part.lower()))
         if any(not said(w, asked) for w in words & (WORN | HAIRDOS)) and not any(n in words for n in names) \
-                and not words & roles:
+                and not any(says_theme(w, roles) for w in words):
             dropped.append(part)
         else:
             kept.append(part)
@@ -575,13 +575,20 @@ def outfit_from_request(people: list, request: str) -> list:
     jersey") and no variant: given both, the prompt writer kept her thigh-high socks under the jersey,
     and once drew "two people on a plush couch"."""
     words = re.findall(r"[a-z0-9'-]+", request.lower())
-    # "her casual outfit" names the default ("casual" unless the look calls it something else).
+    asked = set(words)
+    garment = any(said(w, asked) for w in OUTFIT_WORDS)
+    # "her casual outfit" names the default ("casual" unless the look calls it something else), and an
+    # alt name any of them knows means the phrase is about someone's own look, not new clothes for all.
     alts = {p[k] for p in people for k in ("variant", "default_name") if p.get(k)}
-    if not (any(said(w, set(words)) for w in OUTFIT_WORDS) or says_outfit(words, alts)):
-        return people
+    names = {n.lower() for p in people for n in [p["name"], *(p.get("aliases") or [])]}
+    # A theme for the whole group ("all in race outfits") is new clothes for each who hasn't got it, so
+    # there it is their own names that decide, not the one who has the alt.
+    group = group_theme(words, names)
     out = []
     for p in people:
-        if p.get("look") and p.get("outfit") and not p.get("variant"):
+        own = {p[k] for k in ("variant", "default_name") if p.get(k)}
+        if p.get("look") and p.get("outfit") and not p.get("variant") \
+                and (garment or says_outfit(words, own if group else alts)):
             toollog.log_detail("image_gen", f"{p['name']}: the request's clothes, not the set outfit")
             p = dict(p, outfit="")
         out.append(p)
@@ -726,8 +733,8 @@ THEME_SKIP = {"draw", "drawing", "paint", "sketch", "render", "rerender", "redo"
 
 def themes(request: str, people: list) -> dict:
     """{name: word} for each person with a set outfit the asker called by a role that isn't one of their
-    looks ("volleyball remy"): the clothes the chat model gave them for it are the asked ones. Without,
-    volleyball remy played in his apron."""
+    looks ("volleyball remy"), or dressed the whole group in ("all in race outfits"): the clothes the
+    chat model gave them for it are the asked ones. Without, volleyball remy played in his apron."""
     words = re.findall(r"[a-z0-9'-]+", re.sub(r"\S+://\S+", " ", request.lower()))
     names = {n.lower() for p in people for n in [p["name"], *(p.get("aliases") or [])]}
     out = {}
@@ -738,7 +745,45 @@ def themes(request: str, people: list) -> dict:
         for before, w in zip(words, words[1:]):
             if w in own and len(before) >= 4 and before.isalpha() and before not in THEME_SKIP | names | set(STYLES):
                 out[p["name"]] = before
+    # A named alt is the outfit itself: the model's other clothes for the group are not the asked ones.
+    theme = "" if borrow_source(people, request) else group_theme(words, names)
+    if theme:
+        for p in people:
+            if p.get("look") and p.get("outfit") and not p.get("variant"):
+                out.setdefault(p["name"], theme)
     return out
+
+
+# A request for the whole group, not just the one or two it names ("all in race outfits").
+GROUP_ASKED = re.compile(r"(?i)\b(?:all|both|everyone|everybody|us all|each of us|the whole group)\b")
+
+
+def group_theme(words: list, names: set) -> str:
+    """The theme the asker dressed the whole group in, or "": the word before the outfit noun. Without
+    it, "all in race outfits" left the two with no race alt in their own clothes, and the racing suits
+    the model wrote for them went as clothes nobody asked for."""
+    if not GROUP_ASKED.search(" ".join(words)):
+        return ""
+    for before, w in zip(words, words[1:]):
+        if (w in OUTFIT_WORDS or w in ("outfit", "outfits")) and len(before) >= 4 and before.isalpha() \
+                and before not in THEME_SKIP | OWN_OUTFIT | names | set(STYLES):
+            return before
+    return ""
+
+
+def theme_stem(word: str) -> str:
+    """A theme word without its ending, so the model's "racing" is the "race" the asker named."""
+    for suffix in ("ing", "ed", "es"):
+        if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+            return word[:-len(suffix)].removesuffix("e")
+    if word.endswith("s") and not word.endswith("ss") and len(word) > 3:
+        return word[:-1].removesuffix("e")
+    return word.removesuffix("e")
+
+
+def says_theme(word: str, roles) -> bool:
+    """Whether word is one of the roles the asker gave, in any of its forms."""
+    return any(theme_stem(word) == theme_stem(r) for r in roles)
 
 
 def outfit_from_theme(prompt: str, people: list, themed: dict) -> list:
@@ -749,10 +794,42 @@ def outfit_from_theme(prompt: str, people: list, themed: dict) -> list:
         role = themed.get(p["name"])
         for part in CLAUSES.split(prompt) if role else []:
             words = re.findall(r"[a-z0-9'-]+", part.lower())
-            if role in words and (set(words) & WORN or says_outfit(words, {p.get("default_name") or ""})):
+            if says_theme(role, words) and (set(words) & WORN or says_outfit(words, {p.get("default_name") or ""})):
                 toollog.log_detail("image_gen", f"{p['name']}: clothes for {role!r}, not the set outfit")
                 p = dict(p, outfit="")
                 break
+        out.append(p)
+    return out
+
+
+# An outfit named after one of the people in the picture ("match carol's race outfit").
+BORROWED = re.compile(r"(?i)(?<![\w-])([\w'-]+?)['’]s\s+([a-z][a-z'-]*)\s+(?:outfits?|looks?|costumes?|suits?|uniforms?)\b")
+
+
+def borrow_source(people: list, request: str):
+    """The person whose alt the asker named for the others ("match carol's race outfit"), or None: the
+    alt has to be the one they're in, since that is the outfit the picture is told."""
+    owners = {n.lower(): p for p in people for n in [p["name"], *(p.get("aliases") or [])]}
+    for m in BORROWED.finditer(request or ""):
+        owner = owners.get(m.group(1).lower())
+        if owner and owner.get("variant") and owner.get("outfit") \
+                and theme_stem(m.group(2).lower()) == theme_stem(owner["variant"].lower()):
+            return owner
+    return None
+
+
+def borrowed_outfit(people: list, request: str) -> list:
+    """The people, in the outfit the asker named after one of them ("me in bob's race look"): that
+    outfit word for word, each one's own face and hair. The alt's hair never transfers: copying the
+    whole look is how a group came out as three of the one who owns it."""
+    owner = borrow_source(people, request)
+    if not owner:
+        return people
+    out = []
+    for p in people:
+        if p["name"] != owner["name"] and p.get("look") and not p.get("variant"):
+            toollog.log_detail("image_gen", f"{p['name']}: {owner['name']}'s {owner['variant']} outfit, their own look")
+            p = dict(p, outfit=owner["outfit"])
         out.append(p)
     return out
 
@@ -1070,6 +1147,7 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
             # "draw bob as a pirate": the clothes the chat model gave the pirate are the asked ones.
             named = outfit_from_prompt(prompt, named)
         named = outfit_from_theme(prompt, named, themed)
+        named = borrowed_outfit(named, request)
         prompt = worn_dropped(prompt, request, named)
     if named:
         toollog.log_detail("image_gen", f"asked for: {prompt[:300]!r}")

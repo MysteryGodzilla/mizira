@@ -338,6 +338,83 @@ func TestPicturePeopleEarlierRequest(t *testing.T) {
 	}
 }
 
+// "give all of us racing outfits to match carol's race outfit" named only carol: the other two lost
+// their looks, and the picture drew three of her.
+func TestPicturePeopleGroupFollowUp(t *testing.T) {
+	const net = "picture-group"
+	store, _ := core.Memories()
+	for _, s := range []string{"alice", "bob", "carol"} {
+		store.SetProfile(net, core.Profile{Subject: s, Pronouns: "she/her"})
+		store.SetLook(net, s, core.Look{Appearance: "adult woman", Hair: "long hair", Outfit: "a white tee"}, "")
+	}
+	store.SetLook(net, "carol", core.Look{Appearance: "adult woman", Hair: "short bob", Outfit: "a white tee",
+		Variants: []core.LookVariant{{Name: "race", Outfit: "a red racing suit"}}}, "")
+	t.Cleanup(func() {
+		for _, s := range []string{"alice", "bob", "carol"} {
+			store.DeleteProfile(net, s)
+		}
+	})
+	lastAsked = &askedStore{m: map[string]askedAt{}}
+	rec := &argsRecorder{}
+	run := func(prompt string, words ...string) ([]PicturePerson, string) {
+		asked := mocktest.NewMockContext().WithSource("alice").WithArgs(words...)
+		asked.GetConfig().Server.Name = net
+		NewPicturePeopleTool(rec).Execute(InjectContext(context.Background(), asked), map[string]any{"prompt": prompt})
+		who, _ := rec.got["people"].(string)
+		request, _ := rec.got["request"].(string)
+		var got []PicturePerson
+		json.Unmarshal([]byte(who), &got)
+		return got, request
+	}
+	names := func(people []PicturePerson) []string {
+		var out []string
+		for _, p := range people {
+			out = append(out, p.Name)
+		}
+		return out
+	}
+
+	first := "draw alice, bob and carol all in race outfits"
+	people, _ := run("alice, bob and carol on a racetrack", strings.Fields("metald "+first)...)
+	if len(people) != 3 {
+		t.Fatalf("the group asked for: %+v", people)
+	}
+	for _, p := range people {
+		want := "a white tee"
+		if p.Name == "carol" {
+			want = "a red racing suit"
+		}
+		if p.Outfit != want {
+			t.Errorf("%s: outfit %q, want %q", p.Name, p.Outfit, want)
+		}
+	}
+
+	people, request := run("three women on a racetrack at sunset",
+		strings.Fields("metald can you give all of us racing outfits to match carol's race outfit?")...)
+	if len(people) != 3 {
+		t.Errorf("the follow-up kept only %v", names(people))
+	}
+	if !strings.Contains(request, first) {
+		t.Errorf("the earlier request wasn't passed on: %q", request)
+	}
+	// The group request didn't replace the one that named all three, so a later retry still has them.
+	_, request = run("three women holding helmets", strings.Fields("metald try that again")...)
+	if !strings.Contains(request, first) {
+		t.Errorf("the kept request was overwritten: %q", request)
+	}
+
+	// Two names are a group of their own: nothing is carried in.
+	people, _ = run("alice and bob on a beach", strings.Fields("metald draw all of us, alice and bob")...)
+	if len(people) != 2 {
+		t.Errorf("a request naming two carried the earlier one in: %v", names(people))
+	}
+	// "all of them" can be the cats in the prompt, not the people in the last picture.
+	people, _ = run("three cats on a beach", strings.Fields("metald draw all of them on a beach")...)
+	if len(people) != 0 {
+		t.Errorf("cats became people: %v", names(people))
+	}
+}
+
 // "mizira mizira now draw volleyball bob" put her in the picture: only the first was the address.
 func TestSelfNamed(t *testing.T) {
 	for _, c := range []struct{ request, want string }{

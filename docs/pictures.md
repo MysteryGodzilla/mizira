@@ -28,6 +28,9 @@ that order matters.
    picture's style over.
 3. Retries: a request that names a known person is kept for an hour, per conversation and asker
    (`lastAsked`). A later request that names nobody ("try that again") gets the kept one in front of it.
+   So does one that asks for the whole group but names at most one of them ("give all of us racing
+   outfits", `groupWord`): the group is the earlier request's, and asking for it doesn't replace the
+   kept one. Two names are a group of their own, and "all of them" can be the cats in the prompt.
 4. `unaskedSelf` drops the bot from the prompt when the request names others but not her. If the
    asker is in the request but not the prompt, she wrote herself in for "me", so the asker's name
    replaces hers.
@@ -58,9 +61,17 @@ that order matters.
      goes in once, at the name; a copy made the prompt writer draw that description as a second person.
    - `unasked_clothes_dropped`: removes clothes and hairdos the model made up and the asker never named.
      A clause with a role the asker put before a name (`themes`: "volleyball bob") stays.
-   - `outfit_from_request`: clothes the asker named replace the set outfit ("bob in a raincoat").
+   - `outfit_from_request`: clothes the asker named replace the set outfit ("bob in a raincoat"). An alt
+     name any of them knows means the phrase is about someone's own look, not new clothes for all —
+     except when the whole group was dressed in it, where each one's own names decide.
    - `COSTUME` ("as a pirate", "dressed up as", "cosplay") → `outfit_from_prompt`: the costume the
      model wrote is the one that was asked for. `outfit_from_theme` does the same for a role.
+   - `themes` also takes a role the asker gave the whole group after the names ("all in race outfits"):
+     everyone without that alt is dressed for it, and the clothes the model wrote for it stay.
+     `says_theme` matches a role in any of its forms, so "racing" is the "race" that was asked for.
+   - `borrowed_outfit`: an alt named after one of them ("match carol's race outfit", "me in bob's race
+     look") is copied word for word onto the others, each keeping their own face and hair. It replaces
+     the group theme, so the model's other clothes for the group go as unasked.
    - `worn_dropped`: removes "wearing ..." from anyone whose set outfit stands. Within it,
      `usual_echo_dropped` removes the default outfit when the model copied it next to a variant.
 4. `refined_with_names`: the prompt writer expands the prompt. An art style the asker named that
@@ -133,4 +144,8 @@ prevent that "double", so check a change against `test_imagegen_runpod.py` befor
   them into the first as one character sheet, and the others answer `Merged:`.
 - Several looks of one person in one picture (a lineup of their alts) go in one prompt, so outfits can
   bleed between them.
-- Borrowing someone else's variant ("me in bob's race look") isn't supported.
+- Borrowing an alt copies its outfit only, and only the alt its owner is in: the hair never transfers,
+  and naming one they aren't in ("bob's office look" while he's in his race one) copies nothing.
+- A prompt that names nobody gets its looks by order, not by what each description says: "Left: violet
+  eyes, Center: cobalt-blue hair" can put the wrong look on the wrong figure. Matching a description to
+  a look by its words is not done.
