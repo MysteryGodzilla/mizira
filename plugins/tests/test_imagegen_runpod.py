@@ -772,5 +772,74 @@ class RunPodImageTests(unittest.TestCase):
         self.assertEqual(seen, [prompt])
 
 
+    def test_a_theme_for_the_group_dresses_everyone(self):
+        # "all in race outfits": only carol has a race alt, so the other two played in their own clothes
+        # and the racing suits the model wrote for them went as clothes nobody asked for.
+        alice = {"name": "alice", "look": "adult woman, violet eyes", "outfit": "a lilac cardigan", "drawn_as": "female"}
+        bob = {"name": "bob", "look": "adult woman, amber eyes", "outfit": "a white robe", "drawn_as": "female"}
+        carol = {"name": "carol", "look": "adult woman, green eyes", "outfit": "a red racing suit", "variant": "race",
+                 "usual": "a white tee", "drawn_as": "female"}
+        people = [alice, bob, carol]
+        request = "draw alice, bob and carol all in race outfits holding their helmets"
+        self.assertEqual(imagegen.themes(request, people), {"alice": "race", "bob": "race"})
+        self.assertEqual([p["outfit"] for p in imagegen.outfit_from_request(people, request)],
+                         ["", "", carol["outfit"]])
+        prompt = ("three women on a racetrack. cream racing suit with lavender accents. white and gold racing robe. "
+                  "casual grey hoodie with a clover hair clip")
+        self.assertEqual(imagegen.unasked_clothes_dropped(prompt, request, people, {"race"}),
+                         "three women on a racetrack. cream racing suit with lavender accents. white and gold racing robe.")
+        # Without a group word it is still one person's own alt, and new clothes for nobody.
+        self.assertEqual(imagegen.themes("draw carol in her race outfit", people), {})
+        self.assertEqual([p["outfit"] for p in imagegen.outfit_from_request(people, "draw carol in her race outfit")],
+                         [alice["outfit"], bob["outfit"], carol["outfit"]])
+        seen = []
+        with patch.object(imagegen, "PEOPLE_FRAME", "People: {people}"), \
+                patch.object(imagegen, "refine_prompt", REFINE_PROMPT), \
+                patch.object(imagegen.chat, "endpoint", lambda name: {"url": "", "model": "", "key": ""}), \
+                patch.object(imagegen, "_refine", lambda text, *a: seen.append(text) or "three women on a racetrack"), \
+                patch.object(imagegen, "PER_HOUR", 0), \
+                patch.object(runpod, "run", lambda *a, **k: {"images": [b"png"], "texts": ["SAFE"]}):
+            reply = imagegen.generate_image(prompt, 1024, 1024, requested_by="alice", people=json.dumps(people),
+                                            request=request)
+        self.assertTrue(reply.startswith("url: "), reply)
+        self.assertIn("cream racing suit with lavender accents", seen[0])
+        self.assertIn(carol["outfit"], seen[0])
+        self.assertNotIn(alice["outfit"], seen[0])
+        self.assertNotIn(bob["outfit"], seen[0])
+
+    def test_a_theme_is_recognised_in_its_other_forms(self):
+        for word, role, want in [
+            ("racing", "race", True), ("race", "racing", True), ("races", "race", True),
+            ("dresses", "dress", True), ("dress", "dresses", True), ("witches", "witch", True),
+            ("pirates", "pirate", True), ("suits", "suit", True), ("glasses", "glass", True),
+            ("volleyball", "volleyball", True), ("racket", "race", False), ("hoodie", "race", False),
+        ]:
+            self.assertEqual(imagegen.says_theme(word, {role}), want, (word, role))
+
+    def test_borrowing_an_alt_copies_the_outfit_only(self):
+        # "give all of us racing outfits to match carol's race outfit" drew three of her: the others had
+        # no look left to bind. The outfit transfers, the face and the hair never do.
+        alice = {"name": "alice", "look": "adult woman, violet eyes, long lavender hair", "outfit": "a lilac cardigan"}
+        bob = {"name": "bob", "look": "adult woman, amber eyes, cobalt hair in a ponytail", "outfit": "a red racing suit",
+               "variant": "race", "usual": "a white robe", "usual_hair": "cobalt hair worn loose"}
+        carol = {"name": "carol", "look": "adult woman, green eyes", "outfit": "a grey blazer", "variant": "office"}
+        people = [alice, bob, carol]
+        for request in ("give all of us racing outfits to match bob's race outfit",
+                        "draw me in bob's race look", "draw alice in bob's racing suit"):
+            got = imagegen.borrowed_outfit(people, request)
+            self.assertEqual(got[0]["outfit"], bob["outfit"], request)
+            self.assertEqual(got[0]["look"], alice["look"], request)
+            self.assertEqual(got[1], bob, request)
+            self.assertEqual(got[2], carol, request)
+        for request in ("draw alice and bob", "draw alice in her race outfit", "draw alice in bob's office outfit", ""):
+            self.assertEqual(imagegen.borrowed_outfit(people, request), people, request)
+        # A named alt is the outfit itself, so the model's other clothes for the group are not asked for.
+        self.assertEqual(imagegen.themes("give all of us racing outfits to match bob's race outfit", people), {})
+        self.assertEqual(imagegen.unasked_clothes_dropped(
+            "three women on a racetrack at sunset. matching white and lavender racing uniforms. cream racing suit with gold trim",
+            "give all of us racing outfits to match bob's race outfit", people, set()),
+            "three women on a racetrack at sunset.")
+
+
 if __name__ == "__main__":
     unittest.main()
