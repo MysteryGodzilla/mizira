@@ -80,12 +80,16 @@ func (p *PicturePeopleTool) Execute(ctx context.Context, args map[string]any) (s
 		network, key := chatCtx.GetNetwork(), chatCtx.GetLockKey()+"\x00"+strings.ToLower(chatCtx.GetSource())
 		names := mentionedNames(network, request)
 		// A request for the whole group names one of the three she just drew: the group is the earlier
-		// request's, so it is not a new one to keep.
+		// request's, so it is not a new one to keep, unless there's no earlier one.
 		group := len(names) < 2 && groupWord.MatchString(request)
 		earlier := ""
-		if len(names) > 0 && !group {
+		if len(names) == 0 || group {
+			earlier = lastAsked.get(key, time.Now())
+		}
+		if len(names) > 0 && (!group || earlier == "") {
 			lastAsked.keep(key, request, time.Now())
-		} else if earlier = lastAsked.get(key, time.Now()); earlier != "" {
+		}
+		if earlier != "" {
 			// "try that image request again" names nobody; the request before it said who and in what.
 			args["request"] = earlier + "\n" + asked
 			if group {
@@ -147,8 +151,9 @@ func mentionedNames(network, text string, except ...string) []string {
 }
 
 // groupWord asks for the whole group rather than the one or two the request names ("all of us").
-// "all of them" is left out: it can be the cats in the prompt, not the people in the last picture.
-var groupWord = regexp.MustCompile(`(?i)\b(?:all of us|us all|both of us|each of us|everyone|everybody|` +
+// "all of them" is left out: it can be the cats in the prompt, not the people in the last picture,
+// and "everyone" the crowd ("alice waving at everyone").
+var groupWord = regexp.MustCompile(`(?i)\b(?:all of us|us all|both of us|each of us|` +
 	`the whole group|(?:all |the )?(?:two|three|four|five|six|seven|eight|nine|ten) of us)\b`)
 
 // youWord is "you" as someone in the picture, not "can you draw".
