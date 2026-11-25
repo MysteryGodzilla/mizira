@@ -30,7 +30,8 @@ that order matters.
    (`lastAsked`). A later request that names nobody ("try that again") gets the kept one in front of it.
    So does one that asks for the whole group but names at most one of them ("give all of us racing
    outfits", `groupWord`): the group is the earlier request's, and asking for it doesn't replace the
-   kept one. Two names are a group of their own, and "all of them" can be the cats in the prompt.
+   kept one (with nothing kept, it is kept itself). Two names are a group of their own, "all of them"
+   can be the cats in the prompt, and "everyone" the crowd ("bob waving at everyone").
 4. `unaskedSelf` drops the bot from the prompt when the request names others but not her. If the
    asker is in the request but not the prompt, she wrote herself in for "me", so the asker's name
    replaces hers.
@@ -66,11 +67,16 @@ that order matters.
      except when the whole group was dressed in it, where each one's own names decide.
    - `COSTUME` ("as a pirate", "dressed up as", "cosplay") → `outfit_from_prompt`: the costume the
      model wrote is the one that was asked for. `outfit_from_theme` does the same for a role.
-   - `themes` also takes a role the asker gave the whole group after the names ("all in race outfits"):
-     everyone without that alt is dressed for it, and the clothes the model wrote for it stay.
-     `says_theme` matches a role in any of its forms, so "racing" is the "race" that was asked for.
+   - `themes` also takes a role the asker gave the whole group (`group_theme`): right after a group
+     word in the same clause ("all in race outfits", "everyone wearing maid outfits"), or "race outfits
+     for everyone". Everyone without that alt is dressed for it, and the clothes the model wrote for it
+     stay. A group word elsewhere ("all smiling, alice in a maid outfit") leaves the outfit alice's.
+     "matching" and the like are no theme. `says_theme` matches a role in any of its forms, so "racing"
+     is the "race" that was asked for.
    - `borrowed_outfit`: an alt named after one of them ("match carol's race outfit", "me in bob's race
-     look") is copied word for word onto the others, each keeping their own face and hair. It replaces
+     look") is copied word for word, each keeping their own face and hair. It goes to everyone for "all
+     in ..."; else to whoever its clause names, "me" being the asker; else to everyone for "give them
+     all ..." or "match ..." naming nobody; else to the only one it could be (`borrowers`). It replaces
      the group theme, so the model's other clothes for the group go as unasked.
    - `worn_dropped`: removes "wearing ..." from anyone whose set outfit stands. Within it,
      `usual_echo_dropped` removes the default outfit when the model copied it next to a variant.
@@ -145,7 +151,8 @@ prevent that "double", so check a change against `test_imagegen_runpod.py` befor
 - Several looks of one person in one picture (a lineup of their alts) go in one prompt, so outfits can
   bleed between them.
 - Borrowing an alt copies its outfit only, and only the alt its owner is in: the hair never transfers,
-  and naming one they aren't in ("bob's office look" while he's in his race one) copies nothing.
+  and naming one they aren't in ("bob's office look" while he's in his race one) copies nothing; that
+  miss goes to the tool log.
 - A prompt that names nobody gets its looks by order, not by what each description says: "Left: violet
   eyes, Center: cobalt-blue hair" can put the wrong look on the wrong figure. Matching a description to
   a look by its words is not done.

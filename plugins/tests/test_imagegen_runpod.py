@@ -839,6 +839,69 @@ class RunPodImageTests(unittest.TestCase):
             "three women on a racetrack at sunset. matching white and lavender racing uniforms. cream racing suit with gold trim",
             "give all of us racing outfits to match bob's race outfit", people, set()),
             "three women on a racetrack at sunset.")
+        self.assertEqual(imagegen.borrowed_outfit(people, "draw me in bob's race look", "alice")[0]["outfit"],
+                         bob["outfit"])
+
+    def test_a_borrow_dresses_only_the_ones_asked(self):
+        # "me in carol's race outfit" in a picture of three put all three in it.
+        alice = {"name": "alice", "look": "adult woman, violet eyes", "outfit": "a lilac cardigan"}
+        bob = {"name": "bob", "look": "adult man, amber eyes", "outfit": "a white robe", "aliases": ["bobby"]}
+        carol = {"name": "carol", "look": "adult woman, green eyes", "outfit": "a red racing suit", "variant": "race"}
+        dave = {"name": "dave", "look": "adult man, grey eyes", "outfit": "a denim jacket"}
+        people, suit = [alice, bob, carol, dave], carol["outfit"]
+        for request, asker, want in [
+            ("draw alice, bob, carol and dave, alice in carol's race outfit", "", ["alice"]),
+            ("draw alice, bob, carol and dave, me in carol's race outfit", "bobby", ["bob"]),
+            ("draw dave, and alice and bob in carol's race outfit", "", ["alice", "bob"]),
+            ("draw alice, bob, carol and dave all in carol's race outfit", "", ["alice", "bob", "dave"]),
+            ("draw the four of us, the others in carol's race outfit", "", ["alice", "bob", "dave"]),
+            ("draw us at the track and give them all carol's race suit", "", ["alice", "bob", "dave"]),
+            ("make them match carol's race outfit", "", ["alice", "bob", "dave"]),
+            ("draw alice with all her medals in carol's race suit", "", ["alice"]),
+            ("draw alice, bob and dave at the track\nalice in carol's race outfit", "", ["alice"]),
+            # Nobody it could be: it stays carol's.
+            ("draw alice, bob, carol and dave, in carol's race outfit", "", []),
+        ]:
+            got = imagegen.borrowed_outfit(people, request, asker)
+            self.assertEqual([p["name"] for p in got if p["outfit"] == suit and p is not carol], want, request)
+            self.assertEqual(got[2], carol, request)
+        # An alt of more than one word, and a word in front of it.
+        day = dict(carol, variant="race day")
+        self.assertEqual(imagegen.borrowed_outfit([alice, day], "draw alice in carol's race day outfit")[0]["outfit"], suit)
+        self.assertEqual(imagegen.borrowed_outfit([alice, carol], "draw alice in carol's red race outfit")[0]["outfit"], suit)
+
+    def test_a_missed_borrow_is_logged(self):
+        alice = {"name": "alice", "look": "adult woman", "outfit": "a lilac cardigan"}
+        carol = {"name": "carol", "look": "adult woman", "outfit": "a grey blazer", "variant": "office"}
+        logged = []
+        with patch.object(imagegen.toollog, "log_detail", lambda tool, text: logged.append(text)):
+            got = imagegen.borrowed_outfit([alice, carol], "draw alice in carol's race outfit")
+        self.assertEqual(got, [alice, carol])
+        self.assertTrue(any("not borrowed" in t and "office" in t for t in logged), logged)
+
+    def test_a_group_theme_follows_the_group_word(self):
+        # "all smiling, alice in a maid outfit" made maids of both: the group word and the theme were
+        # read from anywhere in the request.
+        alice = {"name": "alice", "look": "adult woman", "outfit": "a lilac cardigan"}
+        bob = {"name": "bob", "look": "adult man", "outfit": "a white robe"}
+        people = [alice, bob]
+        for request, want in [
+            ("draw alice and bob, all smiling, alice in a maid outfit", {}),
+            ("draw alice with all her books, bob in a pirate outfit", {}),
+            ("draw alice with all her books and bob in a pirate outfit", {}),
+            ("draw everyone in matching outfits", {}),
+            ("draw alice and bob in matching outfits", {}),
+            ("draw alice and bob both in maid outfits", {"alice": "maid", "bob": "maid"}),
+            ("draw all three of us in race outfits", {"alice": "race", "bob": "race"}),
+            ("draw everyone wearing matching race outfits", {"alice": "race", "bob": "race"}),
+            ("draw alice and bob, pirate outfits for everyone", {"alice": "pirate", "bob": "pirate"}),
+        ]:
+            self.assertEqual(imagegen.themes(request, people), want, request)
+
+    def test_uniforms_in_the_request_clear_set_outfits(self):
+        # "uniforms" is an outfit word like "uniform": soldiers in them still clear alice's set outfit.
+        alice = {"name": "alice", "look": "adult woman", "outfit": "a lilac cardigan"}
+        self.assertEqual(imagegen.outfit_from_request([alice], "draw alice next to soldiers in uniforms")[0]["outfit"], "")
 
 
 if __name__ == "__main__":

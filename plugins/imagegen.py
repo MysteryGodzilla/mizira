@@ -583,7 +583,7 @@ def outfit_from_request(people: list, request: str) -> list:
     names = {n.lower() for p in people for n in [p["name"], *(p.get("aliases") or [])]}
     # A theme for the whole group ("all in race outfits") is new clothes for each who hasn't got it, so
     # there it is their own names that decide, not the one who has the alt.
-    group = group_theme(words, names)
+    group = group_theme(request, names)
     out = []
     for p in people:
         own = {p[k] for k in ("variant", "default_name") if p.get(k)}
@@ -728,14 +728,16 @@ THEME_SKIP = {"draw", "drawing", "paint", "sketch", "render", "rerender", "redo"
               "give", "picture", "image", "photo", "with", "next", "beside", "from", "then", "please", "just", "also",
               "again", "both", "their", "your", "another", "same", "four", "five", "cute", "happy", "angry", "sleepy",
               "tired", "little", "tiny", "young", "cool", "coolest", "handsome", "handsomest", "pretty", "beautiful",
-              "smiling", "adult", "full", "body", "normal", "usual", "default", "regular", "chibi", "style"}
+              "smiling", "adult", "full", "body", "normal", "usual", "default", "regular", "chibi", "style",
+              "matching", "similar", "identical", "coordinated", "coordinating", "twinning"}
 
 
 def themes(request: str, people: list) -> dict:
     """{name: word} for each person with a set outfit the asker called by a role that isn't one of their
     looks ("volleyball remy"), or dressed the whole group in ("all in race outfits"): the clothes the
     chat model gave them for it are the asked ones. Without, volleyball remy played in his apron."""
-    words = re.findall(r"[a-z0-9'-]+", re.sub(r"\S+://\S+", " ", request.lower()))
+    # Punctuation stays a word, so "all her books, bob" is no role for bob.
+    words = re.findall(r"[a-z0-9'-]+|[,.;:!?]", re.sub(r"\S+://\S+", " ", request.lower()))
     names = {n.lower() for p in people for n in [p["name"], *(p.get("aliases") or [])]}
     out = {}
     for p in people:
@@ -746,7 +748,7 @@ def themes(request: str, people: list) -> dict:
             if w in own and len(before) >= 4 and before.isalpha() and before not in THEME_SKIP | names | set(STYLES):
                 out[p["name"]] = before
     # A named alt is the outfit itself: the model's other clothes for the group are not the asked ones.
-    theme = "" if borrow_source(people, request) else group_theme(words, names)
+    theme = "" if borrow_source(people, request) else group_theme(request, names)
     if theme:
         for p in people:
             if p.get("look") and p.get("outfit") and not p.get("variant"):
@@ -754,20 +756,39 @@ def themes(request: str, people: list) -> dict:
     return out
 
 
-# A request for the whole group, not just the one or two it names ("all in race outfits").
-GROUP_ASKED = re.compile(r"(?i)\b(?:all|both|everyone|everybody|us all|each of us|the whole group)\b")
+# The whole group, not just the one or two a request names.
+GROUP_WORD = r"(?:all|both|everyone|everybody|each of us|the whole group|the others|the rest(?: of us)?)"
+# The group dressed in something: "all in race outfits", "everyone wearing maid outfits". The theme has
+# to follow it in the same clause: "all smiling, alice in a maid outfit" is alice's outfit, not theirs.
+GROUP_DRESSED = re.compile(rf"(?i)\b{GROUP_WORD}(?:\s+(?:two|three|four|five|six|seven|of us|of them|together))*"
+                           r"\s+(?:in|wearing|(?:dressed|clad|decked out)(?:\s+up)?\s+in)\s+([^,.;:!?\n]*)")
+# "race outfits for everyone".
+FOR_GROUP = re.compile(rf"(?i)\b([a-z][a-z'-]*)\s+([a-z]+)\s+for\s+(?:us all|all of us|{GROUP_WORD})\b")
 
 
-def group_theme(words: list, names: set) -> str:
+def group_theme(request: str, names: set) -> str:
     """The theme the asker dressed the whole group in, or "": the word before the outfit noun. Without
     it, "all in race outfits" left the two with no race alt in their own clothes, and the racing suits
     the model wrote for them went as clothes nobody asked for."""
-    if not GROUP_ASKED.search(" ".join(words)):
-        return ""
-    for before, w in zip(words, words[1:]):
-        if (w in OUTFIT_WORDS or w in ("outfit", "outfits")) and len(before) >= 4 and before.isalpha() \
-                and before not in THEME_SKIP | OWN_OUTFIT | names | set(STYLES):
-            return before
+    text = re.sub(r"\S+://\S+", " ", request.lower())
+
+    def outfit(w):
+        return w in OUTFIT_WORDS or w in ("outfit", "outfits")
+
+    def theme(w):
+        return len(w) >= 4 and w.isalpha() and w not in THEME_SKIP | OWN_OUTFIT | names | set(STYLES)
+    for m in GROUP_DRESSED.finditer(text):
+        words = re.findall(r"[a-z0-9'-]+", m.group(1))[:5]
+        for i, w in enumerate(words):
+            if w in names:
+                break
+            if outfit(w):
+                if i and theme(words[i - 1]):
+                    return words[i - 1]
+                break
+    for m in FOR_GROUP.finditer(text):
+        if outfit(m.group(2)) and theme(m.group(1)):
+            return m.group(1)
     return ""
 
 
@@ -802,32 +823,77 @@ def outfit_from_theme(prompt: str, people: list, themed: dict) -> list:
     return out
 
 
-# An outfit named after one of the people in the picture ("match carol's race outfit").
-BORROWED = re.compile(r"(?i)(?<![\w-])([\w'-]+?)['’]s\s+([a-z][a-z'-]*)\s+(?:outfits?|looks?|costumes?|suits?|uniforms?)\b")
+# An outfit named after one of the people in the picture ("match carol's race outfit"), up to three
+# words for it ("carol's race day outfit").
+BORROWED = re.compile(r"(?i)(?<![\w-])([\w'-]+?)['’]s\s+((?:[a-z][a-z'-]*\s+){0,2}?[a-z][a-z'-]*)\s+"
+                      r"(?:outfits?|looks?|costumes?|suits?|uniforms?)\b")
+
+
+def borrow_match(people: list, request: str, log: bool = False):
+    """(owner, match) for the alt the asker named, or (None, None); with log, each miss goes to the tool
+    log ("carol's race outfit" while she's in her office look)."""
+    owners = {n.lower(): p for p in people for n in [p["name"], *(p.get("aliases") or [])]}
+    for m in BORROWED.finditer(request or ""):
+        owner = owners.get(m.group(1).lower())
+        if not owner:
+            continue
+        said = [theme_stem(w) for w in m.group(2).lower().split()]
+        alt = [theme_stem(w) for w in (owner.get("variant") or "").lower().split()]
+        if alt and owner.get("outfit") and said[-len(alt):] == alt:
+            return owner, m
+        if log:
+            toollog.log_detail("image_gen", f"{owner['name']}'s {m.group(2)!r} outfit not borrowed: they're in "
+                                            f"{owner.get('variant') or 'their usual look'}")
+    return None, None
 
 
 def borrow_source(people: list, request: str):
     """The person whose alt the asker named for the others ("match carol's race outfit"), or None: the
     alt has to be the one they're in, since that is the outfit the picture is told."""
-    owners = {n.lower(): p for p in people for n in [p["name"], *(p.get("aliases") or [])]}
-    for m in BORROWED.finditer(request or ""):
-        owner = owners.get(m.group(1).lower())
-        if owner and owner.get("variant") and owner.get("outfit") \
-                and theme_stem(m.group(2).lower()) == theme_stem(owner["variant"].lower()):
-            return owner
-    return None
+    return borrow_match(people, request)[0]
 
 
-def borrowed_outfit(people: list, request: str) -> list:
+CLAUSE_EDGE = re.compile(r"(?<=[,.;:])\s+|\n")
+GROUP_BEFORE = re.compile(rf"(?i)\b(?:us all|all of us|{GROUP_WORD}|match(?:ing|es)?)\b")
+ME = re.compile(r"(?i)\b(?:me|myself)\b")
+
+
+def borrowers(people: list, request: str, owner: dict, m, asker: str) -> list:
+    """Who the borrowed outfit goes to: everyone for "all in carol's race outfit"; else whoever its
+    clause names, "me" being the asker; else everyone for "give them all" or "match ..." naming nobody;
+    else the only one it could be. Given to everyone, "me in carol's race outfit" dressed the group."""
+    edges = [e.span() for e in CLAUSE_EDGE.finditer(request)]
+    start = max([e for s, e in edges if e <= m.start()], default=0)
+    part = request[start:min([s for s, e in edges if s >= m.end()], default=len(request))]
+    at = m.start() - start
+    can = [p for p in people if p["name"] != owner["name"] and p.get("look") and not p.get("variant")]
+    if any(g.start() < at for g in GROUP_DRESSED.finditer(part)):
+        return can
+    def own(p):
+        return [p["name"], *(p.get("aliases") or [])]
+    every = [n for p in people for n in own(p)]
+    me = bool(asker and ME.search(part[:at]))
+    named = [p for p in can if any(s <= at < e for n in own(p) for s, e in said_of(part, n, every))
+             or me and asker.lower() in {n.lower() for n in own(p)}]
+    if named:
+        return named
+    if GROUP_BEFORE.search(request[:m.start()]) or len(can) == 1:
+        return can
+    toollog.log_detail("image_gen", f"{owner['name']}'s {owner['variant']} outfit: nobody to borrow it")
+    return []
+
+
+def borrowed_outfit(people: list, request: str, asker: str = "") -> list:
     """The people, in the outfit the asker named after one of them ("me in bob's race look"): that
     outfit word for word, each one's own face and hair. The alt's hair never transfers: copying the
     whole look is how a group came out as three of the one who owns it."""
-    owner = borrow_source(people, request)
+    owner, m = borrow_match(people, request, log=True)
     if not owner:
         return people
+    to = {p["name"] for p in borrowers(people, request, owner, m, asker)}
     out = []
     for p in people:
-        if p["name"] != owner["name"] and p.get("look") and not p.get("variant"):
+        if p["name"] in to:
             toollog.log_detail("image_gen", f"{p['name']}: {owner['name']}'s {owner['variant']} outfit, their own look")
             p = dict(p, outfit=owner["outfit"])
         out.append(p)
@@ -1110,18 +1176,18 @@ def generate_image(prompt: str, width: int, height: int, negative: str = "", req
         return why_not
     # Admins are neither capped nor counted, so the shared day total stays everyone else's.
     if admin:
-        return draw(prompt, width, height, negative, image_url, people, chosen, reference_url, request)
+        return draw(prompt, width, height, negative, image_url, people, chosen, reference_url, request, requested_by)
     over = usagecap.take("imagegen", requested_by, PER_HOUR, PER_DAY, DAY_TOTAL)
     if over:
         return over
-    reply = draw(prompt, width, height, negative, image_url, people, chosen, reference_url, request)
+    reply = draw(prompt, width, height, negative, image_url, people, chosen, reference_url, request, requested_by)
     if not reply.startswith("url: "):
         # Only a posted picture counts against the caps.
         usagecap.give_back("imagegen", requested_by)
     return reply
 
 def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "", people: str = "",
-         style: dict = None, reference_url: str = "", request: str = "") -> str:
+         style: dict = None, reference_url: str = "", request: str = "", requested_by: str = "") -> str:
     refused = review_prompt(prompt, edit=bool(image_url))
     if refused:
         return refused
@@ -1147,7 +1213,7 @@ def draw(prompt: str, width: int, height: int, negative: str, image_url: str = "
             # "draw bob as a pirate": the clothes the chat model gave the pirate are the asked ones.
             named = outfit_from_prompt(prompt, named)
         named = outfit_from_theme(prompt, named, themed)
-        named = borrowed_outfit(named, request)
+        named = borrowed_outfit(named, request, requested_by)
         prompt = worn_dropped(prompt, request, named)
     if named:
         toollog.log_detail("image_gen", f"asked for: {prompt[:300]!r}")
