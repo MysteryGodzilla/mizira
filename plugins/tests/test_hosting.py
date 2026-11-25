@@ -11,7 +11,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 os.environ.setdefault("METALD_TOOL_LOG", os.devnull)
 _plugins = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path[:0] = [_plugins, os.path.join(_plugins, "lib")]
+sys.path[:0] = [_plugins, os.path.join(_plugins, "lib"), os.path.dirname(os.path.abspath(__file__))]
+from fakeserver import FakeServer
 from metald_tools import hosting
 
 class Recorder(BaseHTTPRequestHandler):
@@ -156,6 +157,21 @@ class HostingTest(unittest.TestCase):
         os.environ["UPLOAD_HEADERS"] = "User-Agent: mine/2"
         hosting.upload_file(b"x", "a.png", "image/png")
         self.assertEqual(Recorder.seen[-1]["headers"]["user-agent"], "mine/2")
+
+    def test_an_upload_never_follows_a_redirect(self):
+        # urllib sent the token and API-key headers on to wherever a 302 pointed.
+        elsewhere = FakeServer({"/": lambda p, b: (200, b"https://evil.example.com/x.png")})
+        self.addCleanup(elsewhere.close)
+        for status, method in [(302, "POST"), (307, "POST"), (308, "PUT"), (301, "PUT")]:
+            moved = FakeServer({"/": lambda p, b, s=status: (s, b"", {"Location": elsewhere.url + "/steal"})})
+            self.addCleanup(moved.close)
+            os.environ.update({"UPLOAD_BACKEND": "http", "UPLOAD_URL": moved.url + "/up", "UPLOAD_METHOD": method,
+                               "UPLOAD_HEADERS": "Authorization: tok; X-Api-Key: k", "UPLOAD_RESPONSE": "text"})
+            with self.assertRaises(hosting.HostingError) as caught:
+                hosting.upload_file(b"x", "a.png", "image/png")
+            self.assertIn("redirected", str(caught.exception))
+            self.assertEqual([r["headers"]["authorization"] for r in moved.seen], ["tok"], status)
+        self.assertEqual(elsewhere.seen, [])
 
     def test_register_backend(self):
         hosting.register_backend("mine", lambda d, f, c, e: "https://mine.example.com/" + f, requires=["MINE_KEY"])

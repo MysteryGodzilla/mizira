@@ -20,6 +20,8 @@ import urllib.request
 import urllib.error
 import urllib.parse
 
+from metald_tools import urlguard
+
 UPLOAD_TIMEOUT = 90
 UPLOAD_RETRIES = int(os.environ.get("UPLOAD_RETRIES", "3"))
 UPLOAD_RETRY_DELAY = 3
@@ -60,13 +62,20 @@ def multipart(fields: dict, file_field: str, filename: str, content_type: str, d
 # can still set another.
 USER_AGENT = "metald-uploader/1"
 
+# An upload never follows a redirect: urllib would send its token and API-key headers on to wherever it
+# points, and a redirected POST arrives as a GET without the file anyway.
+_opener = urllib.request.build_opener(urlguard.NoRedirect)
+
 def send(url: str, body: bytes, headers: dict, method: str = "POST", label: str = "upload") -> bytes:
     headers = {"User-Agent": USER_AGENT, **headers, **extra_headers()}
     req = urllib.request.Request(url, data=body, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=UPLOAD_TIMEOUT) as resp:
+        with _opener.open(req, timeout=UPLOAD_TIMEOUT) as resp:
             return resp.read()
     except urllib.error.HTTPError as e:
+        if 300 <= e.code < 400:
+            raise HostingError(f"{label} redirected ({e.code}) to {e.headers.get('Location', '')[:200]!r}; "
+                               "set the address it ends at")
         raise HostingError(f"{label} returned {e.code}: {e.read().decode('utf-8', 'replace')[:300]}")
     except (urllib.error.URLError, OSError) as e:
         raise HostingError(f"{label} request failed: {e}")
