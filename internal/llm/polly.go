@@ -277,6 +277,7 @@ type callbackHandler struct {
 	repeats          int               // calls this request to a once-per-request tool after its first
 	running          map[string]uint64 // tool call id -> core.ToolStarted id, for the status bridge
 	runningMu        sync.Mutex        // tools end in parallel
+	endMu            sync.Mutex        // one turn's tools run in parallel; their ends take turns with the handler
 }
 
 // maxTurnContent bounds how much visible text ONE request may post.
@@ -615,6 +616,8 @@ func (h *callbackHandler) onToolStart(calls []messages.ChatMessageToolCall) {
 }
 
 func (h *callbackHandler) onToolEnd(tc messages.ChatMessageToolCall, result string, duration time.Duration, toolErr error) {
+	h.endMu.Lock()
+	defer h.endMu.Unlock()
 	h.toolEnded(tc)
 	if toolErr != nil {
 		h.chatCtx.GetLogger().Error("tool_failed",
