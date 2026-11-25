@@ -2,7 +2,7 @@
 # Part of metald, a fork of soulshack (github.com/pkdindustries/soulshack)
 # SPDX-License-Identifier: GPL-3.0-only
 """A tiny scripted HTTP server for plugin tests: routes map a path prefix to
-a handler returning (status, body_bytes)."""
+a handler returning (status, body_bytes) or (status, body, headers)."""
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -17,15 +17,19 @@ class FakeServer:
                 body = self.rfile.read(int(self.headers.get("Content-Length", 0) or 0))
                 outer.seen.append({"method": self.command, "path": self.path, "body": body,
                                    "headers": {k.lower(): v for k, v in self.headers.items()}})
+                extra = {}
                 for prefix, fn in outer.routes.items():
                     if self.path.startswith(prefix):
-                        status, out = fn(self.path, body)
+                        status, out, *more = fn(self.path, body)
+                        extra = more[0] if more else {}
                         break
                 else:
                     status, out = 404, b"not found"
                 if isinstance(out, (dict, list)):
                     out = json.dumps(out).encode()
                 self.send_response(status)
+                for k, v in extra.items():
+                    self.send_header(k, v)
                 self.end_headers()
                 self.wfile.write(out)
             do_GET = do_POST = do_PUT = do_HEAD = _go

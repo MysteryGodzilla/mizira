@@ -120,9 +120,29 @@ class RadioTest(unittest.TestCase):
         self.addCleanup(srv.close)
         radio = load(srv)
         radio.speech.synthesize = lambda text, voice="", *delivery, **how: self.fail("spoke an intro for a missing song")
+        # The test server is on loopback; let the guard take it as public.
+        public, radio.urlguard.public = radio.urlguard.public, lambda addr: True
+        self.addCleanup(setattr, radio.urlguard, "public", public)
         out = radio.run({"action": "queue", "url": srv.url + "/u/gone.flac", "intro": "hello"})
         self.assertTrue(out.startswith("Refused"))
         self.assertFalse([r for r in srv.seen if r["path"] == "/push"])
+
+    def test_the_link_check_never_touches_a_private_address(self):
+        # Owner mode checked a song's link with a redirect-following HEAD to wherever it pointed.
+        srv = FakeServer({"/push": lambda p, b: (200, {"queued": "x", "position": 1}),
+                          "/u/": lambda p, b: (200, b"audio")})
+        self.addCleanup(srv.close)
+        radio = load(srv)
+        self.assertTrue(radio.reachable(srv.url + "/u/a.flac"))
+        self.assertEqual(srv.seen, [])
+        # A public link that redirects is taken as there: the radio server fetches it itself.
+        moved = FakeServer({"/u/": lambda p, b: (302, b"", {"Location": srv.url + "/u/a.flac"})})
+        self.addCleanup(moved.close)
+        public, radio.urlguard.public = radio.urlguard.public, lambda addr: True
+        self.addCleanup(setattr, radio.urlguard, "public", public)
+        self.assertTrue(radio.reachable(moved.url + "/u/a.flac"))
+        self.assertEqual([r["method"] for r in moved.seen], ["HEAD"])
+        self.assertEqual(srv.seen, [])
 
     def test_intro_is_a_required_field(self):
         import contextlib, io

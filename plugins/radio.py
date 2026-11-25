@@ -37,7 +37,7 @@ import urllib.error
 
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [_here, os.path.join(_here, "lib")]
-from metald_tools import hosting, lyricsync, speech, toollog
+from metald_tools import hosting, lyricsync, speech, toollog, urlguard
 from metald_tools.hosting import upload_file, HostingError
 from metald_tools.media import tag_flac
 
@@ -157,10 +157,17 @@ def call(method, path, body=None):
 
 
 def reachable(url):
-    """Whether the song is still hosted, checked before an intro is spoken for it."""
+    """Whether the song is still hosted, checked before an intro is spoken for it. Only a public link is
+    checked, through urlguard; the radio server checks any other when it fetches the song."""
+    if urlguard.safe_url(url)[1]:
+        toollog.log_detail("radio", f"link not checked, not public: {url[:120]!r}")
+        return True
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, method="HEAD"), timeout=TIMEOUT) as resp:
+        with urlguard.opener().open(urllib.request.Request(url, method="HEAD"), timeout=TIMEOUT) as resp:
             return resp.status == 200
+    except urllib.error.HTTPError as e:
+        # A redirect isn't followed here, but the song may well be at the end of it.
+        return 300 <= e.code < 400
     except (urllib.error.URLError, OSError, ValueError):
         return False
 
