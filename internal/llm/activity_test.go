@@ -5,6 +5,8 @@
 package llm
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -44,5 +46,39 @@ func TestToolCallsShowAsActivityUntilTheyEnd(t *testing.T) {
 	h.endTools()
 	if running(look.Name) != 0 {
 		t.Fatalf("endTools left %+v", core.ActiveTools())
+	}
+}
+
+// pollytool runs one turn's tool calls in parallel and reports each end from its own goroutine.
+func TestParallelToolEndsShareTheHandlerSafely(t *testing.T) {
+	ctx := mocktest.NewMockContext()
+	h := newCallbackHandler(ctx, irc.NewChunker(make(chan string, 200), 350), ctx.GetConfig())
+	draw := irc.ClaimTool[irc.ClaimDraw]
+	results := []struct{ name, result string }{
+		{draw, "url: https://files.example.com/a.png"},
+		{draw, "Not done: the picture service is busy."},
+		{"paralleltest__search", "Error: refused, that request is not allowed"},
+		{"paralleltest__wave", "action: waves"},
+		{"paralleltest__paste", "url: https://files.example.com/b.txt"},
+	}
+	var calls []messages.ChatMessageToolCall
+	for i, r := range results {
+		calls = append(calls, messages.ChatMessageToolCall{ID: fmt.Sprintf("p%d", i), Name: r.name})
+	}
+	h.onToolStart(calls)
+
+	var wg sync.WaitGroup
+	for round := 0; round < 20; round++ {
+		for i, r := range results {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				h.onToolEnd(calls[i], r.result, time.Millisecond, nil)
+			}()
+		}
+	}
+	wg.Wait()
+	if h.lastToolURL == "" || !h.shown {
+		t.Fatalf("lastToolURL = %q, shown = %v; want both set", h.lastToolURL, h.shown)
 	}
 }
