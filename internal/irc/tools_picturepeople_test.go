@@ -413,6 +413,20 @@ func TestPicturePeopleGroupFollowUp(t *testing.T) {
 	if len(people) != 0 {
 		t.Errorf("cats became people: %v", names(people))
 	}
+	// "everyone" can be the crowd: bob alone, and his request is the one kept.
+	people, request = run("bob waving at a crowd", strings.Fields("metald draw bob waving at everyone in the crowd")...)
+	if len(people) != 1 || people[0].Name != "bob" || strings.Contains(request, "alice and bob") {
+		t.Errorf("a crowd carried the earlier request in: %v, %q", names(people), request)
+	}
+	if _, request = run("bob waving", strings.Fields("metald try that again")...); !strings.Contains(request, "waving at everyone") {
+		t.Errorf("the crowd request wasn't kept: %q", request)
+	}
+	// A group request with nothing earlier to join is kept for a retry.
+	lastAsked = &askedStore{m: map[string]askedAt{}}
+	run("carol and friends", strings.Fields("metald draw all of us with carol")...)
+	if _, request = run("carol and friends", strings.Fields("metald try that again")...); !strings.Contains(request, "all of us with carol") {
+		t.Errorf("a lone group request wasn't kept: %q", request)
+	}
 }
 
 // "mizira mizira now draw volleyball bob" put her in the picture: only the first was the address.
